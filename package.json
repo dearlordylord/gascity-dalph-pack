@@ -4,9 +4,25 @@
   "type": "module",
   "packageManager": "pnpm@10.28.2",
   "dependencies": {
-    "effect": "4.0.0-beta.106",
-    "@effect/platform-node": "4.0.0-beta.106"
+    "@effect/platform-node": "4.0.0-beta.106",
+    "cytoscape": "^3.34.3",
+    "cytoscape-dagre": "^4.0.1",
+    "effect": "4.0.0-beta.106"
   },
-  "scripts": { "test": "python3 -m unittest discover -s tests -v" },
-  "pnpm": { "overrides": { "@effect/platform-node-shared": "4.0.0-beta.106" } }
+  "scripts": {
+    "test": "python3 -m unittest discover -s tests -v",
+    "dashboard:build": "esbuild dashboard/app.js --bundle --minify --format=esm --outfile=dashboard/app.bundle.js",
+    "dashboard:test": "node --test dashboard/projection.test.mjs",
+    "dashboard:serve": "python3 dashboard/serve.py",
+    "dashboard:test:browser": "node dashboard/browser.test.mjs"
+  },
+  "pnpm": {
+    "overrides": {
+      "@effect/platform-node-shared": "4.0.0-beta.106"
+    }
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "playwright": "1.62.1"
+  }
 }
