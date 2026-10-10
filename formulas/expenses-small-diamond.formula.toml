@@ -1,0 +1,60 @@
+formula = "expenses-small-diamond"
+description = "Four small Luna max tasks: fork and join through verified delivery"
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[[steps]]
+id = "S1-work"
+title = "Exact amount formatting: work"
+description = "Implement src/format-amount.mjs exporting formatAmount(amount): a safe integer number of minor units -> signed decimal string with exactly two fractional digits. Examples 0 -> \"0.00\", 1 -> \"0.01\", -1 -> \"-0.01\", 12345 -> \"123.45\". Reject non-safe integers with TypeError. Preserve exact arithmetic for Number.MAX_SAFE_INTEGER. Own only this module and test/format-amount.test.mjs. Add meaningful tests for examples, safe limits and invalid input. No new dependencies."
+metadata = { "gc.run_target" = "dalph.worker", "dalph.task" = "S1", "dalph.phase" = "work" }
+
+[[steps]]
+id = "S1-deliver"
+title = "Exact amount formatting: deliver"
+description = "Deliver the exact accepted implementation commit, verify remote, promote, close and safely clean exact owned worktrees."
+needs = ["S1-work"]
+metadata = { "gc.run_target" = "dalph.integrator", "dalph.task" = "S1", "dalph.phase" = "deliver" }
+
+[[steps]]
+id = "S2-work"
+title = "Format total lines: work"
+description = "Implement src/format-totals.mjs exporting formatTotals(totals): return an array of strings in input order, each \"<category> | <currency> | <formatted amount>\" using formatAmount from src/format-amount.mjs. Example [{category:\"food\",currency:\"USD\",amount:123}] -> [\"food | USD | 1.23\"]. Empty -> []. Do not mutate input. Own only this module and test/format-totals.test.mjs. Test negative amount, mixed currencies, empty input and no mutation. No CLI changes."
+needs = ["S1-deliver"]
+metadata = { "gc.run_target" = "dalph.worker", "dalph.task" = "S2", "dalph.phase" = "work" }
+
+[[steps]]
+id = "S2-deliver"
+title = "Format total lines: deliver"
+description = "Deliver the exact accepted implementation commit, verify remote, promote, close and safely clean exact owned worktrees."
+needs = ["S2-work"]
+metadata = { "gc.run_target" = "dalph.integrator", "dalph.task" = "S2", "dalph.phase" = "deliver" }
+
+[[steps]]
+id = "S3-work"
+title = "Format item count: work"
+description = "Implement src/format-count.mjs exporting formatCount(count): non-negative safe integer -> \"0 expenses\", \"1 expense\", \"2 expenses\" etc. Reject negative, non-integer and non-safe values with TypeError. Own only this module and test/format-count.test.mjs. Add tests for zero, singular, plural and invalid inputs. No CLI changes or dependencies."
+needs = ["S1-deliver"]
+metadata = { "gc.run_target" = "dalph.worker", "dalph.task" = "S3", "dalph.phase" = "work" }
+
+[[steps]]
+id = "S3-deliver"
+title = "Format item count: deliver"
+description = "Deliver the exact accepted implementation commit, verify remote, promote, close and safely clean exact owned worktrees."
+needs = ["S3-work"]
+metadata = { "gc.run_target" = "dalph.integrator", "dalph.task" = "S3", "dalph.phase" = "deliver" }
+
+[[steps]]
+id = "S4-work"
+title = "Join report text: work"
+description = "Implement src/report-text.mjs exporting renderReportText(report): join formatCount(report.count) followed by formatTotals(report.totals) using newline, no trailing newline. Example {count:2,totals:[{category:\"food\",currency:\"USD\",amount:123},{category:\"travel\",currency:\"EUR\",amount:-50}]} -> \"2 expenses\\nfood | USD | 1.23\\ntravel | EUR | -0.50\". Empty report -> \"0 expenses\". Use already delivered format-count and format-totals modules. Own only this module, test/report-text.test.mjs, and a short README section documenting these four new helper APIs with one example. Preserve existing CLI behavior and project contract. Test actual createReport -> renderReportText composition and no mutation."
+needs = ["S2-deliver", "S3-deliver"]
+metadata = { "gc.run_target" = "dalph.worker", "dalph.task" = "S4", "dalph.phase" = "work" }
+
+[[steps]]
+id = "S4-deliver"
+title = "Join report text: deliver"
+description = "Deliver the exact accepted implementation commit, verify remote, promote, close and safely clean exact owned worktrees."
+needs = ["S4-work"]
+metadata = { "gc.run_target" = "dalph.integrator", "dalph.task" = "S4", "dalph.phase" = "deliver" }
