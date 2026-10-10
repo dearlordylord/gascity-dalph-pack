@@ -1,0 +1,102 @@
+formula = "expenses-delivery"
+description = "Seven-task expenses CLI: two workers, serial verified delivery"
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[[steps]]
+id = "A-work"
+title = "Define data contract: implementation result"
+description = "Implement src/model.mjs with strict validation of date YYYY-MM-DD, description, currency uppercase three letters, and integer minor-unit amounts parsed from decimal strings without floating-point rounding. Export parseAmount and validateExpense. Add model tests."
+metadata = { "gc.run_target" = "dalph.worker", "dalph.task" = "A", "dalph.phase" = "work" }
+
+[[steps]]
+id = "A-deliver"
+title = "Define data contract: delivered task"
+description = "Deliver the exact accepted implementation commit, verify remote, promote, close and safely clean exact owned worktrees."
+needs = ["A-work"]
+metadata = { "gc.run_target" = "dalph.integrator", "dalph.task" = "A", "dalph.phase" = "deliver" }
+
+[[steps]]
+id = "B-work"
+title = "Read CSV: implementation result"
+description = "Implement src/csv.mjs exporting parseCsv(text), using the model contract. Handle quoted descriptions, commas, CRLF, header validation, malformed rows. Add CSV tests. Own csv files only."
+needs = ["A-deliver"]
+metadata = { "gc.run_target" = "dalph.worker", "dalph.task" = "B", "dalph.phase" = "work" }
+
+[[steps]]
+id = "B-deliver"
+title = "Read CSV: delivered task"
+description = "Deliver the exact accepted implementation commit, verify remote, promote, close and safely clean exact owned worktrees."
+needs = ["B-work"]
+metadata = { "gc.run_target" = "dalph.integrator", "dalph.task" = "B", "dalph.phase" = "deliver" }
+
+[[steps]]
+id = "C-work"
+title = "Categorize expenses: implementation result"
+description = "Implement src/categories.mjs exporting categorize(expense, rules), deterministic case-insensitive substring rules, first match wins, otherwise uncategorized. Add category tests. Own category files only."
+needs = ["A-deliver"]
+metadata = { "gc.run_target" = "dalph.worker", "dalph.task" = "C", "dalph.phase" = "work" }
+
+[[steps]]
+id = "C-deliver"
+title = "Categorize expenses: delivered task"
+description = "Deliver the exact accepted implementation commit, verify remote, promote, close and safely clean exact owned worktrees."
+needs = ["C-work"]
+metadata = { "gc.run_target" = "dalph.integrator", "dalph.task" = "C", "dalph.phase" = "deliver" }
+
+[[steps]]
+id = "D-work"
+title = "Aggregate totals: implementation result"
+description = "Implement src/totals.mjs exporting aggregate(expenses), deterministic totals grouped by category and currency using integer minor units, never combine currencies. Add totals tests. Own totals files only."
+needs = ["A-deliver"]
+metadata = { "gc.run_target" = "dalph.worker", "dalph.task" = "D", "dalph.phase" = "work" }
+
+[[steps]]
+id = "D-deliver"
+title = "Aggregate totals: delivered task"
+description = "Deliver the exact accepted implementation commit, verify remote, promote, close and safely clean exact owned worktrees."
+needs = ["D-work"]
+metadata = { "gc.run_target" = "dalph.integrator", "dalph.task" = "D", "dalph.phase" = "deliver" }
+
+[[steps]]
+id = "E-work"
+title = "Build CLI: implementation result"
+description = "Implement bin/expenses.mjs executable entrypoint reading CSV path, optional --rules JSON path, --json flag. Use parseCsv and categorize; default human output lists categorized expenses. Invalid input nonzero useful stderr. Add CLI tests. Do not depend on totals/report modules yet."
+needs = ["B-deliver", "C-deliver"]
+metadata = { "gc.run_target" = "dalph.worker", "dalph.task" = "E", "dalph.phase" = "work" }
+
+[[steps]]
+id = "E-deliver"
+title = "Build CLI: delivered task"
+description = "Deliver the exact accepted implementation commit, verify remote, promote, close and safely clean exact owned worktrees."
+needs = ["E-work"]
+metadata = { "gc.run_target" = "dalph.integrator", "dalph.task" = "E", "dalph.phase" = "deliver" }
+
+[[steps]]
+id = "F-work"
+title = "JSON reporting: implementation result"
+description = "Implement src/report.mjs exporting createReport(expenses), deterministic JSON-compatible report using aggregate, totals and item count. Add report tests. Own report files only."
+needs = ["D-deliver"]
+metadata = { "gc.run_target" = "dalph.worker", "dalph.task" = "F", "dalph.phase" = "work" }
+
+[[steps]]
+id = "F-deliver"
+title = "JSON reporting: delivered task"
+description = "Deliver the exact accepted implementation commit, verify remote, promote, close and safely clean exact owned worktrees."
+needs = ["F-work"]
+metadata = { "gc.run_target" = "dalph.integrator", "dalph.task" = "F", "dalph.phase" = "deliver" }
+
+[[steps]]
+id = "G-work"
+title = "Acceptance and documentation: implementation result"
+description = "Connect CLI to createReport for --json and human totals. Add executable end-to-end tests with fixture data and README usage. Exercise malformed CSV, negative amounts, mixed currencies, categories, deterministic JSON. Run complete pnpm test. Own final CLI integration, README and end-to-end tests."
+needs = ["E-deliver", "F-deliver"]
+metadata = { "gc.run_target" = "dalph.worker", "dalph.task" = "G", "dalph.phase" = "work" }
+
+[[steps]]
+id = "G-deliver"
+title = "Acceptance and documentation: delivered task"
+description = "Deliver the exact accepted implementation commit, verify remote, promote, close and safely clean exact owned worktrees."
+needs = ["G-work"]
+metadata = { "gc.run_target" = "dalph.integrator", "dalph.task" = "G", "dalph.phase" = "deliver" }

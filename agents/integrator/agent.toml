@@ -1,0 +1,10 @@
+scope = "rig"
+suspended = false
+start_command = "sh {{.ConfigDir}}/scripts/run-agent.sh integrator"
+lifecycle = "one_shot"
+idle_timeout = "15m"
+min_active_sessions = 0
+max_active_sessions = 1
+
+[env]
+DALPH_FAULT_AFTER_PUSH = "ex-9kr"

@@ -1,0 +1,76 @@
+# Dalph pack on Gas City: accepted trial contract
+
+The operator authorizes an isolated Gas City to deliver a seven-task expenses
+CLI through Codex gpt-6-luna with reasoning max. This implements the workflow
+agreed in the conversation; it does not modify Dalph production runtime.
+
+## Authorities and execution
+
+Gas City's tracker owns task identity, status, dependencies, and claims. Git
+owns attempt branches, immutable bases, result commits, integration candidates,
+remote publication, and worktree registration. Gas City's execution substrate
+owns live sessions and stopped-writer observations. Durable workflow records
+own intents and their observations; derived ready lists are never a second
+tracker. Native Gas City schedules the graph; no independent Dalph scheduler.
+
+Use two task-work positions and one integration position for the target branch.
+Positions survive coordinator activation loss through exact session/attempt
+reconciliation. Unknown liveness cannot release a position. Automatic retries
+and loops have explicit finite limits; stalled work remains visible.
+Each exact attempt permits at most three model executions and three
+qualification executions. A missing exit receipt is never success. Only a
+fresh substrate observation proving every marked writer stopped allows a
+separate reconciliation fact and the next ordinal on that same exact worktree.
+Every prior intent and outcome remains retained; exhaustion leaves the bead
+unfinished for an explicit operator decision.
+
+## Scenarios and evidence
+
+1. Fresh graph: A defines the data contract; B CSV parsing, C categorization,
+   and D aggregation depend on A; E CLI depends on B and C; F JSON reporting
+   depends on D; G acceptance tests/docs depends on E and F. Start the run with
+   all tasks open and no sessions/worktrees. The coordinator reads dependencies,
+   admits at most two attempts, prepares their exact worktrees, and starts
+   Codex. Finishing one attempt allows another ready task to run. Evidence:
+   native task/session snapshots and timestamped start/stop records prove the
+   limit and actual overlapping execution. No dependent starts from an agent
+   response alone.
+2. Delivery: an accepted task result names a commit. One target integrator
+   constructs and checks an isolated candidate from current target and result.
+   Verify Git parents, push normally, read back remote proof, promote locally,
+   close the tracker task, then re-read the graph to admit successors. Evidence:
+   result/candidate SHAs, parent lists, remote heads, close timestamps and next
+   admission snapshots. Failed checks cannot close the task.
+3. Coordinator loss: stop the coordinator while an executor is active, preserve
+   its session and records, restart. Reconcile the same attempt and exact
+   worktree before continuation. Evidence: unchanged attempt/session identities,
+   no duplicate begin, and bounded live sessions throughout. Unknown session
+   state retains the claim and capacity until proven stopped.
+4. Publication ambiguity: interrupt between remote push and recording its
+   observation. Restart and read remote ancestry before any repeated push;
+   reuse the same candidate. Evidence: remote trace plus durable intent and
+   reconciliation records. No replacement implementation or force push.
+5. Cleanup: after successful delivery and proven stopped writers, remove only
+   the exact owned attempt/candidate resources, retaining commits in the target.
+   Interrupt cleanup and repeat it safely. A foreign registration, changed
+   ownership/generation, dirty worktree, or unknown writer is refused and kept.
+   Evidence: controlled refusal tests and live final worktree/branch inventory.
+6. Finality: after G is delivered, fresh tracker observation shows every task
+   completed, all acceptance tests pass on the published target, no executor
+   remains live, and eligible owned resources are removed. Retained unsafe
+   resources and unfinished workflow records make completion unproven.
+
+## Product acceptance
+
+CLI reads CSV with date, description, amount, and currency; deterministic
+category rules; integer minor-unit amounts; per-category/per-currency totals;
+human and JSON output; useful input errors; executable end-to-end tests and
+usage documentation. No real financial account/provider is involved.
+
+## Required deliverables
+
+Pinned sources, reusable pack/configuration, reproducible setup/run commands,
+expenses repository and local remote, focused protocol tests, real Luna-max
+execution evidence, crash/restart evidence, tracker closure and cleanup audit,
+and a final report with timings and available usage counts. Controlled tests
+must not be presented as live-provider proof.

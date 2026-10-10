@@ -1,0 +1,40 @@
+[workspace]
+name = "dalph-expenses"
+provider = "codex"
+isolation = "none"
+
+[providers.codex]
+base = "builtin:codex"
+
+[session]
+provider = "tmux"
+
+[beads]
+provider = "bd"
+native_transport = "off"
+conditional_writes = "require"
+guarded_release = "require"
+
+[daemon]
+patrol_interval = "2s"
+max_restarts = 2
+restart_window = "30m"
+shutdown_timeout = "15s"
+
+[[rigs]]
+name = "expenses"
+default_branch = "master"
+path = "/workspace/dalph-dogfood/gascity-dalph/expenses"
+
+[rigs.imports.dalph]
+source = "/workspace/dalph-dogfood/gascity-dalph/pack"
+
+[[patches.agent]]
+name = "bd.dog"
+suspended = true
+
+[orders]
+skip = ["beads-health", "cascade-nudge-on-blocker-close", "cross-rig-deps", "dolt-health", "dolt-remotes-patrol", "gate-sweep", "jsonl-export", "mol-dog-backup", "mol-dog-compactor", "mol-dog-doctor", "mol-dog-phantom-db", "mol-dog-stale-db", "notify-on-human-gate-creation", "nudge-mail-sweep", "nudge-on-route", "order-tracking-sweep", "orphan-sweep", "prune-branches", "reaper", "renudge-stale-human-gates", "spawn-storm-detect", "wisp-compact"]
+
+[workspace.env]
+DALPH_PROJECT_CONTRACT_PATH = "$DALPH_PACK_ROOT/trial/project-contract.md"

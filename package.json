@@ -1,0 +1,12 @@
+{
+  "name": "dalph-gascity-pack",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.2",
+  "dependencies": {
+    "effect": "4.0.0-beta.106",
+    "@effect/platform-node": "4.0.0-beta.106"
+  },
+  "scripts": { "test": "python3 -m unittest discover -s tests -v" },
+  "pnpm": { "overrides": { "@effect/platform-node-shared": "4.0.0-beta.106" } }
+}

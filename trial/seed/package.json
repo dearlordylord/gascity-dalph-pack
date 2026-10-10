@@ -1,0 +1,9 @@
+{
+  "name": "expenses-cli-trial",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "packageManager": "pnpm@10.28.2"
+}

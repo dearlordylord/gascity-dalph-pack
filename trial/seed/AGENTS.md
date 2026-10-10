@@ -1,0 +1,1 @@
+Use pnpm and mise exec -- for Node commands. Own only files assigned by your task. Other workers have separate worktrees; do not undo their changes. Commit your implementation. Do not push, merge, close tracker tasks, or delete worktrees; delivery belongs to the pack.
