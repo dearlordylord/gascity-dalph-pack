@@ -151,7 +151,7 @@ def record(bead_id, key, value):
             raise RuntimeError('contradictory durable fact: ' + key)
         return value
     run([*GC, 'beads', 'metadata-cas', bead_id, '--store-ref=rig:' + RIG,
-         '--key=dalph.' + key, '--expected=', '--next=' + encoded, '--json'])
+         '--key=dalph.' + key, '--expected=', '--next=' + encoded, '--json'], timeout=60)
     actual = bead(bead_id).get('metadata', {}).get('dalph.' + key)
     if actual != encoded:
         raise RuntimeError('durable fact not acknowledged: ' + key)
