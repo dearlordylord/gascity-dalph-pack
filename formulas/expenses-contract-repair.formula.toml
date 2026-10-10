@@ -1,7 +1,3 @@
-[pack]
-name = "dalph"
-schema = 2
-version = "0.1.0"
 formula = "expenses-contract-repair"
 description = "Repair the specified flat totals contract before final acceptance"
 
