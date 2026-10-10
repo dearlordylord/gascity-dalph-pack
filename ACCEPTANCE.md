@@ -4,6 +4,13 @@ The operator authorizes an isolated Gas City to deliver a seven-task expenses
 CLI through Codex gpt-6-luna with reasoning max. This implements the workflow
 agreed in the conversation; it does not modify Dalph production runtime.
 
+The operator clarified on 2026-10-10 that the product goal is recoverable,
+bounded delivery of the graph, not exact reproduction of Dalph's internal
+semantics. Gas City's native claims, sessions, dependencies and recovery are
+valid implementations. Receipts below describe this prototype's implementation;
+they are not a required replacement for native Gas City mechanisms. Concurrent
+task attempts must be observed and bounded; model calls need not start together.
+
 ## Authorities and execution
 
 Gas City's tracker owns task identity, status, dependencies, and claims. Git
@@ -68,7 +75,7 @@ unfinished for an explicit operator decision.
    and F delivery blockers and add the repair-root blocker. E and H own
    disjoint files and may run in the same two-position pool; G starts only after
    all three delivery boundaries. Evidence: native graft mapping/dependencies,
-   real overlapping Codex processes, exact candidate proofs, and an independent
+   concurrent native task attempts, exact candidate proofs, and an independent
    product oracle on the published target. This supplements the seven-task
    workflow; it does not replace its unfinished branches.
 
