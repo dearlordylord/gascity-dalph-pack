@@ -16,11 +16,13 @@ const params = new URLSearchParams(location.search)
 const city = params.get('city') || 'dalph-expenses'
 const run = params.get('run') || 'ex-aly'
 const scope = params.get('scope') || 'expenses'
+const native = params.get('native')
+const nativeOrigin = native && /^https?:\/\/[a-zA-Z0-9.:[\]-]+$/.test(native) ? native : null
 let detail, selected
 byId('run').value = run
 byId('city').value = city
 byId('scope').value = scope
-byId('open').onclick = () => { location.search = new URLSearchParams({city:byId('city').value,run:byId('run').value,scope:byId('scope').value}) }
+byId('open').onclick = () => { location.search = new URLSearchParams({city:byId('city').value,run:byId('run').value,scope:byId('scope').value,...(nativeOrigin?{native:nativeOrigin}:{})}) }
 byId('fit').onclick = () => graph.resetView()
 byId('grouping').onchange = () => render()
 const element = (tag, text, className) => { const e=document.createElement(tag);e.textContent=text;if(className)e.className=className;return e }
@@ -38,7 +40,7 @@ function renderSelection() {
   panel.append(element('h3','Execution observations'))
   for(const instance of n.executionInstances) {panel.append(element('p',`${instance.beadId} · ${instance.status} · ${instance.label}`, 'mono'));if(instance.session?.link)panel.append(element('p',instance.session.link.sessionName,'mono'))}
   const raw=element('details','');raw.append(element('summary','Raw observation'),element('pre',JSON.stringify(n.executionInstances,null,2)));panel.append(raw)
-  const a=element('a','Open in Gas City ↗');a.href=`http://${location.hostname}:43596/city/${encodeURIComponent(city)}/runs/${encodeURIComponent(run)}`;a.target='_blank';panel.append(a)
+  if(nativeOrigin){const a=element('a','Open in Gas City ↗');a.href=`${nativeOrigin}/city/${encodeURIComponent(city)}/runs/${encodeURIComponent(run)}`;a.target='_blank';a.rel='noopener';panel.append(a)}
 }
 function render() {
   if(!detail)return

@@ -1,0 +1,5 @@
+[
+  { "match": "coffee", "category": "food" },
+  { "match": "lunch", "category": "food" },
+  { "match": "bus", "category": "transport" }
+]

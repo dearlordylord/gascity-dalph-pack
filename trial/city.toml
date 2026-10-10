@@ -1,5 +1,6 @@
+# Template: render with trial/render-city.py before gc init.
 [workspace]
-name = "dalph-expenses"
+name = "@@CITY_NAME@@"
 provider = "codex"
 isolation = "none"
 
@@ -22,12 +23,12 @@ restart_window = "30m"
 shutdown_timeout = "15s"
 
 [[rigs]]
-name = "expenses"
-default_branch = "master"
-path = "/workspace/dalph-dogfood/gascity-dalph/expenses"
+name = "@@RIG@@"
+default_branch = "@@BRANCH@@"
+path = "@@TARGET_REPO@@"
 
 [rigs.imports.dalph]
-source = "/workspace/dalph-dogfood/gascity-dalph/pack"
+source = "@@PACK_ROOT@@"
 
 [[patches.agent]]
 name = "bd.dog"

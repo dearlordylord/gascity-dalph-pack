@@ -1,0 +1,74 @@
+{
+  "beads": 20,
+  "closed": 20,
+  "target": "f40fbe0d9308d772e4f1005161d9bd684525e823",
+  "remote": "f40fbe0d9308d772e4f1005161d9bd684525e823",
+  "deliveries": [
+    {
+      "id": "ex-9kr",
+      "commit": "2cc819ba001563f7e15a1975cd6c9b2fc4315b75",
+      "parents": [
+        "b5dd89c5ec1750c6158557bb56781978b0a9974e",
+        "a7ba9611c0b6221d4d5f5b0a109dc3796376cc08"
+      ]
+    },
+    {
+      "id": "ex-slw",
+      "commit": "f85bd5150ca03344f218e1f9b1d02d859bd329ee",
+      "parents": [
+        "2dfccf3bb15dbd2814590add1d487d65b42a201a",
+        "f8abf47e959e50555292ce6fe8889056595deb41"
+      ]
+    },
+    {
+      "id": "ex-3ce",
+      "commit": "2dfccf3bb15dbd2814590add1d487d65b42a201a",
+      "parents": [
+        "b66ea8749bc9ba3f298950d51b39603653def12e",
+        "4a2e840bfa2af4942f6bd25be3774eab76afc663"
+      ]
+    },
+    {
+      "id": "ex-2fv",
+      "commit": "6cdde6818b6015fb7243af092b71f992ebf16056",
+      "parents": [
+        "2cc819ba001563f7e15a1975cd6c9b2fc4315b75",
+        "4fce63a8e70a61f74f5d8c6b9cad54ee790bb742"
+      ]
+    },
+    {
+      "id": "ex-v91",
+      "commit": "b0c7585ffd658aea5b94b97bf4393495ad7998b1",
+      "parents": [
+        "daf9911701948a97b43ec6b0192be2eefa1adbcc",
+        "90112c316da2f8876bfdb64c46188054340c05b8"
+      ]
+    },
+    {
+      "id": "ex-cdi",
+      "commit": "b66ea8749bc9ba3f298950d51b39603653def12e",
+      "parents": [
+        "6cdde6818b6015fb7243af092b71f992ebf16056",
+        "06548253fca29f814e34d7e9643ea82aeaea1420"
+      ]
+    },
+    {
+      "id": "ex-dpd",
+      "commit": "f40fbe0d9308d772e4f1005161d9bd684525e823",
+      "parents": [
+        "b0c7585ffd658aea5b94b97bf4393495ad7998b1",
+        "9821061391cd22ba0571a484170b557c38a8093d"
+      ]
+    },
+    {
+      "id": "ex-ec1",
+      "commit": "daf9911701948a97b43ec6b0192be2eefa1adbcc",
+      "parents": [
+        "f85bd5150ca03344f218e1f9b1d02d859bd329ee",
+        "e6ef2e2e964e4dfce8a2e38964b6d8db52cedfa8"
+      ]
+    }
+  ],
+  "owned_branches": [],
+  "live_marked_model_or_check_writers": []
+}

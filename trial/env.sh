@@ -1,18 +1,21 @@
-export GC_HOME=/workspace/dalph-dogfood/gascity-dalph/gc-home
-export GC_BEADS=bd
-export GC_SESSION=tmux
-export GC_SUPERVISOR_DASHBOARD=1
-export DALPH_PACK_ROOT=/workspace/dalph-dogfood/gascity-dalph/pack
-export DALPH_TRIAL_ROOT=/workspace/dalph-dogfood/gascity-dalph
-export PATH=/workspace/dalph-dogfood/gascity-dalph/bin:$PATH
-export LD_LIBRARY_PATH=/workspace/dalph-dogfood/gascity-dalph/tools/usr/lib/aarch64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
-
-export DALPH_CITY_ROOT=/workspace/dalph-dogfood/gascity-dalph/city-native
-export DOLT_ROOT_PATH=/workspace/dalph-dogfood/gascity-dalph/gc-home
-
-export TMUX_TMPDIR=/workspace/dalph-dogfood/gascity-dalph/tmux
-export DALPH_RIG=expenses
-export DALPH_TARGET_REPO=/workspace/dalph-dogfood/gascity-dalph/expenses
-export DALPH_CITY_NAME=dalph-expenses
-export DALPH_TRACKER_ENDPOINT=http://127.0.0.1:8372
-export DALPH_PROJECT_CONTRACT_PATH=/workspace/dalph-dogfood/gascity-dalph/pack/trial/project-contract.md
+# Source from Bash. Defaults keep each trial's services and artifacts together.
+export DALPH_PACK_ROOT="${DALPH_PACK_ROOT:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)}"
+export DALPH_TRIAL_ROOT="${DALPH_TRIAL_ROOT:-$(dirname -- "$DALPH_PACK_ROOT")}"
+export GC_HOME="${GC_HOME:-$DALPH_TRIAL_ROOT/gc-home}"
+export GC_BEADS="${GC_BEADS:-bd}"
+export GC_SESSION="${GC_SESSION:-tmux}"
+export GC_SUPERVISOR_DASHBOARD="${GC_SUPERVISOR_DASHBOARD:-1}"
+export PATH="$DALPH_TRIAL_ROOT/bin:$PATH"
+if [ -d "$DALPH_TRIAL_ROOT/tools/usr/lib/aarch64-linux-gnu" ]; then
+  export LD_LIBRARY_PATH="$DALPH_TRIAL_ROOT/tools/usr/lib/aarch64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
+export DALPH_RIG="${DALPH_RIG:-expenses}"
+export DALPH_TARGET_REPO="${DALPH_TARGET_REPO:-$DALPH_TRIAL_ROOT/$DALPH_RIG}"
+export DALPH_CITY_ROOT="${DALPH_CITY_ROOT:-$DALPH_TRIAL_ROOT/city-native}"
+export DALPH_CITY_NAME="${DALPH_CITY_NAME:-dalph-expenses}"
+export DALPH_TARGET_BRANCH="${DALPH_TARGET_BRANCH:-master}"
+export DALPH_WORKTREE_ROOT="${DALPH_WORKTREE_ROOT:-$DALPH_TRIAL_ROOT/worktrees}"
+export DALPH_TRACKER_ENDPOINT="${DALPH_TRACKER_ENDPOINT:-http://127.0.0.1:8372}"
+export DALPH_PROJECT_CONTRACT_PATH="${DALPH_PROJECT_CONTRACT_PATH:-$DALPH_PACK_ROOT/trial/project-contract.md}"
+export DOLT_ROOT_PATH="${DOLT_ROOT_PATH:-$GC_HOME}"
+export TMUX_TMPDIR="${TMUX_TMPDIR:-$DALPH_TRIAL_ROOT/tmux}"
