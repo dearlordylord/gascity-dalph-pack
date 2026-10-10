@@ -1,7 +1,7 @@
 export GC_HOME=/workspace/dalph-dogfood/gascity-dalph/gc-home
 export GC_BEADS=bd
 export GC_SESSION=tmux
-export GC_SUPERVISOR_DASHBOARD=0
+export GC_SUPERVISOR_DASHBOARD=1
 export DALPH_PACK_ROOT=/workspace/dalph-dogfood/gascity-dalph/pack
 export DALPH_TRIAL_ROOT=/workspace/dalph-dogfood/gascity-dalph
 export PATH=/workspace/dalph-dogfood/gascity-dalph/bin:$PATH
