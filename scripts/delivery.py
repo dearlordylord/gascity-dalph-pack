@@ -251,7 +251,7 @@ pack's child-only marker and do not belong to its execution authority.
             fields = (entry / 'environ').read_bytes().split(b'\0')
             if marker in fields:
                 found.append(int(entry.name))
-        except FileNotFoundError:
+        except (FileNotFoundError, ProcessLookupError):
             continue
         except PermissionError as error:
             # The process can exit between reading stat and environ. Re-read
@@ -270,7 +270,7 @@ pack's child-only marker and do not belong to its execution authority.
                         found.append(int(entry.name))
                     resolved = True
                     break
-                except FileNotFoundError:
+                except (FileNotFoundError, ProcessLookupError):
                     resolved = True
                     break
                 except PermissionError:

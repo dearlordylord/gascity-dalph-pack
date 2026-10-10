@@ -19,6 +19,17 @@ spec.loader.exec_module(delivery)
 
 
 class CustodyTests(unittest.TestCase):
+    def test_process_disappears_during_stat_or_permission_recheck(self):
+        with tempfile.TemporaryDirectory() as directory:
+            entry = Path(directory) / '1000000000'
+            entry.mkdir()
+            stat = '1000000000 (fixture) ' + ' '.join(['R'] + ['0'] * 18 + ['100'])
+            with patch.object(Path, 'read_text', side_effect=ProcessLookupError('exited')):
+                self.assertEqual(delivery.marked_processes('DALPH_BOUNDARY=fixture', 1, Path(directory)), [])
+            with patch.object(Path, 'read_text', side_effect=[stat, ProcessLookupError('exited')]), \
+                 patch.object(Path, 'read_bytes', side_effect=PermissionError('exiting')):
+                self.assertEqual(delivery.marked_processes('DALPH_BOUNDARY=fixture', 1, Path(directory)), [])
+
     def test_permission_race_with_exit_is_rechecked_but_live_unknown_holds(self):
         with tempfile.TemporaryDirectory() as directory:
             entry = Path(directory) / '1000000000'
