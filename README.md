@@ -120,6 +120,8 @@ platform-node-shared override needed by this Effect beta.
 ```sh
 cd /workspace/dalph-dogfood/gascity-dalph
 . pack/trial/env.sh
+# The completed trial city is stopped; register/start it before live inspection.
+gc --city "$DALPH_CITY_ROOT" start
 gc --city "$DALPH_CITY_ROOT" --rig expenses ready --json
 gc --city "$DALPH_CITY_ROOT" graph ex-6g2 --json
 gc --city "$DALPH_CITY_ROOT" session list --json
@@ -132,7 +134,10 @@ Cook once for a new run with
 Retain its returned `root_id` and mapping; cooking again without an attachment
 creates another workflow. The current run is `ex-6g2` and must not be recooked.
 Restart the isolated supervisor with `gc supervisor start`; native tmux sessions
-outlive an abrupt supervisor loss. To stop the city and its sessions use
+outlive an abrupt supervisor loss. Starting a stopped city also registers it;
+starting the supervisor alone does not restore an unregistered city. Keep
+`workspace.name` equal to `DALPH_CITY_NAME` for the loopback tracker locator.
+To stop the city and its sessions use
 `gc --city "$DALPH_CITY_ROOT" stop`. `GC_HOME` keeps its registry isolated;
 `DOLT_ROOT_PATH` confines author configuration, and `TMUX_TMPDIR` confines tmux
 state. No HOME or Codex authentication directory is replaced.
