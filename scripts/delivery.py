@@ -77,7 +77,7 @@ def run(args, cwd=None, timeout=30):
         child = subprocess.Popen(args, cwd=cwd, env=environment, text=True,
                                  stdout=output, stderr=error, start_new_session=True)
         code = wait_child(child, timeout, 5)
-    writers = marked_processes('DALPH_BOUNDARY=' + nonce, birth)
+    writers = stopped_boundary_writers('DALPH_BOUNDARY=' + nonce, birth)
     receipt['observation'] = {'exit': code, 'stopped_writers': not writers, 'observed': time.time()}
     persist_receipt(path, receipt)
     if writers:
@@ -278,6 +278,20 @@ pack's child-only marker and do not belong to its execution authority.
             if not resolved:
                 raise RuntimeError('writer absence unknown after bounded observation: ' + str(entry)) from error
     return found
+
+
+def stopped_boundary_writers(marker, birth_ticks, grace=5):
+    """A returned leader may leave descendants finishing their own exits.
+
+    Wait finitely for fresh substrate proof; elapsed grace never proves absence.
+    Unreadable live processes still fail closed in marked_processes.
+    """
+    deadline = time.monotonic() + grace
+    while True:
+        writers = marked_processes(marker, birth_ticks)
+        if not writers or time.monotonic() >= deadline:
+            return writers
+        time.sleep(min(0.05, max(0, deadline - time.monotonic())))
 
 
 def marked_writers(attempt, birth_ticks):

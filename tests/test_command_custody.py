@@ -19,6 +19,25 @@ spec.loader.exec_module(delivery)
 
 
 class CustodyTests(unittest.TestCase):
+    def test_boundary_drain_waits_for_real_exit_and_keeps_still_live_writer(self):
+        marker = 'fixture-drain-' + str(os.getpid())
+        birth = int(time.clock_gettime(time.CLOCK_BOOTTIME) * os.sysconf('SC_CLK_TCK'))
+        child = subprocess.Popen([sys.executable, '-c', 'import time;time.sleep(0.4)'],
+                                 env=dict(os.environ, DALPH_BOUNDARY=marker))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / str(child.pid)).symlink_to(Path('/proc') / str(child.pid))
+            observe = delivery.marked_processes
+            try:
+                with patch.object(delivery, 'marked_processes', side_effect=lambda m, b: observe(m, b, root)):
+                    self.assertEqual(delivery.stopped_boundary_writers('DALPH_BOUNDARY=' + marker, birth, grace=0), [child.pid])
+                    self.assertEqual(delivery.stopped_boundary_writers('DALPH_BOUNDARY=' + marker, birth, grace=2), [])
+                self.assertIsNotNone(child.poll())
+            finally:
+                if child.poll() is None:
+                    child.kill()
+                child.wait(timeout=3)
+
     def test_process_disappears_during_stat_or_permission_recheck(self):
         with tempfile.TemporaryDirectory() as directory:
             entry = Path(directory) / '1000000000'
