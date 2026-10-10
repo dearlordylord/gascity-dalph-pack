@@ -78,7 +78,8 @@ def run(args, cwd=None, timeout=30):
                                  stdout=output, stderr=error, start_new_session=True)
         code = wait_child(child, timeout, 5)
     writers = stopped_boundary_writers('DALPH_BOUNDARY=' + nonce, birth)
-    receipt['observation'] = {'exit': code, 'stopped_writers': not writers, 'observed': time.time()}
+    receipt['observation'] = {'exit': code, 'stopped_writers': not writers,
+                              'writer_pids': writers, 'observed': time.time()}
     persist_receipt(path, receipt)
     if writers:
         raise RuntimeError('boundary descendants still live; retain custody: ' + str(path))
