@@ -10,9 +10,49 @@ task beads. Only delivered task beads unblock successor implementations. Worker
 capacity is two; the target integrator capacity is one. No second scheduler is
 run by the pack.
 
-See [ACCEPTANCE.md](ACCEPTANCE.md) for chronological scenarios and required
-evidence. Trial qualification is still in progress; the final report will name
-the verified artifact revision and remaining limits.
+The product trial completed on 2026-10-10. Gas City delivered the seven-task
+expenses CLI plus its totals-contract repair, recovered interrupted work, and
+closed both workflows. See [ACCEPTANCE.md](ACCEPTANCE.md) for the product
+criteria and chronological scenarios.
+
+## Verified product result
+
+The published expenses target is `f40fbe0d9308d772e4f1005161d9bd684525e823`.
+All 20 workflow beads are closed, eight implementation results are integrated,
+local and remote target commits match, and the checkout is clean. Only the
+main worktree remains; no owned task/candidate branches or marked model/check
+writers remain. Native capacity is two workers and one integrator.
+
+- Actual Codex `gpt-6-luna` with reasoning max implemented every work task.
+- A coordinator loss during C preserved its live model process, exact attempt
+  and worktree; native recovery continued that same execution to delivery.
+- Loss after A's remote push recovered the same candidate from remote ancestry
+  without repeating the push or implementation.
+- Published-target tests passed all 34 cases. A separate hand-calculated oracle
+  passed exact amounts, negative values, separate currencies, categories,
+  deterministic CLI JSON/human output, malformed input and usage docs.
+- Pack qualification at `f5e0ab2` passed all 26 tests, including real native
+  worktree cleanup/refusal tests and the idiomatic Effect HTTP adapter.
+
+Primary local evidence beside the pack: `evidence/final-audit.json`,
+`final-tracker.json`, `published-product-tests.log`,
+`published-product-oracle.log`, `pack-combined-final-tests.log`, and the
+`tmux-live-model-*` / `push-loss-*` fault observations.
+
+The run took 2h 10m 47s including fault injection, operator repairs and native
+scheduling delays; it is not an unattended performance benchmark. Across 109
+retained native metadata-CAS calls with known zero exits, median command plus
+custody-observation time was 10.821s. Published application tests took 0.694s.
+Eight completed model usage receipts report 2,063,302 input tokens, including
+1,806,592 cached tokens, and 53,371 output tokens. Usage for failed executions
+without completion receipts is unmeasured; these counts are not a cost estimate.
+
+The trial used pinned sources and the CLI transport described below. It
+included pack repairs; a cold replay of the final revision is untested.
+Concurrent native worker turns were observed, but simultaneous model requests
+were not observed. The product criterion is bounded concurrent task execution,
+not synchronized model starts. The completed city can be stopped and started
+without recooking this already-closed graph.
 
 ## Delivery boundaries
 
@@ -58,6 +98,7 @@ distinguish an executing turn from an idle claimed task.
 | Dolt | `2.4.2` |
 | tmux / Python | `3.3a` / Python 3 |
 | Node / pnpm | `24.20.0` / `10.28.2` |
+| Codex CLI | `0.162.1` |
 | Effect / platform-node / platform-node-shared | `4.0.0-beta.106` |
 
 Beads release 1.3.1 lacks the four required `--if-revision` verbs. The pinned
