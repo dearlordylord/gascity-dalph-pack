@@ -26,6 +26,11 @@ the preceding evidence. A failed qualification requires diagnosis; it is not
 blindly repeated. Missing qualification exit evidence permits a fresh check
 only after stopped-writer reconciliation. Models have a 600-second budget;
 checks 90 seconds, with bounded process-group termination afterward.
+Git/GC/Beads commands likewise retain process-group custody and fsynced intent
+and exit receipts in `evidence/boundaries`. An escaped descendant blocks
+recovery/cleanup until its marker proves stopped. These are execution receipts;
+they never replace native tracker, Git, or process observations. Qualification
+also verifies unchanged HEAD and a clean tree after tests and before a new push.
 
 The integrator merges the accepted result into a separate candidate with exact
 ordered parents `[current target, result]`, qualifies that commit, records push
@@ -134,6 +139,7 @@ Claims and dependencies remain native GC/Beads authorities.
 ## Focused checks and evidence
 
 ```sh
+. trial/env.sh
 mise exec node@24.20.0 -- pnpm test
 ```
 

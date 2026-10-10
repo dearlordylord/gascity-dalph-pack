@@ -6,5 +6,3 @@ idle_timeout = "15m"
 min_active_sessions = 0
 max_active_sessions = 1
 
-[env]
-DALPH_FAULT_AFTER_PUSH = "ex-9kr"

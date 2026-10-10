@@ -56,7 +56,7 @@ const request = Effect.fn("DalphTracker.request")(function* (input) {
 const main = Effect.gen(function* () {
   const argument = yield* Effect.sync(() => process.argv[2])
   const input = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Input))(argument)
-  const result = yield* request(input).pipe(Effect.timeout("15 seconds"))
+  const result = yield* request(input).pipe(Effect.timeout("60 seconds"))
   const output = yield* Schema.encodeEffect(Schema.fromJsonString(input.action === "show" ? Bead : Response))(result)
   yield* Console.log(output)
 })

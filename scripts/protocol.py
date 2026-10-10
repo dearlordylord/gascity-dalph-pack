@@ -13,17 +13,6 @@ def worktree_action(prepared, exists):
     return 'verify' if exists else 'ensure'
 
 
-def model_action(command_state, writer_live, result_observed):
-    """Command ambiguity requires substrate/provider reconciliation before begin."""
-    if result_observed:
-        return 'accept'
-    if writer_live:
-        return 'observe'
-    if command_state is not None:
-        raise RuntimeError('reconcile the exact model command before further execution')
-    return 'begin'
-
-
 def authorize_cleanup(published, stopped):
     """Git provenance checks supplement, never replace, stopped-writer proof."""
     if not published or not stopped:

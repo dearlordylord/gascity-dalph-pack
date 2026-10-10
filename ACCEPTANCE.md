@@ -60,6 +60,18 @@ unfinished for an explicit operator decision.
    remains live, and eligible owned resources are removed. Retained unsafe
    resources and unfinished workflow records make completion unproven.
 
+7. Repair during delivery: D and F were delivered with an object-shaped totals
+   result that does not match the specified flat array. Once B and C deliveries
+   release E, graft `expenses-contract-repair` onto the still-blocked G work
+   bead using native `formula cook --attach`. H repairs totals/report and their
+   tests through the same worker/integrator workflow. Preserve G's original E
+   and F delivery blockers and add the repair-root blocker. E and H own
+   disjoint files and may run in the same two-position pool; G starts only after
+   all three delivery boundaries. Evidence: native graft mapping/dependencies,
+   real overlapping Codex processes, exact candidate proofs, and an independent
+   product oracle on the published target. This supplements the seven-task
+   workflow; it does not replace its unfinished branches.
+
 ## Product acceptance
 
 CLI reads CSV with date, description, amount, and currency; deterministic

@@ -1,0 +1,22 @@
+[pack]
+name = "dalph"
+schema = 2
+version = "0.1.0"
+formula = "expenses-contract-repair"
+description = "Repair the specified flat totals contract before final acceptance"
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[[steps]]
+id = "H-work"
+title = "Repair flat totals contract: implementation result"
+description = "Repair aggregate(expenses) in src/totals.mjs so its public result is a deterministic array of {category, currency, amount}, as the project contract requires. Keep exact integer addition, safe range checks, separate currencies, signed values, special category keys and no mutation. Adapt src/report.mjs and both corresponding test files so createReport(expenses) returns {count, totals} with that array. Own totals/report files and their tests only. Add independent expected-value cases, do not merely reshape the implementation oracle. Commit the repair."
+metadata = { "gc.run_target" = "dalph.worker", "dalph.task" = "H", "dalph.phase" = "work" }
+
+[[steps]]
+id = "H-deliver"
+title = "Repair flat totals contract: delivered task"
+description = "Deliver the exact accepted implementation commit, verify remote, promote, close and safely clean exact owned worktrees."
+needs = ["H-work"]
+metadata = { "gc.run_target" = "dalph.integrator", "dalph.task" = "H", "dalph.phase" = "deliver" }

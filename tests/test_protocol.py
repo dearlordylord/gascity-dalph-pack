@@ -21,13 +21,6 @@ class ProtocolTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'lost'):
             protocol.worktree_action(True, False)
 
-    def test_ambiguous_model_command_cannot_start_again(self):
-        self.assertEqual(protocol.model_action(None, False, False), 'begin')
-        self.assertEqual(protocol.model_action('began', True, False), 'observe')
-        self.assertEqual(protocol.model_action('finished', False, True), 'accept')
-        with self.assertRaisesRegex(RuntimeError, 'reconcile'):
-            protocol.model_action('began', False, False)
-
     def test_cleanup_needs_published_commit_and_stopped_writers(self):
         for published, stopped in [(False, False), (True, False), (False, True)]:
             with self.assertRaises(RuntimeError):

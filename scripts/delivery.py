@@ -29,6 +29,7 @@ TARGET_REF = 'refs/heads/' + TARGET_BRANCH
 REMOTE_TRACKING_REF = 'refs/remotes/origin/' + TARGET_BRANCH
 WORKTREES = Path(os.environ.get('DALPH_WORKTREE_ROOT', str(ROOT / 'worktrees')))
 GC = ['gc', '--city', str(CITY), '--rig', RIG]
+CURRENT_ATTEMPT = None
 
 
 class RetainedOutput:
@@ -53,11 +54,76 @@ class RetainedOutput:
 
 
 def run(args, cwd=None, timeout=30):
-    result = subprocess.run(args, cwd=cwd, text=True, timeout=timeout, stdout=subprocess.PIPE)
-    if result.returncode:
-        print(f"boundary command failed ({result.returncode}): {args!r}; stdout={result.stdout}", file=sys.stderr)
-        result.check_returncode()
-    return result.stdout.strip()
+    """Every CLI child owns a process group and retained execution custody.
+
+    These receipts are execution evidence, not tracker or Git state. A missing
+    exit is never success. Semantic recovery still reads the owning authority.
+    """
+    directory = ROOT / 'evidence' / 'boundaries'
+    directory.mkdir(parents=True, exist_ok=True)
+    nonce = uuid.uuid4().hex
+    path = directory / (nonce + '.json')
+    output_path = directory / (nonce + '.stdout')
+    error_path = directory / (nonce + '.stderr')
+    birth = int(time.clock_gettime(time.CLOCK_BOOTTIME) * os.sysconf('SC_CLK_TCK'))
+    owner_birth = Path('/proc/self/stat').read_text().rsplit(')', 1)[1].split()[19]
+    receipt = {'intent': {'attempt': CURRENT_ATTEMPT, 'nonce': nonce, 'birth_ticks': birth,
+                         'owner_pid': os.getpid(), 'owner_birth': owner_birth,
+                         'args': list(args), 'cwd': str(cwd) if cwd else None,
+                         'timeout_seconds': timeout, 'started': time.time()}}
+    persist_receipt(path, receipt)
+    environment = dict(os.environ, DALPH_BOUNDARY=nonce)
+    with output_path.open('w') as output, error_path.open('w') as error:
+        child = subprocess.Popen(args, cwd=cwd, env=environment, text=True,
+                                 stdout=output, stderr=error, start_new_session=True)
+        code = wait_child(child, timeout, 5)
+    writers = marked_processes('DALPH_BOUNDARY=' + nonce, birth)
+    receipt['observation'] = {'exit': code, 'stopped_writers': not writers, 'observed': time.time()}
+    persist_receipt(path, receipt)
+    if writers:
+        raise RuntimeError('boundary descendants still live; retain custody: ' + str(path))
+    stdout = output_path.read_text()
+    if code:
+        stderr = error_path.read_text()
+        print(f"boundary command failed ({code}): {args!r}; stdout={stdout}; stderr={stderr}", file=sys.stderr)
+        raise subprocess.CalledProcessError(code, args, stdout, stderr)
+    return stdout.strip()
+
+
+def persist_receipt(path, value):
+    temporary = path.with_suffix('.pending')
+    with temporary.open('w') as output:
+        json.dump(value, output, sort_keys=True)
+        output.flush()
+        os.fsync(output.fileno())
+    temporary.replace(path)
+    descriptor = os.open(str(path.parent), os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def reconcile_commands(attempt, only_orphans=False):
+    """An interrupted CLI may have left descendants after its owner stopped."""
+    for path in (ROOT / 'evidence' / 'boundaries').glob('*.json'):
+        receipt = json.loads(path.read_text())
+        intent = receipt['intent']
+        if intent['attempt'] != attempt or receipt.get('observation', {}).get('stopped_writers'):
+            continue
+        if only_orphans:
+            owner = Path('/proc') / str(intent['owner_pid'])
+            try:
+                fields = (owner / 'stat').read_text().rsplit(')', 1)[1].split()
+                if fields[0] not in ('Z', 'X') and fields[19] == intent['owner_birth']:
+                    continue
+            except FileNotFoundError:
+                pass
+        if marked_processes('DALPH_BOUNDARY=' + intent['nonce'], intent['birth_ticks']):
+            raise RuntimeError('uncertain boundary has live writers; retain custody: ' + str(path))
+        receipt['reconciliation'] = {'state': 'stopped_without_success_receipt', 'observed': time.time()}
+        receipt.setdefault('observation', {})['stopped_writers'] = True
+        persist_receipt(path, receipt)
 
 
 def git(*args, cwd=REPO):
@@ -96,7 +162,7 @@ def mutate(bead_id, action, body):
     request = {'endpoint': API_ENDPOINT, 'city': CITY_NAME,
                'id': bead_id, 'action': action, 'body': body}
     return json.loads(run(['mise', 'exec', 'node@24.20.0', '--', 'node',
-                          str(PACK / 'scripts/beads-http.mjs'), json.dumps(request)], timeout=25))
+                          str(PACK / 'scripts/beads-http.mjs'), json.dumps(request)], timeout=70))
 
 
 def owned_spec(plan):
@@ -132,6 +198,7 @@ def prepare(bead_id, kind, base):
 
 
 def prepare_inside_guard(bead_id, kind, base):
+    global CURRENT_ATTEMPT
     key = kind + '_plan'
     plan = facts(bead_id, key)
     if plan is None:
@@ -139,7 +206,10 @@ def prepare_inside_guard(bead_id, kind, base):
         plan = {'bead': bead_id, 'attempt': attempt, 'base': base,
                 'branch': 'dalph/' + kind + '/' + bead_id,
                 'path': str(WORKTREES / (kind + '-' + bead_id))}
+        CURRENT_ATTEMPT = plan['attempt']
         record(bead_id, key, plan)
+    CURRENT_ATTEMPT = plan['attempt']
+    reconcile_commands(CURRENT_ATTEMPT)
     ready = facts(bead_id, kind + '_prepared')
     action = worktree_action(ready is not None, Path(plan['path']).exists())
     if action == 'ensure' and git('rev-parse', REMOTE_TRACKING_REF) != plan['base']:
@@ -153,15 +223,15 @@ def prepare_inside_guard(bead_id, kind, base):
     return plan
 
 
-def marked_writers(attempt, birth_ticks):
+def marked_processes(marker_text, birth_ticks, proc_root=Path('/proc')):
     """Observe actual process environment, never a retained PID/status file.
 
 Same-user unreadable processes retain custody. Other users cannot inherit the
 pack's child-only marker and do not belong to its execution authority.
 """
-    marker = ('DALPH_ATTEMPT=' + attempt).encode()
+    marker = marker_text.encode()
     found = []
-    for entry in Path('/proc').iterdir():
+    for entry in proc_root.iterdir():
         if not entry.name.isdigit() or int(entry.name) == os.getpid():
             continue
         try:
@@ -184,8 +254,34 @@ pack's child-only marker and do not belong to its execution authority.
         except FileNotFoundError:
             continue
         except PermissionError as error:
-            raise RuntimeError('writer absence unknown: ' + str(entry)) from error
+            # The process can exit between reading stat and environ. Re-read
+            # its substrate state before calling that race unknown liveness.
+            resolved = False
+            for pause in (0, 0.01, 0.03, 0.1):
+                if pause:
+                    time.sleep(pause)
+                try:
+                    current = (entry / 'stat').read_text().rsplit(')', 1)[1].split()
+                    if current[0] in ('Z', 'X'):
+                        resolved = True
+                        break
+                    fields = (entry / 'environ').read_bytes().split(b'\0')
+                    if marker in fields:
+                        found.append(int(entry.name))
+                    resolved = True
+                    break
+                except FileNotFoundError:
+                    resolved = True
+                    break
+                except PermissionError:
+                    pass
+            if not resolved:
+                raise RuntimeError('writer absence unknown after bounded observation: ' + str(entry)) from error
     return found
+
+
+def marked_writers(attempt, birth_ticks):
+    return marked_processes('DALPH_ATTEMPT=' + attempt, birth_ticks)
 
 
 def command_slot(bead_id, plan, kind, commit=None):
@@ -239,6 +335,13 @@ def wait_child(child, timeout, grace):
     except subprocess.TimeoutExpired:
         os.killpg(child.pid, signal.SIGKILL)
         child.wait(timeout=grace)
+    # The leader may have exited on TERM while a descendant ignored it.
+    # Kill only this exact spawned group; escaped descendants remain fenced
+    # by the marker observation at the caller's stopped-writer boundary.
+    try:
+        os.killpg(child.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
     return 124
 
 
@@ -277,6 +380,7 @@ def qualify(bead_id, plan):
     suffix = '' if ordinal == 1 else '-qualification-' + str(ordinal)
     logfile = ROOT / 'evidence' / ('tests-' + commit + suffix + '.log')
     if accepted:
+        qualified_tree(plan, commit)
         return {'commit': commit, 'exit': 0, 'logfile': str(logfile)}
     record(bead_id, prefix + '_intent', {
         'commit': commit, 'attempt': plan['attempt'], 'logfile': str(logfile),
@@ -292,10 +396,19 @@ def qualify(bead_id, plan):
     intent = facts(bead_id, prefix + '_intent')
     if marked_writers(plan['attempt'], intent['birth_ticks']):
         raise RuntimeError('qualification exit did not stop its writers')
+    if code == 0:
+        qualified_tree(plan, commit)
     record(bead_id, prefix + '_finished', {'commit': commit, 'exit': code, 'stopped': time.time()})
     if code != 0:
         raise RuntimeError('exact candidate qualification failed; retained evidence: ' + str(logfile))
     return {'commit': commit, 'exit': 0, 'logfile': str(logfile)}
+
+
+def qualified_tree(plan, commit):
+    if git('rev-parse', 'HEAD', cwd=plan['path']) != commit:
+        raise RuntimeError('qualification changed HEAD; refuse acceptance/publication')
+    if git('status', '--porcelain', cwd=plan['path']):
+        raise RuntimeError('qualification tree differs from commit; refuse acceptance/publication')
 
 
 def close(bead_id, reason):
@@ -356,6 +469,7 @@ def implementation_for(current):
 def cleanup(delivery_id, source_id, kind):
     plan = facts(source_id, kind + '_plan')
     prepared = facts(source_id, kind + '_prepared')
+    reconcile_commands(plan['attempt'])
     published = facts(delivery_id, 'published')
     intents = [facts(source_id, kind + suffix + '_intent')
                for kind in ('model', 'qualification') for suffix in ('', '_2', '_3')]
@@ -386,12 +500,16 @@ def cleanup(delivery_id, source_id, kind):
 
 
 def integrator(current):
+    global CURRENT_ATTEMPT
     bead_id = current['id']
     source = implementation_for(current)
     result = facts(source['id'], 'result')
     if result is None:
         raise RuntimeError('missing exact accepted result')
     candidate = facts(bead_id, 'candidate')
+    if candidate is not None:
+        CURRENT_ATTEMPT = facts(bead_id, 'candidate_plan')['attempt']
+        reconcile_commands(CURRENT_ATTEMPT)
     if candidate is None:
         git('fetch', 'origin', TARGET_REF + ':' + REMOTE_TRACKING_REF)
         head = git('rev-parse', REMOTE_TRACKING_REF)
@@ -414,6 +532,7 @@ def integrator(current):
     git('fetch', 'origin', TARGET_REF + ':' + REMOTE_TRACKING_REF)
     remote = git('rev-parse', REMOTE_TRACKING_REF)
     if remote == candidate['head']:
+        qualified_tree(facts(bead_id, 'candidate_plan'), candidate['commit'])
         # Ordinary, non-force publication. No retry on a failed/ambiguous push.
         git('push', 'origin', candidate['commit'] + ':' + TARGET_REF)
         if os.environ.get('DALPH_FAULT_AFTER_PUSH') == bead_id:
@@ -442,6 +561,7 @@ def integrator(current):
 
 
 def main():
+    reconcile_commands(None, only_orphans=True)
     claimed = json.loads(run([*GC, 'hook', '--claim', '--json'], timeout=120))
     if claimed.get('action') != 'work' or not claimed.get('bead_id'):
         raise RuntimeError('turn did not receive an exact admitted work claim: ' + json.dumps(claimed))
