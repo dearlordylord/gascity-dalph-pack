@@ -92,7 +92,9 @@ def run(args, cwd=None, timeout=30):
 
 
 def persist_receipt(path, value):
-    temporary = path.with_suffix('.pending')
+    # Independent native turns can reconcile the same orphan evidence. Each
+    # atomic writer owns its staging file; they never rename each other's file.
+    temporary = path.with_name(path.name + '.' + uuid.uuid4().hex + '.pending')
     with temporary.open('w') as output:
         json.dump(value, output, sort_keys=True)
         output.flush()

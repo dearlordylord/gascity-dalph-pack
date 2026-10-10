@@ -19,6 +19,28 @@ spec.loader.exec_module(delivery)
 
 
 class CustodyTests(unittest.TestCase):
+    def test_two_processes_can_reconcile_the_same_evidence_receipt_atomically(self):
+        with tempfile.TemporaryDirectory() as directory:
+            receipt = Path(directory) / 'receipt.json'
+            script = ('import sys,json;from pathlib import Path;sys.path.insert(0,sys.argv[1]);'
+                      'import delivery;'
+                      '[(delivery.persist_receipt(Path(sys.argv[2]), {"intent":{"nonce":"same"},"observation":{"writer":sys.argv[3],"ordinal":i}})) for i in range(100)]')
+            children = [subprocess.Popen([sys.executable, '-c', script, str(PACK / 'scripts'), str(receipt), str(i)],
+                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for i in range(2)]
+            try:
+                for child in children:
+                    output, error = child.communicate(timeout=10)
+                    self.assertEqual(child.returncode, 0, output + error)
+                import json
+                result = json.loads(receipt.read_text())
+                self.assertEqual(result['intent']['nonce'], 'same')
+                self.assertEqual(result['observation']['ordinal'], 99)
+            finally:
+                for child in children:
+                    if child.poll() is None:
+                        child.kill()
+                    child.wait(timeout=3)
+
     def test_boundary_drain_waits_for_real_exit_and_keeps_still_live_writer(self):
         marker = 'fixture-drain-' + str(os.getpid())
         birth = int(time.clock_gettime(time.CLOCK_BOOTTIME) * os.sysconf('SC_CLK_TCK'))
