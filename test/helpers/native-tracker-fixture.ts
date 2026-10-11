@@ -12,6 +12,22 @@ import { makeWorkflow } from "../../src/delivery/workflow.ts"
 import { runCommand } from "../../src/quality/command.ts"
 import { BoundaryFailure } from "../../src/domain/shared.ts"
 
+export const nativeClaimBoundary =
+  <E, R>(
+    state: { readsFail: boolean; claims: Array<typeof Claim.Type> },
+    execute: (...args: Parameters<Commands["execute"]>) => Effect.Effect<string, E, R>
+  ) =>
+  (...[root, args, cwd, timeout, capture]: Parameters<Commands["execute"]>) =>
+    Effect.gen(function* () {
+      // Discovery and identity reads must reach native before the first claim.
+      if (args[0] === "gc" && args.includes("ready") && state.readsFail && state.claims.length > 0)
+        return yield* new BoundaryFailure({ message: "tracker unavailable" })
+      const text = yield* execute(root, args, cwd, timeout, capture)
+      if (args[0] === "gc" && args.includes("hook") && args.includes("--claim"))
+        state.claims.push(yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Claim))(text))
+      return text
+    })
+
 const freePort = Effect.tryPromise(
   () =>
     new Promise<number>((resolve, reject) => {
@@ -185,7 +201,7 @@ export const nativeTrackerFixture = Effect.gen(function* () {
   }
   const commands: Commands = {
     ...actual,
-    execute: (recordRoot, args, cwd, timeout, capture) =>
+    execute: nativeClaimBoundary(state, (recordRoot, args, cwd, timeout, capture) =>
       Effect.gen(function* () {
         if (args[0] === "bd") return yield* new BoundaryFailure({ message: "direct bd forbidden" })
         if (args[0] === "codex") {
@@ -198,8 +214,6 @@ export const nativeTrackerFixture = Effect.gen(function* () {
         }
         if (args[0] === "mise") return "controlled project qualification"
         if (args[0] === "gc") {
-          if (args.includes("ready") && state.readsFail)
-            return yield* new BoundaryFailure({ message: "tracker unavailable" })
           if (args.includes("metadata-cas")) {
             state.casCalls++
             state.casKeys.push(args.find((arg) => arg.startsWith("--key=")) ?? "")
@@ -241,8 +255,6 @@ export const nativeTrackerFixture = Effect.gen(function* () {
                 })
               )
             )
-          if (args.includes("hook"))
-            state.claims.push(yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Claim))(text))
           if (args.includes("metadata-cas") && state.loseCas) {
             state.loseCas = false
             return yield* new CommandRejected({
@@ -254,6 +266,7 @@ export const nativeTrackerFixture = Effect.gen(function* () {
         }
         return yield* actual.execute(recordRoot, args, cwd, timeout, capture)
       })
+    )
   }
   const tracker = makeTracker(config, commands)
   const git = makeGit(config, commands)
