@@ -29,13 +29,35 @@ export const verifyDependencies = Effect.fn("Tracker.verifyDependencies")(functi
     return yield* new BoundaryFailure({ message: "incomplete or contradictory native dependencies" })
   yield* verifyEdges(current)
 })
+const prerequisiteReference = Effect.fn("Tracker.prerequisiteReference")(function* (
+  scope: Record<string, string>,
+  prerequisite: Bead
+) {
+  const metadata = prerequisite.metadata ?? {}
+  const ref = yield* Schema.decodeUnknownEffect(Schema.NonEmptyString)(metadata["gc.step_ref"])
+  if (
+    prerequisite.status !== "closed" ||
+    metadata["gc.root_bead_id"] !== scope["gc.root_bead_id"] ||
+    metadata["gc.root_store_ref"] !== scope["gc.root_store_ref"]
+  )
+    return yield* new BoundaryFailure({ message: "native prerequisite identity or delivery is not observed" })
+  return ref
+})
 export const observePrerequisites = Effect.fn("Tracker.observePrerequisites")(function* (
   current: Bead,
   read: ReturnType<typeof makeTracker>["bead"]
 ) {
-  const ids = prerequisiteIds(current)
-  for (const id of ids) {
-    if ((yield* read(id)).status !== "closed")
-      return yield* new BoundaryFailure({ message: "native prerequisite delivery is not observed" })
+  const scope = yield* Schema.decodeUnknownEffect(Schema.Record(Schema.String, Schema.String))(current.metadata)
+  const refs = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Schema.NonEmptyString)))(
+    scope["gc.native_step_dependencies.v1"]
+  )
+  const observed = new Set<string>()
+  for (const id of prerequisiteIds(current)) {
+    const ref = yield* prerequisiteReference(scope, yield* read(id))
+    if (!refs.includes(ref) || observed.has(ref))
+      return yield* new BoundaryFailure({ message: "contradictory native prerequisite reference" })
+    observed.add(ref)
   }
+  if (observed.size !== refs.length)
+    return yield* new BoundaryFailure({ message: "native prerequisite observations are incomplete" })
 })

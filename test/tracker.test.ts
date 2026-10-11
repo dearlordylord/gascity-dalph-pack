@@ -233,12 +233,52 @@ it.effect("native dependency declarations must be complete, unique and supported
     const closed = f.rows.get("delivery")
     if (!closed) throw new Error("fixture")
     closed.status = "closed"
+    closed.metadata["gc.step_ref"] = "step"
     const blocked = yield* Schema.decodeUnknownEffect(Bead)({
       ...original,
       needs: ["delivery"],
+      metadata: { ...original.metadata, "gc.native_step_dependencies.v1": '["step"]' },
       dependencies: [{ issue_id: "work", depends_on_id: "delivery", type: "blocks" }]
     })
     yield* observePrerequisites(blocked, f.tracker.bead).pipe(Effect.provide(NodeServices.layer))
+    for (const [key, value] of [
+      ["gc.step_ref", "unrelated"],
+      ["gc.step_ref", ""],
+      ["gc.root_bead_id", "foreign"],
+      ["gc.root_store_ref", "rig:foreign"]
+    ] as const) {
+      const saved = closed.metadata[key]
+      closed.metadata[key] = value
+      yield* Effect.flip(observePrerequisites(blocked, f.tracker.bead).pipe(Effect.provide(NodeServices.layer)))
+      if (saved !== undefined) closed.metadata[key] = saved
+    }
+    yield* Effect.flip(
+      observePrerequisites(
+        {
+          ...blocked,
+          needs: [BeadId.make("delivery"), BeadId.make("another")],
+          dependencies: [],
+          metadata: { ...blocked.metadata, "gc.native_step_dependencies.v1": '["step","other"]' }
+        },
+        (id) => Effect.succeed({ ...closed, id, status: "closed" as const })
+      ).pipe(Effect.provide(NodeServices.layer))
+    )
+    yield* Effect.flip(
+      observePrerequisites(blocked, (id) => Effect.succeed({ id, status: "closed" as const })).pipe(
+        Effect.provide(NodeServices.layer)
+      )
+    )
+    yield* Effect.flip(
+      observePrerequisites(
+        { id: blocked.id, status: blocked.status, needs: [BeadId.make("delivery")] },
+        f.tracker.bead
+      ).pipe(Effect.provide(NodeServices.layer))
+    )
+    yield* Effect.flip(
+      observePrerequisites({ ...blocked, needs: [], dependencies: [] }, f.tracker.bead).pipe(
+        Effect.provide(NodeServices.layer)
+      )
+    )
   })
 )
 it.effect("all native identity comparisons reject missing or contradictory scope", () =>
