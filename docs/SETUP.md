@@ -6,7 +6,7 @@ platforms and newer dependency revisions need their own qualification.
 
 ## Dependencies
 
-Use `git`, `mise`, `pnpm`, Python 3.11+, `jq`, `tmux`, `lsof`, and an authenticated
+Use `git`, `mise`, `pnpm`, `jq`, `tmux`, `lsof`, and an authenticated
 Codex CLI. These are the versions used by the completed trials:
 
 | Component | Trial input |
@@ -20,7 +20,7 @@ Codex CLI. These are the versions used by the completed trials:
 | Codex CLI | `0.162.1`, with access to `gpt-6-luna` |
 | tmux | `3.3a` |
 
-`pnpm-lock.yaml` owns the exact JavaScript dependency graph. Beads release
+`pnpm-lock.yaml` owns the exact TypeScript tooling and runtime dependency graph. Beads release
 1.3.1 lacks the four conditional `--if-revision` verbs required here; use the
 pinned source build. The sample keeps conditional writes and guarded release
 at `require`. Its `native_transport="off"` selects the supported CLI transport:
@@ -73,9 +73,10 @@ git init --bare "$DALPH_TRIAL_ROOT/expenses-remote.git"
 git -C "$DALPH_TARGET_REPO" remote add origin "$DALPH_TRIAL_ROOT/expenses-remote.git"
 git -C "$DALPH_TARGET_REPO" push -u origin "$DALPH_TARGET_BRANCH"
 mise exec node@24.20.0 -- pnpm install --frozen-lockfile
+mise exec node@24.20.0 -- pnpm build
 dolt config --global --add user.name 'Dalph Trial'
 dolt config --global --add user.email 'dalph-trial@local'
-python3 trial/render-city.py > "$DALPH_TRIAL_ROOT/city.generated.toml"
+mise exec node@24.20.0 -- pnpm exec tsx scripts/render-city.ts > "$DALPH_TRIAL_ROOT/city.generated.toml"
 gc init "$DALPH_CITY_ROOT" --file "$DALPH_TRIAL_ROOT/city.generated.toml" --beads-target local --beads-transport direct --no-start --skip-provider-readiness
 gc --city "$DALPH_CITY_ROOT" start
 ```
@@ -110,14 +111,11 @@ Run from the pack with the prepared environment:
 
 ```sh
 . trial/env.sh
-mise exec node@24.20.0 -- pnpm test
-mise exec node@24.20.0 -- pnpm dashboard:test
-mise exec node@24.20.0 -- pnpm dashboard:build
+mise exec node@24.20.0 -- pnpm check-all
 ```
 
 Pack tests cover protocol, actual child custody, the Effect HTTP boundary, and
-native worktree refusal/idempotence. Native worktree tests skip when `gc` is
-absent; a skip supplies no native coverage. Application checks run in the
+native worktree refusal/idempotence. Native worktree checks require `gc`; an absent binary fails the check. Application checks run in the
 example or actual published target with `mise exec node@24.20.0 -- pnpm test`.
 
 For browser changes, install Chromium with

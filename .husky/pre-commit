@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+pnpm build
+pnpm exec lint-staged
+pnpm typecheck
+gitleaks protect --staged

@@ -4,25 +4,74 @@
   "type": "module",
   "packageManager": "pnpm@10.28.2",
   "dependencies": {
-    "@effect/platform-node": "4.0.0-beta.106",
+    "@effect/platform-node": "4.0.0",
     "cytoscape": "^3.34.3",
     "cytoscape-dagre": "^4.0.1",
-    "effect": "4.0.0-beta.106"
+    "effect": "4.0.0",
+    "smol-toml": "1.6.0"
   },
   "scripts": {
-    "test": "python3 -m unittest discover -s tests -v",
-    "dashboard:build": "esbuild dashboard/app.js --bundle --minify --format=esm --outfile=dashboard/app.bundle.js",
-    "dashboard:test": "node --test dashboard/projection.test.mjs",
-    "dashboard:serve": "python3 dashboard/serve.py",
-    "dashboard:test:browser": "node dashboard/browser.test.mjs"
+    "test": "vitest run",
+    "dashboard:build": "esbuild dashboard/app.ts --bundle --minify --format=esm --outfile=dashboard/app.bundle.js",
+    "dashboard:test": "vitest run test/dashboard.test.ts",
+    "dashboard:serve": "tsx scripts/serve-dashboard.ts",
+    "dashboard:test:browser": "tsx dashboard/browser.test.ts",
+    "build": "esbuild src/quality/lint-plugin.ts --platform=node --format=esm --outfile=dist/quality/lint-plugin.js && esbuild scripts/delivery.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/delivery.js && pnpm dashboard:build",
+    "typecheck": "pnpm typecheck:tsc && pnpm typecheck:effect",
+    "typecheck:tsc": "node node_modules/@typescript/native/bin/tsc -p tsconfig.json --noEmit",
+    "typecheck:effect": "effect-tsgo diagnostics --project tsconfig.json --strict --severity error,warning",
+    "lint": "oxlint --deny-warnings src scripts test dashboard trial && dprint check && jscpd --silent src",
+    "lint:fix": "oxlint --fix src scripts test dashboard && dprint fmt",
+    "format": "dprint fmt",
+    "check-format": "dprint check",
+    "check-all": "tsx scripts/check-all.ts",
+    "circular": "dpdm --no-warning --no-tree --no-progress --exit-code circular:1 --transform \"src/**/*.ts\"",
+    "complexity": "oxlint -c oxlint.complexity.json src",
+    "test:coverage": "vitest run --coverage",
+    "test:unit": "vitest run",
+    "verify:effect-cohort": "tsx scripts/verify-effect-cohort.ts",
+    "verify:schema-boundaries": "tsx scripts/verify-schema-boundaries.ts",
+    "prepare": "husky",
+    "trial:render-city": "tsx scripts/render-city.ts",
+    "check": "tsx scripts/check-all.ts",
+    "example:typecheck": "node node_modules/@typescript/native/bin/tsc -p examples/expenses/tsconfig.json",
+    "example:test": "pnpm --dir examples/expenses test",
+    "example:oracle": "tsx trial/verify-product.ts \"$PWD/examples/expenses\""
   },
   "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "dprint"
+    ],
     "overrides": {
-      "@effect/platform-node-shared": "4.0.0-beta.106"
+      "@effect/platform-node-shared": "4.0.0"
     }
   },
   "devDependencies": {
+    "@effect/tsgo": "0.36.4",
+    "@effect/vitest": "4.0.0",
+    "@types/cytoscape-dagre": "^2.3.4",
+    "@types/node": "25.1.0",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "@vitest/coverage-v8": "5.0.1",
+    "dpdm": "4.2.0",
+    "dprint": "0.55.2",
     "esbuild": "^0.28.2",
-    "playwright": "1.62.1"
+    "fast-check": "4.8.0",
+    "husky": "9.1.7",
+    "jscpd": "4.0.8",
+    "lint-staged": "16.2.7",
+    "oxlint": "1.76.0",
+    "oxlint-tsgolint": "7.0.2001",
+    "playwright": "1.62.1",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3",
+    "vitest": "5.0.1"
+  },
+  "lint-staged": {
+    "{src,scripts,test,dashboard}/**/*.ts": [
+      "oxlint --fix --deny-warnings",
+      "dprint fmt --allow-no-files"
+    ]
   }
 }

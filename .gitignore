@@ -3,3 +3,9 @@ __pycache__/
 node_modules/
 
 dashboard/app.bundle.js
+
+dist/
+coverage/
+*.tsbuildinfo
+.hapsland-local/
+.env*

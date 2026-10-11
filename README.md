@@ -74,6 +74,8 @@ it to a shared operational city.
 
 ## Check or investigate
 
+- **Quality:** [quality harness](docs/QUALITY.md) documents `pnpm check-all`,
+  the 99% coverage floor, Effect diagnostics, source rules, and Hapsland.
 - **Checks:** [setup](docs/SETUP.md#checks) names the focused pack, application,
   and browser commands, including prerequisites and skipped-check limits.
 - **Recovery:** [recovery](docs/RECOVERY.md) explains custody, exact candidate

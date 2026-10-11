@@ -1,4 +1,4 @@
-# Template: render with trial/render-city.py before gc init.
+# Template: render with scripts/render-city.ts before gc init.
 [workspace]
 name = "@@CITY_NAME@@"
 provider = "codex"

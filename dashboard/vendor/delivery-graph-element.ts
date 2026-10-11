@@ -13,8 +13,7 @@ export const deliveryGraphEncoding = {
   selectedTicket: { className: "placement", legend: "Purple halo: selected bounded ticket" }
 } as const
 
-export type DeliveryGraphDisplayClass =
-  (typeof deliveryGraphEncoding)[keyof typeof deliveryGraphEncoding]["className"]
+export type DeliveryGraphDisplayClass = (typeof deliveryGraphEncoding)[keyof typeof deliveryGraphEncoding]["className"]
 
 /** A presentation-only task tone. It does not own or reconstruct task state. */
 export type DeliveryGraphTaskTone = "blocked" | "waiting" | "desired" | "running" | "integrating" | "settled" | "paused"

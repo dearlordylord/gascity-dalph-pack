@@ -26,7 +26,8 @@ the server forwards them to `DALPH_TRACKER_ENDPOINT`, default
 Serve a different port/upstream with:
 
 ```sh
-python3 dashboard/serve.py --port 43597 --upstream http://127.0.0.1:8372
+DALPH_DASHBOARD_PORT=43597 DALPH_TRACKER_ENDPOINT=http://127.0.0.1:8372 \
+  mise exec node@24.20.0 -- pnpm dashboard:serve
 ```
 
 An optional `native=http://HOST:NATIVE_PORT` query adds a drill-through link to

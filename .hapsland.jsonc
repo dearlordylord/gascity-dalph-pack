@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "sessionAnalytics": true,
+  "sessionInspection": true,
+  "includes": [
+    "src/**/*.ts",
+    "scripts/**/*.ts",
+    "dashboard/**/*.ts"
+  ],
+  "excludes": [
+    "dist/**",
+    "node_modules/**"
+  ]
+}

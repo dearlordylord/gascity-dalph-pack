@@ -8,8 +8,8 @@ Run the executable with a CSV path. Pass `--rules` to apply category rules, or
 `--json` to print the report as JSON:
 
 ```sh
-mise exec -- ./bin/expenses.mjs expenses.csv --rules rules.json
-mise exec -- ./bin/expenses.mjs expenses.csv --rules rules.json --json
+mise exec -- ./bin/expenses.ts expenses.csv --rules rules.json
+mise exec -- ./bin/expenses.ts expenses.csv --rules rules.json --json
 ```
 
 The CSV must have exactly these headers: `date`, `description`, `amount`, and
@@ -72,7 +72,7 @@ Invalid input is reported to stderr and exits with a nonzero status.
 For example:
 
 ```js
-import { renderReportText } from "./src/report-text.mjs";
+import { renderReportText } from "./src/report-text.ts";
 
 console.log(renderReportText({
   count: 2,

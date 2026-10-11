@@ -7,7 +7,7 @@ formula_compiler = ">=2.0.0"
 [[steps]]
 id = "A-work"
 title = "Define data contract: implementation result"
-description = "Implement src/model.mjs with strict validation of date YYYY-MM-DD, description, currency uppercase three letters, and integer minor-unit amounts parsed from decimal strings without floating-point rounding. Export parseAmount and validateExpense. Add model tests."
+description = "Implement src/model.ts with strict validation of date YYYY-MM-DD, description, currency uppercase three letters, and integer minor-unit amounts parsed from decimal strings without floating-point rounding. Export parseAmount and validateExpense. Add model tests."
 metadata = { "gc.run_target" = "dalph.worker", "dalph.task" = "A", "dalph.phase" = "work" }
 
 [[steps]]
@@ -20,7 +20,7 @@ metadata = { "gc.run_target" = "dalph.integrator", "dalph.task" = "A", "dalph.ph
 [[steps]]
 id = "B-work"
 title = "Read CSV: implementation result"
-description = "Implement src/csv.mjs exporting parseCsv(text), using the model contract. Handle quoted descriptions, commas, CRLF, header validation, malformed rows. Add CSV tests. Own csv files only."
+description = "Implement src/csv.ts exporting parseCsv(text), using the model contract. Handle quoted descriptions, commas, CRLF, header validation, malformed rows. Add CSV tests. Own csv files only."
 needs = ["A-deliver"]
 metadata = { "gc.run_target" = "dalph.worker", "dalph.task" = "B", "dalph.phase" = "work" }
 
@@ -34,7 +34,7 @@ metadata = { "gc.run_target" = "dalph.integrator", "dalph.task" = "B", "dalph.ph
 [[steps]]
 id = "C-work"
 title = "Categorize expenses: implementation result"
-description = "Implement src/categories.mjs exporting categorize(expense, rules), deterministic case-insensitive substring rules, first match wins, otherwise uncategorized. Add category tests. Own category files only."
+description = "Implement src/categories.ts exporting categorize(expense, rules), deterministic case-insensitive substring rules, first match wins, otherwise uncategorized. Add category tests. Own category files only."
 needs = ["A-deliver"]
 metadata = { "gc.run_target" = "dalph.worker", "dalph.task" = "C", "dalph.phase" = "work" }
 
@@ -48,7 +48,7 @@ metadata = { "gc.run_target" = "dalph.integrator", "dalph.task" = "C", "dalph.ph
 [[steps]]
 id = "D-work"
 title = "Aggregate totals: implementation result"
-description = "Implement src/totals.mjs exporting aggregate(expenses), deterministic totals grouped by category and currency using integer minor units, never combine currencies. Add totals tests. Own totals files only."
+description = "Implement src/totals.ts exporting aggregate(expenses), deterministic totals grouped by category and currency using integer minor units, never combine currencies. Add totals tests. Own totals files only."
 needs = ["A-deliver"]
 metadata = { "gc.run_target" = "dalph.worker", "dalph.task" = "D", "dalph.phase" = "work" }
 
@@ -62,7 +62,7 @@ metadata = { "gc.run_target" = "dalph.integrator", "dalph.task" = "D", "dalph.ph
 [[steps]]
 id = "E-work"
 title = "Build CLI: implementation result"
-description = "Implement bin/expenses.mjs executable entrypoint reading CSV path, optional --rules JSON path, --json flag. Use parseCsv and categorize; default human output lists categorized expenses. Invalid input nonzero useful stderr. Add CLI tests. Do not depend on totals/report modules yet."
+description = "Implement bin/expenses.ts executable entrypoint reading CSV path, optional --rules JSON path, --json flag. Use parseCsv and categorize; default human output lists categorized expenses. Invalid input nonzero useful stderr. Add CLI tests. Do not depend on totals/report modules yet."
 needs = ["B-deliver", "C-deliver"]
 metadata = { "gc.run_target" = "dalph.worker", "dalph.task" = "E", "dalph.phase" = "work" }
 
@@ -76,7 +76,7 @@ metadata = { "gc.run_target" = "dalph.integrator", "dalph.task" = "E", "dalph.ph
 [[steps]]
 id = "F-work"
 title = "JSON reporting: implementation result"
-description = "Implement src/report.mjs exporting createReport(expenses), deterministic JSON-compatible report using aggregate, totals and item count. Add report tests. Own report files only."
+description = "Implement src/report.ts exporting createReport(expenses), deterministic JSON-compatible report using aggregate, totals and item count. Add report tests. Own report files only."
 needs = ["D-deliver"]
 metadata = { "gc.run_target" = "dalph.worker", "dalph.task" = "F", "dalph.phase" = "work" }
 

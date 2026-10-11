@@ -7,7 +7,7 @@ formula_compiler = ">=2.0.0"
 [[steps]]
 id = "E1-work"
 title = "Currency filter: work"
-description = "Starting facts: existing expense total records are {category,currency,amount} and amounts are safe integer minor units. Add src/filter-totals.mjs exporting filterTotalsByCurrency(totals, currency = undefined). Trigger: call with an array of totals and optional currency. Return a NEW array preserving order and item identities; undefined selects all, otherwise exact currency equality. Reject a supplied currency unless it is a string of exactly three uppercase ASCII letters with TypeError. Do not mutate the input or its records. Empty input returns []. Own only this module and test/filter-totals.test.mjs. Acceptance tests: all, USD-only mixed currencies, no matches, empty, frozen input, fresh array, invalid currency. No dependencies, CLI changes, or unrelated edits. Commit your change."
+description = "Starting facts: existing expense total records are {category,currency,amount} and amounts are safe integer minor units. Add src/filter-totals.ts exporting filterTotalsByCurrency(totals, currency = undefined). Trigger: call with an array of totals and optional currency. Return a NEW array preserving order and item identities; undefined selects all, otherwise exact currency equality. Reject a supplied currency unless it is a string of exactly three uppercase ASCII letters with TypeError. Do not mutate the input or its records. Empty input returns []. Own only this module and test/filter-totals.test.ts. Acceptance tests: all, USD-only mixed currencies, no matches, empty, frozen input, fresh array, invalid currency. No dependencies, CLI changes, or unrelated edits. Commit your change."
 metadata = { "gc.run_target" = "dalph.worker", "dalph.task" = "E1", "dalph.phase" = "work" }
 
 [[steps]]
@@ -20,7 +20,7 @@ metadata = { "gc.run_target" = "dalph.integrator", "dalph.task" = "E1", "dalph.p
 [[steps]]
 id = "E2-work"
 title = "CSV export: work"
-description = "Starting facts: filterTotalsByCurrency and formatAmount are delivered. Add src/totals-csv.mjs exporting renderTotalsCsv(totals, currency = undefined). Trigger: call with totals and optional currency. Use filterTotalsByCurrency, preserve selected order. Return header category,currency,amount then newline-separated rows with formatAmount(amount), no trailing newline. Empty selection returns the header only. Escape CSV cells containing comma, double quote, CR or LF by enclosing them in double quotes and doubling embedded quotes. Do not mutate input. Own only this module and test/totals-csv.test.mjs. Acceptance tests: signed amount, exact USD filter, empty selection, comma and quote escaping, newline escaping, frozen input. Preserve CLI behavior; no unrelated edits or dependencies. Commit your change."
+description = "Starting facts: filterTotalsByCurrency and formatAmount are delivered. Add src/totals-csv.ts exporting renderTotalsCsv(totals, currency = undefined). Trigger: call with totals and optional currency. Use filterTotalsByCurrency, preserve selected order. Return header category,currency,amount then newline-separated rows with formatAmount(amount), no trailing newline. Empty selection returns the header only. Escape CSV cells containing comma, double quote, CR or LF by enclosing them in double quotes and doubling embedded quotes. Do not mutate input. Own only this module and test/totals-csv.test.ts. Acceptance tests: signed amount, exact USD filter, empty selection, comma and quote escaping, newline escaping, frozen input. Preserve CLI behavior; no unrelated edits or dependencies. Commit your change."
 needs = ["E1-deliver"]
 metadata = { "gc.run_target" = "dalph.worker", "dalph.task" = "E2", "dalph.phase" = "work" }
 
@@ -34,7 +34,7 @@ metadata = { "gc.run_target" = "dalph.integrator", "dalph.task" = "E2", "dalph.p
 [[steps]]
 id = "E3-work"
 title = "JSON export: work"
-description = "Starting facts: filterTotalsByCurrency is delivered. Add src/totals-json.mjs exporting renderTotalsJson(totals, currency = undefined). Trigger: call with totals and optional currency. Use filterTotalsByCurrency and return JSON.stringify(selectedTotals), compact with no trailing newline. Preserve record fields, input order, signed integer minor units, and exact safe integer values. Do not mutate input. Own only this module and test/totals-json.test.mjs. Acceptance tests: mixed currencies, exact filter, empty selection -> [], signed amount, MAX_SAFE_INTEGER, frozen input. Preserve CLI behavior; no dependencies or unrelated edits. Commit your change."
+description = "Starting facts: filterTotalsByCurrency is delivered. Add src/totals-json.ts exporting renderTotalsJson(totals, currency = undefined). Trigger: call with totals and optional currency. Use filterTotalsByCurrency and return JSON.stringify(selectedTotals), compact with no trailing newline. Preserve record fields, input order, signed integer minor units, and exact safe integer values. Do not mutate input. Own only this module and test/totals-json.test.ts. Acceptance tests: mixed currencies, exact filter, empty selection -> [], signed amount, MAX_SAFE_INTEGER, frozen input. Preserve CLI behavior; no dependencies or unrelated edits. Commit your change."
 needs = ["E1-deliver"]
 metadata = { "gc.run_target" = "dalph.worker", "dalph.task" = "E3", "dalph.phase" = "work" }
 
@@ -48,7 +48,7 @@ metadata = { "gc.run_target" = "dalph.integrator", "dalph.task" = "E3", "dalph.p
 [[steps]]
 id = "E4-work"
 title = "Join export API: work"
-description = "Starting facts: renderTotalsCsv and renderTotalsJson are delivered. Add src/export-totals.mjs exporting exportTotals(totals, options). Trigger: options {format:'csv'|'json', currency?:string}. Dispatch to the corresponding existing renderer and pass currency through. Missing options or unsupported format must throw TypeError. Do not mutate inputs. Own only this module, test/export-totals.test.mjs, and a short README section showing both formats. Acceptance tests: actual createReport(expenses).totals -> both exports; exact currency filter in both formats; empty selection; invalid format and missing options; frozen input. Preserve CLI behavior and existing APIs. No dependencies or unrelated edits. Commit your change."
+description = "Starting facts: renderTotalsCsv and renderTotalsJson are delivered. Add src/export-totals.ts exporting exportTotals(totals, options). Trigger: options {format:'csv'|'json', currency?:string}. Dispatch to the corresponding existing renderer and pass currency through. Missing options or unsupported format must throw TypeError. Do not mutate inputs. Own only this module, test/export-totals.test.ts, and a short README section showing both formats. Acceptance tests: actual createReport(expenses).totals -> both exports; exact currency filter in both formats; empty selection; invalid format and missing options; frozen input. Preserve CLI behavior and existing APIs. No dependencies or unrelated edits. Commit your change."
 needs = ["E2-deliver", "E3-deliver"]
 metadata = { "gc.run_target" = "dalph.worker", "dalph.task" = "E4", "dalph.phase" = "work" }
 
