@@ -103,8 +103,14 @@ the final refresh/classification checks passed six tests across two files in
 7.83 seconds. A separate recovery cohort passed eight tests across three files.
 The complete gate passed dependency coherence, build, TypeScript/Effect,
 Schema boundaries, circular dependency, complexity and lint stages; its coverage
-stage is still running in a detached invocation after two turn interruptions.
-No complete gate or 99% coverage result is claimed.
+stage failed in the detached invocation (`s78-check-all3`) with
+`TimeoutError: Operation timed out after 10m` and exit code 1. The later example
+stages did not run. No complete gate or 99% coverage result is claimed.
+A diagnostic run excluding the three long native workflow files observed
+176 of 177 tests passing; its classifier failure occurred during source editing.
+The subsequent unchanged-candidate diagnostic process exited without a result,
+so it supplies no coverage measurement. The final targeted classifier rerun
+passed both tests in 5.08 seconds.
 
 Completed Hapsland declaration evaluations reported no findings for
 `acceptedResultMatches` (0.06), `candidateMatches` (0.05), `candidateKey` (0.03),
@@ -116,8 +122,10 @@ These are completed rule evaluations, not claims of exhaustive analysis.
 Fresh independent review round one found that revision qualification logs could
 overwrite earlier diagnostics. Revision-specific log directories now preserve
 those outputs. Fresh round two reviewed `368f610..89dbc24` and reported no
-reasonable blocking implementation findings; it expressly left live qualification
-and the complete gate pending. No other parent scenario or combined live trial
+reasonable blocking implementation findings. After tightening the remote-read
+operand check, fresh round three reviewed `368f610..3cd3ff6` and reported no
+reasonable blocking implementation findings. Both expressly left live
+qualification and the complete gate incomplete. No other parent scenario or combined live trial
 is claimed completed by this handoff.
 
 | Required boundary | Status and next evidence |
@@ -129,7 +137,7 @@ is claimed completed by this handoff.
 | Exact native resource identity, preservation, absence reconciliation and branch compare-delete | Implemented with focused safety checks; S8 public recovery remains unqualified. |
 | Native custody, escaped writers and operational observations | Retained narrow process guard and classified native reads; unknown custody preserves resources. No dead-session equivalence claimed. |
 | Stable task/attempt/candidate metadata and immutable accepted implementation evidence | Implemented with changed-result/approval refusal and revision-specific qualification; composed propagation remains unqualified. |
-| TypeScript/Effect, focused checks, full 99% gate, Hapsland, separate project checks and no CI | Focused/static/Hapsland checks passed as described. Full gate remains unfinished. The fixture project check is separate from pack qualification. No CI added. |
+| TypeScript/Effect, focused checks, full 99% gate, Hapsland, separate project checks and no CI | Focused/static/Hapsland checks passed as described. Full gate failed its coverage-stage timeout. The fixture project check is separate from pack qualification. No CI added. |
 | Exact scenario handoff and parent preservation | This handoff records failed/missing observations; no parent completion or issue mutation claimed. |
 
 Reproduction in the provisioned native environment:
