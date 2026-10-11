@@ -68,3 +68,35 @@ filter, parallel CSV/JSON exports, and a joined export API through Luna max.
 It was active when repository publication began. Its completion is not credited
 by either retained audit above. Use the formula and example as new-run inputs;
 these live task IDs identify the original local trial only.
+
+## TypeScript Luna export diamond, 2026-10-11
+
+Run `ex-oq9` completed the currency filter, parallel CSV/JSON exports, and joined
+export API. Each of the four model calls used `gpt-6-luna` with max reasoning.
+The CSV and JSON model executions overlapped. Native routing used a worker pool
+of two and one integrator; the graph was launched once.
+
+The native run finished with all 10 workflow nodes completed. The pack dashboard
+displayed four settled task squares and four prerequisite edges, with an empty
+frontier. Work and delivery observations remain inside each task square;
+containers and finalization are excluded from the task graph. A browser check
+against the host-facing address verified these results without page errors.
+
+Target, tracking ref, and bare remote agreed at
+`26657865673d0034b4e6c02825a2992593e6613c`. The final candidate passed 68 tests.
+The target was clean, only its main worktree and master branch remained, and
+fresh reconciliation found no unproven custody among 782 boundary receipts.
+Private trial evidence is retained under `luna-ts-trial/evidence`, including
+`final-dashboard-observation.json`, `final-tracker-observation.json`,
+`final-live-browser.log`, and `final-custody-audit.log`.
+
+The pack's required full qualification passed 111 tests, its 47-test example,
+and the CLI oracle. Coverage exceeded 99% for statements, branches, functions,
+and lines. A supported Hapsland function declaration was evaluated successfully;
+that check does not establish semantic review coverage for every changed UI
+declaration.
+
+Native provider-health and process-helper delays required recovery during this
+trial. Completed model calls were retained rather than repeated. These results
+establish completion of this graph with recovery assistance, not low latency or
+unattended cold-replay qualification.

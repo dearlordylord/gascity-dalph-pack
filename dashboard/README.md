@@ -39,17 +39,24 @@ belongs to the deployment; this sample is for the isolated trusted trial host.
 
 The graph fills the viewport, supports pan/zoom, task selection, and Fit graph.
 Graph summary starts collapsed and provides accessible task/relationship lists.
-Prerequisites show arrows; optional grouping edges show containment separately.
-The header represents the run root until grouping is enabled. Nine graph nodes
-can therefore correspond to ten tracker beads.
+Prerequisites show arrows between product tasks. Pack formula identities
+`TASK-work` and `TASK-deliver` form one task box; its current phase appears
+inside that box. Four tasks therefore produce four boxes and four fork/join
+arrows, even though Gas City retains separate work and delivery beads.
+Internal phase edges, formula grouping, the run container and workflow-finalize
+are excluded from the canvas. The header reports native run terminality.
 
-- **Frontier:** supervisor `ready` steps, with blue borders. Root readiness is
+- **Frontier:** tasks whose current phase is supervisor `ready`, with blue borders. Root readiness is
   excluded from task readiness.
-- **Current work:** supervisor `running`/`active` steps, with a double border.
+- **Current work:** tasks whose current phase is supervisor `running`/`active`, with a double border.
   Green with a double border means active; completed green nodes have an
   ordinary border and a completed label.
 - **Selected task:** prerequisites and execution observations appear beside
-  the graph. Raw observations are available under a collapsed detail.
+  the graph. Both phases retain their execution observations under the selected
+  task. Raw observations are available under a collapsed detail.
+
+Work completion alone never produces the delivered task color or increments
+the completed task count; the delivery phase must complete.
 
 These encodings display observations; they do not independently prove process
 custody or accept task completion. See [finality](../docs/RECOVERY.md#completion)
@@ -73,9 +80,9 @@ workflow state.
 ## Check changes
 
 `pnpm dashboard:test` covers fork/join projection, readiness encoding, and
-optional grouping. `pnpm dashboard:build` bundles the browser entrypoint.
+task aggregation and delivery-gated completion. `pnpm dashboard:build` bundles the browser entrypoint.
 With Chromium installed and the server running, `pnpm dashboard:test:browser`
-covers selection/prerequisites, grouping, fit, initially collapsed summary,
+covers four task boxes, selection/prerequisites, fit, initially collapsed summary,
 stale data retention after API failure, and a narrow viewport. It uses a
 retained native fixture and controlled transport responses. Live execution and
 host-facing request evidence are reported separately in

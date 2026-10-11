@@ -64,7 +64,7 @@ provider responses and local Hapsland state stay outside Git.
 ```sh
 hapsland --version
 hapsland doctor codex
-hapsland rules check --path src/domain/candidate.ts --line 2
+hapsland rules check --path src/domain/candidate.ts --line 4
 ```
 
 A doctor result checks installation readiness; it does not establish that a
@@ -96,7 +96,8 @@ The TypeScript tests preserve the delivery and recovery contract in
   foreign/stale ownership, dirty/unmerged trees, changed target Base and lost
   cleanup responses. `test/git-guard.test.ts` checks real OS serialization.
 - Graph display: `test/dashboard.test.ts` and `dashboard/browser.test.ts` cover
-  fork/join, frontier, grouping, selection, collapsed summary and stale retention.
+  fork/join, frontier, task aggregation, delivery-gated completion, selection,
+  collapsed summary and stale retention.
 
 Native graph admission, coordinator restart with a live provider and the repair
 graft remain owned by Gas City and the historical live trials. Controlled
