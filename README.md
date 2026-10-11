@@ -84,6 +84,8 @@ it to a shared operational city.
   and browser commands, including prerequisites and skipped-check limits.
 - **Recovery:** [recovery](docs/RECOVERY.md) explains custody, exact candidate
   reuse, native restart/wake, and evidence required before another attempt.
+- **Platform reuse:** [primitive audit](docs/GASCITY-PRIMITIVES-AUDIT.md) records
+  which Gas City mechanisms the prototype uses and which it still bypasses.
 - **Acceptance:** [ACCEPTANCE.md](ACCEPTANCE.md) records the agreed chronology
   and authority boundaries; [trial results](docs/TRIAL-RESULTS.md) distinguish
   completed observations from untested portability and performance claims.
