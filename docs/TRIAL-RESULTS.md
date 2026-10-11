@@ -210,6 +210,18 @@ alternate supported harness launch, without claiming that probe delivered a task
 
 The complete gate passed 139 pack tests, 47 example tests and the independent
 CLI oracle. Coverage was 99.80% statements, 99.29% branches, 100% functions and
-99.77% lines. A final gate rerun includes the subsequent conservative missing
-session-inventory refusal and authoritative live-test observation. Earlier
-bounded trial failures remain retained and are not acceptance receipts.
+99.77% lines. The final `mise exec node@24.20.0 -- pnpm check-all` rerun passed all 139
+pack tests (17 files), 47 example tests, and the independent CLI oracle, including
+the conservative missing session-inventory refusal and authoritative live-test
+observation. Final coverage: statements 1007/1009 (99.80%), branches 566/570
+(99.29%), functions 222/222 (100%), lines 907/909 (99.77%). The pack test stage
+took 306.30 seconds; its finite gate deadline is ten minutes, separate from the
+configured project command's five-second timeout.
+
+Final live evidence is retained at `/tmp/dalph-native-acceptance-n2UxIm`:
+workflow `fi-29h`, implementation node `fi-rdi`, session `na-wisp-7z5`,
+Base `8c7c0a380bfde2288e09fd93ffaeb4d449ee5720`, published/promoted candidate
+`06ec20fdbb3ae1f8f69315a86efb4f8f4911d7d3`. The same clean-target, remote,
+owned-cleanup and immutable public-resume assertions passed. Four independent
+review rounds were completed; the last reported no reasonable blocking findings.
+Earlier bounded trial failures remain retained and are not acceptance receipts.
