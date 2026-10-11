@@ -35,8 +35,8 @@ const main = Effect.gen(function* () {
     const worktrees = makeWorktrees(config, commands, tracker, git)
     const stages = makeStages(config, commands, tracker, git)
     yield* Effect.log(`Native Gas City ${role} turn started`)
-    yield* makeWorkflow(config, commands, tracker, git, stages, worktrees).run(role)
-    yield* Effect.log("Exact claimed turn completed")
+    const outcome = yield* makeWorkflow(config, commands, tracker, git, stages, worktrees).run(role)
+    yield* Effect.log("Native turn settled", outcome)
   }).pipe(
     Effect.tapCause((cause) => Effect.logError(cause)),
     Effect.provide(

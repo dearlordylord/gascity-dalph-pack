@@ -131,3 +131,12 @@ observation of absence or a stopped process releases custody; persistent unknown
 reads still fail closed. `test/process-observation.test.ts` reproduces the race
 through an injected filesystem port. Bootstrap errors are retained in the native
 session log before commands run, so a closed tmux pane cannot erase the diagnosis.
+
+## S9 native tracker boundary slice
+
+The scenario-to-test map, native compatibility bounds and exact verification
+results are maintained in [docs/S9-TRACKER-HANDOFF.md](docs/S9-TRACKER-HANDOFF.md).
+The isolated public workflow launch/resume test uses the production delivery
+composition with Gas City owning the tracker backend and claim authority.
+Controlled model and qualification ports are not live-provider proof; the parent
+specification's remaining scenarios and combined trial stay separate.

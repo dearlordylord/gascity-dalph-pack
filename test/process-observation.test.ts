@@ -147,3 +147,42 @@ it.live("rechecks an unknown stat read when the process disappears during observ
     })
   )
 )
+
+it.live("a batched census retains every live owner and fails if any owner is unreadable", () =>
+  provide(
+    Effect.gen(function* () {
+      const { fs, owner, root } = yield* makeFixture
+      const second = join(root, "43")
+      yield* fs.makeDirectory(second)
+      yield* fs.writeFileString(join(second, "stat"), stat("R"))
+      yield* fs.writeFileString(join(second, "environ"), "DALPH_BOUNDARY=owned\0")
+      const census = markedProcesses("DALPH_BOUNDARY=owned", BirthTicks.make(100), owner, root)
+      expect((yield* census).sort((a, b) => a - b)).toEqual([42, 43])
+      yield* fs.writeFileString(join(second, "stat"), stat("Z"))
+      expect(yield* census).toEqual([42])
+      yield* fs.writeFileString(join(second, "stat"), stat("R"))
+      let reads = 0
+      const unreadable = {
+        ...fs,
+        readFileString: (path: string) =>
+          path === join(second, "environ")
+            ? Effect.suspend(() => {
+                reads++
+                return Effect.fail(
+                  PlatformError.systemError({
+                    _tag: "Unknown",
+                    module: "FileSystem",
+                    method: "readFileString",
+                    pathOrDescriptor: path
+                  })
+                )
+              })
+            : fs.readFileString(path)
+      }
+      expect((yield* Effect.flip(census.pipe(Effect.provideService(FileSystem.FileSystem, unreadable))))._tag).toBe(
+        "BoundaryFailure"
+      )
+      expect(reads).toBe(4)
+    })
+  )
+)

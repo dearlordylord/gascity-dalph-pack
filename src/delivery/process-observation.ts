@@ -5,6 +5,7 @@ import { BirthTicks, BoundaryFailure, ProcessId } from "../domain/shared.ts"
 const AFTER_PROCESS_NAME_OFFSET = 2
 const START_TICKS_INDEX = 19
 const OBSERVATION_RECHECKS = 3
+const PROCESS_OBSERVATION_CONCURRENCY = 16
 const processState = Schema.Struct({ state: Schema.String, birth: BirthTicks })
 function isTerminal(state: string): boolean {
   return state === "Z" || state === "X"
@@ -34,44 +35,48 @@ export const markedProcesses: (
 ) {
   const fs = yield* FileSystem.FileSystem
   const entries = yield* fs.readDirectory(root)
-  const found: Array<typeof ProcessId.Type> = []
-  for (const name of entries.filter((name) => /^\d+$/.test(name))) {
-    const path = join(root, name)
-    const observe = Effect.gen(function* () {
-      const info = yield* fs.stat(path)
-      const observedOwner = yield* Schema.decodeUnknownEffect(Schema.Number)(Option.getOrNull(info.uid))
-      if (observedOwner !== owner) return false
-      const stat = yield* fs.readFileString(join(path, "stat"))
-      const state = yield* parseProcessStat(stat)
-      if (isTerminal(state.state) || state.birth < birth) return false
-      const environment = yield* fs.readFileString(join(path, "environ"))
-      // An environment read is evidence only for the incarnation bracketed by
-      // these identity reads. A reused PID requires a complete fresh observation.
-      const currentInfo = yield* fs.stat(path)
-      const current = yield* parseProcessStat(yield* fs.readFileString(join(path, "stat")))
-      const currentOwner = yield* Schema.decodeUnknownEffect(Schema.Number)(Option.getOrNull(currentInfo.uid))
-      if (currentOwner !== owner || current.birth !== state.birth) {
-        return yield* PlatformError.systemError({
-          _tag: "Unknown",
-          module: "FileSystem",
-          method: "markedProcesses",
-          pathOrDescriptor: path
-        })
-      }
-      if (isTerminal(current.state)) return false
-      return environment.split("\0").includes(marker)
-    }).pipe(
-      Effect.retry({
-        schedule: Schedule.recurs(OBSERVATION_RECHECKS),
-        while: (error) => error._tag === "PlatformError" && error.reason._tag !== "NotFound"
+  const observations = yield* Effect.forEach(
+    entries.filter((name) => /^\d+$/.test(name)),
+    (name) =>
+      Effect.gen(function* () {
+        const path = join(root, name)
+        const observe = Effect.gen(function* () {
+          const info = yield* fs.stat(path)
+          const observedOwner = yield* Schema.decodeUnknownEffect(Schema.Number)(Option.getOrNull(info.uid))
+          if (observedOwner !== owner) return false
+          const stat = yield* fs.readFileString(join(path, "stat"))
+          const state = yield* parseProcessStat(stat)
+          if (isTerminal(state.state) || state.birth < birth) return false
+          const environment = yield* fs.readFileString(join(path, "environ"))
+          // An environment read is evidence only for the incarnation bracketed by
+          // these identity reads. A reused PID requires a complete fresh observation.
+          const currentInfo = yield* fs.stat(path)
+          const current = yield* parseProcessStat(yield* fs.readFileString(join(path, "stat")))
+          const currentOwner = yield* Schema.decodeUnknownEffect(Schema.Number)(Option.getOrNull(currentInfo.uid))
+          if (currentOwner !== owner || current.birth !== state.birth) {
+            return yield* PlatformError.systemError({
+              _tag: "Unknown",
+              module: "FileSystem",
+              method: "markedProcesses",
+              pathOrDescriptor: path
+            })
+          }
+          if (isTerminal(current.state)) return false
+          return environment.split("\0").includes(marker)
+        }).pipe(
+          Effect.retry({
+            schedule: Schedule.recurs(OBSERVATION_RECHECKS),
+            while: (error) => error._tag === "PlatformError" && error.reason._tag !== "NotFound"
+          }),
+          Effect.catch((error) =>
+            error._tag === "PlatformError" && error.reason._tag === "NotFound"
+              ? Effect.succeed(false)
+              : Effect.fail(new BoundaryFailure({ message: `writer absence unknown at ${path}: ${String(error)}` }))
+          )
+        )
+        return (yield* observe) ? [yield* Schema.decodeUnknownEffect(ProcessId)(Number(name))] : []
       }),
-      Effect.catch((error) =>
-        error._tag === "PlatformError" && error.reason._tag === "NotFound"
-          ? Effect.succeed(false)
-          : Effect.fail(new BoundaryFailure({ message: `writer absence unknown at ${path}: ${String(error)}` }))
-      )
-    )
-    if (yield* observe) found.push(yield* Schema.decodeUnknownEffect(ProcessId)(Number(name)))
-  }
-  return found
+    { concurrency: PROCESS_OBSERVATION_CONCURRENCY }
+  )
+  return observations.flat()
 })
