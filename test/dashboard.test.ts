@@ -10,13 +10,13 @@ import { project } from "../src/dashboard/projection.ts"
 import { GraphNode, Identity, RunDetail } from "../src/dashboard/run.ts"
 import { dashboard } from "../src/dashboard/server.ts"
 
-it.effect("preserves fork/join blocking edges and grouping separately", () =>
+it.effect("projects four tasks and their delivery-gated fork/join edges", () =>
   Effect.gen(function* () {
     const fixture = yield* Effect.tryPromise(() => readFile("dashboard/fixtures/fork-join.json", "utf8"))
     const detail = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(RunDetail))(fixture)
     const projection = project(detail)
-    expect(projection.edges).toHaveLength(9)
-    expect(project(detail, true).edges).toHaveLength(18)
+    expect(projection.edges).toHaveLength(4)
+    expect(projection.tasks).toHaveLength(4)
     expect(projection.tasks.some((task) => task.display?.classes?.includes("frontier"))).toBe(true)
   })
 )
@@ -54,10 +54,47 @@ it.effect("projects every visible status without inventing readiness", () =>
       "blocked"
     ])
     const deliver = node("active")
-    expect(project({ ...detail, nodes: [{ ...deliver, title: "task: deliver" }] }).tasks[0]?.display?.tone).toBe(
-      "integrating"
-    )
+    expect(
+      project({ ...detail, nodes: [{ ...deliver, id: Identity.make("task-deliver"), title: "task: deliver" }] })
+        .tasks[0]?.display?.tone
+    ).toBe("integrating")
     expect(project({ ...detail, nodes: [{ ...deliver, visibleInGraph: false }] }).tasks).toEqual([])
+  })
+)
+
+it.effect("keeps delivery pending after work completion and retains both phase observations", () =>
+  Effect.sync(() => {
+    const node = (id: string, status: string) =>
+      GraphNode.make({
+        id: Identity.make(id),
+        title: `${id}: work`,
+        status,
+        currentBeadId: id,
+        constructKind: "step",
+        visibleInGraph: true,
+        executionInstances: []
+      })
+    const detail = RunDetail.make({
+      runId: Identity.make("run"),
+      title: "trial",
+      nodes: [node("A-work", "completed"), node("A-deliver", "pending"), node("B-work", "running")],
+      edges: [
+        { from: Identity.make("A-work"), to: Identity.make("A-deliver"), kind: "blocks" },
+        { from: Identity.make("A-deliver"), to: Identity.make("B-work"), kind: "blocks" },
+        { from: Identity.make("A-deliver"), to: Identity.make("B-work"), kind: "blocks" },
+        { from: Identity.make("missing"), to: Identity.make("B-work"), kind: "blocks" },
+        { from: Identity.make("B-work"), to: Identity.make("missing"), kind: "blocks" }
+      ],
+      progress: { terminal: false },
+      completeness: { kind: "complete" }
+    })
+    expect(project(detail).tasks[0]).toMatchObject({
+      id: "A",
+      lifecycle: "delivery · pending",
+      display: { tone: "blocked" }
+    })
+    expect(project(detail).edges).toHaveLength(1)
+    expect(project({ ...detail, nodes: [node("A-work", "completed")] }).tasks[0]?.display?.tone).toBe("blocked")
   })
 )
 

@@ -40,7 +40,7 @@ const main = Effect.scoped(
             if (!Array.isArray(collection)) throw new Error("No graph collection")
             return collection.length
           }, key)
-        assert.equal(await count("edges"), 9)
+        assert.equal(await count("edges"), 4)
         assert.equal(
           await page.locator("dalph-delivery-graph").evaluate((element) => {
             const details = element.shadowRoot?.querySelector("details")
@@ -50,11 +50,9 @@ const main = Effect.scoped(
           false
         )
         await page.locator("#frontier button").click()
-        for (const title of ["Join report text: work", "Format total lines: deliver", "Format item count: deliver"])
+        for (const title of ["Join report text", "Format total lines", "Format item count"])
           assert.ok((await page.locator("#facts").innerText()).includes(title))
-        await page.locator("#grouping").check()
-        assert.equal(await count("edges"), 18)
-        await page.locator("#grouping").uncheck()
+        assert.equal(await count("tasks"), 4)
         await page.locator("#fit").click()
         failed = true
         await page.waitForFunction(
@@ -62,7 +60,7 @@ const main = Effect.scoped(
           {},
           { timeout: 20000 }
         )
-        assert.equal(await count("tasks"), 9)
+        assert.equal(await count("tasks"), 4)
         assert.ok((await page.locator("#error").innerText()).length > 0)
         assert.deepEqual(errors, [])
         await page.setViewportSize({ width: 390, height: 844 })
@@ -71,7 +69,7 @@ const main = Effect.scoped(
       catch: (error) => new BoundaryFailure({ message: `Browser acceptance failed: ${String(error)}` })
     })
     yield* Console.log(
-      "Browser passed: fork/join, collapsed summary, selection prerequisites, grouping, fit, retained stale graph, mobile layout"
+      "Browser passed: fork/join, collapsed summary, selection prerequisites, task phases, fit, retained stale graph, mobile layout"
     )
   })
 )

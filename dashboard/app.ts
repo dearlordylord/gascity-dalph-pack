@@ -5,7 +5,8 @@ import * as Response from "effect/http/HttpClientResponse"
 import * as FetchHttpClient from "effect/http/FetchHttpClient"
 import { registerDeliveryGraph } from "./vendor/delivery-graph-renderer.ts"
 import { project } from "../src/dashboard/projection.ts"
-import { RunDetail, type GraphNode } from "../src/dashboard/run.ts"
+import { RunDetail } from "../src/dashboard/run.ts"
+import { observedTasks, type ObservedTask } from "../src/dashboard/tasks.ts"
 import type { DeliveryGraphElement } from "./vendor/delivery-graph-element.ts"
 
 const JSON_INDENT = 2
@@ -45,14 +46,13 @@ byId("open").onclick = () => {
   )
 }
 byId("fit").onclick = () => graph?.resetView()
-input("grouping").onchange = () => render()
 const element = <Tag extends keyof HTMLElementTagNameMap>(tag: Tag, text: string, className?: string) => {
   const e = document.createElement(tag)
   e.textContent = text
   if (className) e.className = className
   return e
 }
-function nodeButton(n: GraphNode) {
+function nodeButton(n: ObservedTask) {
   const b = element("button", n.title)
   b.onclick = () => select(n.id)
   return b
@@ -65,28 +65,35 @@ function select(id: string) {
 function renderSelection() {
   const panel = byId("facts")
   panel.replaceChildren()
-  const n = detail?.nodes.find((n) => n.id === selected)
+  const n = detail && observedTasks(detail).find((n) => n.id === selected)
   if (!n || !detail) {
     panel.append(element("p", "Select a task to inspect its dependencies and execution."))
     return
   }
-  panel.append(element("h2", n.title), element("p", `${n.currentBeadId} · ${n.status}`, "mono"))
-  const deps = detail.edges.filter((e) => e.to === n.id && !["parent", "parent-child", "contains"].includes(e.kind))
+  panel.append(element("h2", n.title), element("p", `${n.phase} · ${n.status}`, "mono"))
+  const deps = project(detail).edges.filter((e) => e.to === n.id)
   panel.append(element("h3", "Prerequisites"))
   for (const e of deps) {
-    const dep = detail.nodes.find((n) => n.id === e.from)
+    const dep = observedTasks(detail).find((n) => n.id === e.from)
     panel.append(dep ? nodeButton(dep) : element("p", e.from))
   }
   if (!deps.length) panel.append(element("p", "No prerequisites"))
   panel.append(element("h3", "Execution observations"))
-  for (const instance of n.executionInstances) {
+  for (const instance of n.nodes.flatMap((node) => node.executionInstances)) {
     panel.append(element("p", `${instance.beadId} · ${instance.status} · ${instance.label}`, "mono"))
     if (instance.session?.link) panel.append(element("p", instance.session.link.sessionName, "mono"))
   }
   const raw = element("details", "")
   raw.append(
     element("summary", "Raw observation"),
-    element("pre", JSON.stringify(n.executionInstances, null, JSON_INDENT))
+    element(
+      "pre",
+      JSON.stringify(
+        n.nodes.flatMap((node) => node.executionInstances),
+        null,
+        JSON_INDENT
+      )
+    )
   )
   panel.append(raw)
   if (nativeOrigin) {
@@ -99,9 +106,9 @@ function renderSelection() {
 }
 function render() {
   if (!detail || !graph) return
-  graph.projection = project(detail, input("grouping").checked)
+  graph.projection = project(detail)
   byId("title").textContent = detail.title
-  const visible = detail.nodes.filter((n) => n.visibleInGraph && n.constructKind !== "run-root")
+  const visible = observedTasks(detail)
   const done = visible.filter((n) => ["completed", "done"].includes(n.status))
   const ready = visible.filter((n) => n.status === "ready")
   const active = visible.filter((n) => ["running", "active"].includes(n.status))
@@ -109,9 +116,9 @@ function render() {
     `${done.length}/${visible.length} completed · ${ready.length} ready · ${active.length} active`
   byId("progress").style.width = `${visible.length ? (PERCENT * done.length) / visible.length : 0}%`
   for (const [id, rows, empty] of [
-    ["frontier", ready, "No ready steps"],
-    ["active", active, "No running steps"]
-  ] satisfies ReadonlyArray<readonly [string, ReadonlyArray<GraphNode>, string]>) {
+    ["frontier", ready, "No ready tasks"],
+    ["active", active, "No running tasks"]
+  ] satisfies ReadonlyArray<readonly [string, ReadonlyArray<ObservedTask>, string]>) {
     const p = byId(id)
     p.replaceChildren()
     for (const n of rows) p.append(nodeButton(n))

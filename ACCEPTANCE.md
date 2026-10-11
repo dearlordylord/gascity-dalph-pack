@@ -93,3 +93,20 @@ expenses repository and local remote, focused protocol tests, real Luna-max
 execution evidence, crash/restart evidence, tracker closure and cleanup audit,
 and a final report with timings and available usage counts. Controlled tests
 must not be presented as live-provider proof.
+
+## Task-level graph presentation (accepted 2026-10-11)
+
+Given a native pack formula with four tasks, each represented by `-work` and
+`-deliver` step identities, opening its graph displays exactly four task boxes.
+The current work or delivery phase appears in that same box. Work completion
+alone cannot mark the task delivered; delivery completion owns that display.
+Native blocking edges between tasks remain, while internal phase edges, run
+containers, native formula grouping and workflow-finalize stay outside the task
+canvas. Selection retains both phases' execution observations. Counts and
+frontier lists use the same task projection. Refresh failure retains the last
+observed frame and explicitly marks it stale. This read-only change cannot
+authorize workflow operations; crashes and retries remain native runtime concerns.
+
+Acceptance: `test/dashboard.test.ts` verifies task aggregation and fork/join;
+`dashboard/browser.test.ts` verifies four boxes, selection, stale retention and
+layout through the real page.
