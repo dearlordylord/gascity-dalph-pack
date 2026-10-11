@@ -1,3 +1,4 @@
+import { isImplementationMetadata } from "../native/nodes.ts"
 import { Duration, Effect, FileSystem, Ref, Schema } from "effect"
 import { Plan, Result, Candidate } from "../domain/attempt.ts"
 import { BeadId, BoundaryFailure, CommitSha } from "../domain/shared.ts"
@@ -27,6 +28,16 @@ export const makeWorkflow = (
   const fetch = () => git.git(["fetch", "origin", `${git.target}:${git.remote}`])
   const commitAt = (ref: string, cwd = config.repo) =>
     git.git(["rev-parse", ref], cwd).pipe(Effect.flatMap(Schema.decodeUnknownEffect(CommitSha)))
+  const accept = Effect.fn("Delivery.accept")(function* (current: Bead, plan: typeof Plan.Type, close = true) {
+    if (yield* git.git(["status", "--porcelain"], plan.path))
+      return yield* new BoundaryFailure({ message: "accepted implementation must be committed and clean" })
+    const result = yield* commitAt("HEAD", plan.path)
+    if (result === plan.base) return yield* new BoundaryFailure({ message: "implementation produced no commit" })
+    yield* git.git(["merge-base", "--is-ancestor", plan.base, result])
+    const tests = yield* stages.qualify(current.id, plan)
+    yield* tracker.record(current.id, "result", { commit: result, attempt: plan.attempt, tests })
+    if (close) yield* tracker.close(current.id, "Accepted implementation result; task delivery remains open")
+  })
   const worker = Effect.fn("Delivery.worker")(function* (current: Bead) {
     const retained = yield* tracker.fact(current.id, "work_plan", Plan)
     if (!retained) yield* fetch()
@@ -40,14 +51,7 @@ export const makeWorkflow = (
       prompt += `\n\nProject contract:\n${yield* fs.readFileString(config.contract)}`
     }
     yield* stages.model(current.id, plan, prompt)
-    if (yield* git.git(["status", "--porcelain"], plan.path))
-      return yield* new BoundaryFailure({ message: "accepted implementation must be committed and clean" })
-    const result = yield* commitAt("HEAD", plan.path)
-    if (result === plan.base) return yield* new BoundaryFailure({ message: "implementation produced no commit" })
-    yield* git.git(["merge-base", "--is-ancestor", plan.base, result])
-    const tests = yield* stages.qualify(current.id, plan)
-    yield* tracker.record(current.id, "result", { commit: result, attempt: plan.attempt, tests })
-    yield* tracker.close(current.id, "Accepted implementation result; task delivery remains open")
+    yield* accept(current, plan)
   })
   const implementationFor = Effect.fn("Delivery.implementationFor")(function* (current: Bead) {
     const task = current.metadata?.["dalph.task"]
@@ -58,8 +62,8 @@ export const makeWorkflow = (
       .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(BeadSchema)))))
     const matches = rows.filter(
       (row) =>
+        isImplementationMetadata(row.metadata ?? {}) &&
         row.metadata?.["dalph.task"] === task &&
-        row.metadata?.["dalph.phase"] === "work" &&
         row.metadata?.["gc.root_bead_id"] === root
     )
     if (matches.length !== 1 || !matches[0])
@@ -157,7 +161,28 @@ export const makeWorkflow = (
     yield* worktrees.cleanup(current.id, current.id, "candidate")
     yield* tracker.close(current.id, "Exact result integrated, remote verified, promoted and owned resources cleaned")
   })
+  const requireLegacy = (bead: Bead) =>
+    bead.metadata?.["dalph.runtime"] === "native-v1"
+      ? Effect.fail(new BoundaryFailure({ message: "legacy-v1 runtime cannot execute a native-v1 workflow" }))
+      : Effect.void
   const run = Effect.fn("Delivery.turn")(function* (role: "worker" | "integrator") {
+    const discovered = yield* commands
+      .execute(config.root, [...tracker.gc, "hook", "--json"])
+      .pipe(
+        Effect.flatMap(
+          Schema.decodeUnknownEffect(
+            Schema.fromJsonString(
+              Schema.Union([
+                Schema.Struct({ action: Schema.Literal("work"), bead_id: BeadId }),
+                Schema.Array(BeadSchema)
+              ])
+            )
+          )
+        )
+      )
+    const discoveredId = "bead_id" in discovered ? discovered.bead_id : discovered[0]?.id
+    if (!discoveredId) return yield* new BoundaryFailure({ message: "no legacy task is ready" })
+    yield* requireLegacy(yield* tracker.bead(discoveredId))
     yield* commands.reconcile(config.root, null, true)
     const claim = yield* commands
       .execute(config.root, [...tracker.gc, "hook", "--claim", "--json"], undefined, Duration.seconds(CLAIM_SECONDS))
@@ -169,11 +194,12 @@ export const makeWorkflow = (
         )
       )
     const current = yield* tracker.bead(claim.bead_id)
+    yield* requireLegacy(current)
     const phase = role === "worker" ? "work" : "deliver"
     if (current.metadata?.["dalph.phase"] !== phase)
       return yield* new BoundaryFailure({ message: "claimed bead belongs to a different workflow phase" })
     if (role === "worker") yield* worker(current)
     else yield* integrator(current)
   })
-  return { run }
+  return { run, accept, integrator }
 }

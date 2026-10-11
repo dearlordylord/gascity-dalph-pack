@@ -1,5 +1,6 @@
 import { Config, Schema } from "effect"
 import { AbsolutePath, Branch } from "../domain/attempt.ts"
+import { ProjectCheck } from "../native/contract.ts"
 
 const CityName = Schema.String.check(Schema.isMinLength(1)).pipe(Schema.brand("CityName"))
 const Rig = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]+$/)).pipe(Schema.brand("Rig"))
@@ -17,6 +18,8 @@ export const RuntimeConfig = Schema.Struct({
   endpoint: Endpoint,
   branch: Branch,
   contract: Schema.optionalKey(AbsolutePath),
+  projectCheck: Schema.optionalKey(ProjectCheck),
+  executionVersion: Schema.optionalKey(Schema.Literals(["legacy-v1", "native-v1"])),
   faultAfterPush: Schema.optionalKey(Schema.String)
 })
 export type RuntimeConfig = typeof RuntimeConfig.Type

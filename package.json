@@ -16,7 +16,7 @@
     "dashboard:test": "vitest run test/dashboard.test.ts",
     "dashboard:serve": "tsx scripts/serve-dashboard.ts",
     "dashboard:test:browser": "tsx dashboard/browser.test.ts",
-    "build": "esbuild src/quality/lint-plugin.ts --platform=node --format=esm --outfile=dist/quality/lint-plugin.js && esbuild scripts/delivery.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/delivery.js && pnpm dashboard:build",
+    "build": "esbuild src/quality/lint-plugin.ts --platform=node --format=esm --outfile=dist/quality/lint-plugin.js && esbuild scripts/delivery.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/delivery.js && esbuild scripts/native.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/native.js && pnpm dashboard:build",
     "typecheck": "pnpm typecheck:tsc && pnpm typecheck:effect",
     "typecheck:tsc": "node node_modules/@typescript/native/bin/tsc -p tsconfig.json --noEmit",
     "typecheck:effect": "effect-tsgo diagnostics --project tsconfig.json --strict --severity error,warning",

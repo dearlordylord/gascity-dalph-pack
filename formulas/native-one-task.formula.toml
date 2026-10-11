@@ -1,0 +1,38 @@
+formula = "native-one-task"
+description = "native-v1: one configured implementation and existing safe deterministic delivery"
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[vars.instruction]
+required = true
+[vars.agent]
+required = true
+[vars.pack]
+required = true
+[vars.check]
+required = true
+
+[[steps]]
+id = "prepare"
+title = "Prepare immutable qualified native attempt"
+metadata = { "gc.run_target" = "dalph.native-prepare", "dalph.task" = "task", "dalph.phase" = "prepare", "dalph.runtime" = "native-v1" }
+
+[[steps]]
+id = "work"
+title = "Implement assigned task through configured native harness"
+description = "{{instruction}}"
+needs = ["prepare"]
+metadata = { "gc.run_target" = "{{agent}}", "dalph.task" = "task", "dalph.phase" = "work", "dalph.runtime" = "native-v1" }
+[steps.check]
+max_attempts = 1
+[steps.check.check]
+mode = "exec"
+path = "{{check}}"
+timeout = "12m"
+
+[[steps]]
+id = "deliver"
+title = "Qualify, publish, promote and safely settle owned resources"
+needs = ["work"]
+metadata = { "gc.run_target" = "dalph.native-integrator", "dalph.task" = "task", "dalph.phase" = "deliver", "dalph.runtime" = "native-v1" }
