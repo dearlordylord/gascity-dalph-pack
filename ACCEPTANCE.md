@@ -33,6 +33,17 @@ unfinished for an explicit operator decision.
 
 ## Scenarios and evidence
 
+### Operator model configuration
+
+An operator prepares Codex with their chosen model and reasoning settings and
+starts a fresh task attempt. At the model boundary the pack invokes `codex exec`
+without model or reasoning overrides, so Codex resolves its own configuration.
+The pack must not substitute the demo's Luna max settings. The existing intent
+records the actual command before execution; missing exits, retries and writer
+reconciliation retain their existing rules. Acceptance: the controlled delivery
+test inspects the recorded model command and verifies that neither override is
+passed. No live provider call is required to prove argument delegation.
+
 1. Fresh graph: A defines the data contract; B CSV parsing, C categorization,
    and D aggregation depend on A; E CLI depends on B and C; F JSON reporting
    depends on D; G acceptance tests/docs depends on E and F. Start the run with

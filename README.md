@@ -1,7 +1,7 @@
 # Gas City Dalph pack
 
 Gas City schedules a dependency graph with bounded native worker sessions.
-This pack delivers each task through an exact Git worktree, Codex **Luna max**,
+This pack delivers each task through an exact Git worktree, Codex,
 qualification, integration, ordinary push, and recoverable cleanup. A separate
 read-only dashboard shows the DAG, frontier, and current work.
 
@@ -58,6 +58,10 @@ contains the starting application fixture with formatting and report helpers.
 The formula adds the export features to that fixture.
 
 ## Use your own project
+
+Configure your model and reasoning settings in Codex before launching workers.
+The pack passes no model or reasoning overrides to `codex exec`; it uses the
+operator's Codex configuration.
 
 Set `DALPH_TRIAL_ROOT`, `DALPH_TARGET_REPO`, `DALPH_RIG`, `DALPH_CITY_NAME`,
 `DALPH_CITY_ROOT`, `DALPH_TARGET_BRANCH`, and `DALPH_PROJECT_CONTRACT_PATH`

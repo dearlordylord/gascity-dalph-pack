@@ -32,6 +32,18 @@ it.effect("delivers one admitted task through qualification, publication, promot
     expect(fixture.rows.get("work")?.status).toBe("closed")
     expect(fixture.rows.get("delivery")?.status).toBe("open")
     expect(fixture.state.workHead).toBe(RESULT)
+    const intent = yield* fixture.tracker
+      .fact(BeadId.make("work"), "model_intent", Schema.Struct({ command: Schema.Array(Schema.String) }))
+      .pipe(Effect.provideService(FileSystem.FileSystem, fixture.fs))
+    expect(intent?.command).toEqual([
+      "codex",
+      "exec",
+      "-C",
+      expect.any(String),
+      "--json",
+      "--dangerously-bypass-approvals-and-sandbox",
+      expect.any(String)
+    ])
     yield* turn(fixture, "integrator")
     expect(fixture.state.local).toBe(CANDIDATE)
     expect(fixture.state.remote).toBe(CANDIDATE)

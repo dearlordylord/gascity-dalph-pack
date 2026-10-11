@@ -17,7 +17,7 @@ Codex CLI. These are the versions used by the completed trials:
 | Dolt | `2.4.2` |
 | Go | `1.27.2` |
 | Node / pnpm | `24.20.0` / `10.28.2` |
-| Codex CLI | `0.162.1`, with access to `gpt-6-luna` |
+| Codex CLI | `0.162.1`, configured with your chosen model and reasoning settings |
 | tmux | `3.3a` |
 
 `pnpm-lock.yaml` owns the exact TypeScript tooling and runtime dependency graph. Beads release

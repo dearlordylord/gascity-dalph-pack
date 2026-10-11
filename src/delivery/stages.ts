@@ -118,10 +118,6 @@ export const makeStages = (config: RuntimeConfig, commands: Commands, tracker: T
       "exec",
       "-C",
       plan.path,
-      "-m",
-      "gpt-6-luna",
-      "-c",
-      'model_reasoning_effort="max"',
       "--json",
       "--dangerously-bypass-approvals-and-sandbox",
       prompt
