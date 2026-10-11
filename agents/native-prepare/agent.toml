@@ -1,0 +1,7 @@
+scope = "rig"
+start_command = "mise exec node@24.20.0 -- node {{.ConfigDir}}/dist/native.js prepare"
+lifecycle = "one_shot"
+idle_timeout = "15m"
+min_active_sessions = 0
+max_active_sessions = 1
+work_query = 'gc ready --metadata-field "gc.routed_to=$GC_TEMPLATE" --unassigned --exclude-type=epic --sort oldest --limit 20 --json'

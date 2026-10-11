@@ -4,7 +4,7 @@ const MINIMUM_COVERAGE = 99
 export default defineConfig({
   test: {
     include: ["test/**/*.test.ts"],
-    maxWorkers: 2,
+    maxWorkers: 1,
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],

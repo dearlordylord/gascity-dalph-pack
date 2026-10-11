@@ -59,7 +59,7 @@ export const makeStages = (config: RuntimeConfig, commands: Commands, tracker: T
     if (slot.accepted) return logfile
     yield* fs.makeDirectory(logdir, { recursive: true })
     const birth = yield* commands.birth
-    const timeout = kind === "model" ? MODEL_SECONDS : QUALIFICATION_SECONDS
+    const timeout = kind === "model" ? MODEL_SECONDS : (config.projectCheck?.timeoutSeconds ?? QUALIFICATION_SECONDS)
     yield* tracker.record(id, `${slot.prefix}_intent`, {
       attempt: plan.attempt,
       birth_ticks: birth,
@@ -102,11 +102,12 @@ export const makeStages = (config: RuntimeConfig, commands: Commands, tracker: T
     const commit = yield* git
       .git(["rev-parse", "HEAD"], plan.path)
       .pipe(Effect.flatMap(Schema.decodeUnknownEffect(CommitSha)))
+    yield* qualifiedTree(plan, commit)
     const logfile = yield* execute(
       id,
       plan,
       "qualification",
-      ["mise", "exec", "node@24.20.0", "--", "pnpm", "test"],
+      config.projectCheck?.command ?? ["mise", "exec", "node@24.20.0", "--", "pnpm", "test"],
       commit
     )
     yield* qualifiedTree(plan, commit)
