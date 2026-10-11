@@ -84,3 +84,8 @@ Legacy receipts remain on the legacy entry point and default to `legacy-v1`.
 Legacy execution refuses native-marked work both before and after claiming;
 native resume requires an explicit `native-v1` launch fact and refuses legacy
 roots. No legacy receipt is interpreted as a native session.
+
+Prepared retained work with missing session inventory, or with an unobserved
+proposal session, blocks resume and keeps its occupied position. This includes
+the launch gap before a first writer is observed; operator reconciliation must
+restore native evidence before recovery.

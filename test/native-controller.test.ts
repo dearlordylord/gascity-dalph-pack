@@ -148,7 +148,17 @@ it.effect("S5 durable task positions survive stopped or uncertain native session
 
 it.effect("S5 public resume observes the same native session and refuses duplicate or miscorrelated writers", () =>
   Effect.gen(function* () {
-    for (const fault of ["live", "duplicate", "path", "unrelated", "missing", "unknown", "runtime-missing"] as const) {
+    for (const fault of [
+      "live",
+      "duplicate",
+      "path",
+      "unrelated",
+      "missing",
+      "unknown",
+      "runtime-missing",
+      "inventory",
+      "proposal-session"
+    ] as const) {
       const f = yield* nativeFixture
       yield* Effect.gen(function* () {
         const controller = makeNativeController(f.config, f.contract, f.commands, f.tracker)
@@ -172,9 +182,34 @@ it.effect("S5 public resume observes the same native session and refuses duplica
                 )
               : execute(root, args, cwd, timeout, logs)
         }
+        if (fault === "inventory") {
+          const execute = f.commands.execute
+          f.commands.execute = (root, args, cwd, timeout, logs) =>
+            args.includes("session") && args.includes("list")
+              ? Effect.succeed(JSON.stringify({ sessions: [] }))
+              : execute(root, args, cwd, timeout, logs)
+        }
+        if (fault === "proposal-session") {
+          f.state.workHead = RESULT
+          yield* f.workflow.finish(yield* f.row("work"), BeadId.make("session"))
+          const proposal = JSON.parse(f.raw("work").metadata["dalph.native_proposal"] ?? "{}")
+          f.raw("work").metadata["dalph.native_proposal"] = JSON.stringify({ ...proposal, session: "lost-session" })
+        }
         const before = f.raw("work").metadata["dalph.native_attempt"]
         const resume = makeNativeController(f.config, f.contract, f.commands, f.tracker).resume(BeadId.make("root"))
-        if (["duplicate", "path", "missing", "unknown", "runtime-missing"].includes(fault)) yield* Effect.flip(resume)
+        if (
+          [
+            "duplicate",
+            "path",
+            "missing",
+            "unknown",
+            "runtime-missing",
+            "unrelated",
+            "inventory",
+            "proposal-session"
+          ].includes(fault)
+        )
+          yield* Effect.flip(resume)
         else yield* resume
         expect(f.raw("work").metadata["dalph.native_attempt"]).toBe(before)
         expect(f.raw("work").metadata["dalph.native_settled"]).toBeUndefined()

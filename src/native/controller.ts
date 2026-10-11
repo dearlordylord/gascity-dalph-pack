@@ -4,7 +4,7 @@ import { BeadId, BoundaryFailure } from "../domain/shared.ts"
 import type { RuntimeConfig } from "../delivery/config.ts"
 import { Bead as BeadSchema, type Bead, type Commands, type makeTracker } from "../delivery/tracker.ts"
 import { canonical } from "../delivery/files.ts"
-import { NativeAttempt, NativeContract } from "./contract.ts"
+import { NativeAttempt, NativeContract, NativeProposal } from "./contract.ts"
 import { nativePreflight } from "./preflight.ts"
 import { nativeRows } from "./identity.ts"
 import { isImplementationMetadata } from "./nodes.ts"
@@ -64,7 +64,12 @@ export const makeNativeController = (
       return yield* new BoundaryFailure({ message: "native resume has no exact delivery identity" })
     const delivery = yield* Schema.decodeUnknownEffect(BeadSchema)(deliveries[0])
     if (yield* settleNative(tracker, delivery, attempt)) return
-    yield* reconcileNativeAttempt(config, commands, attempt)
+    yield* reconcileNativeAttempt(
+      config,
+      commands,
+      attempt,
+      yield* tracker.fact(row.id, "native_proposal", NativeProposal)
+    )
     const fs = yield* FileSystem.FileSystem
     if (!(yield* fs.exists(attempt.plan.path)))
       return yield* new BoundaryFailure({

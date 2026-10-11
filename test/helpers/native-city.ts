@@ -159,9 +159,19 @@ export const nativeCity = Effect.gen(function* () {
   yield* git("push", "origin", "master")
   yield* Effect.log(`Native acceptance evidence retained at ${root}`)
   const rows = () =>
-    gc("beads", "list", "--all", "--format=json").pipe(
-      Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Bead))))
-    )
+    execute([
+      "env",
+      "GC_NO_API=1",
+      "gc",
+      "--city",
+      city,
+      "--rig",
+      "fixture",
+      "beads",
+      "list",
+      "--all",
+      "--format=json"
+    ]).pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Bead)))))
   const native = (...args: string[]) => execute([process.execPath, `${pack}/dist/native.js`, ...args])
   return { root, fs, env, git, gc, native, rows, execute }
 })

@@ -156,7 +156,7 @@ The controlled fixture supplies tracker, execution and clock boundaries through
 ports/layers. Its configured native provider never launches a nested agent CLI.
 The additional live `native-city.test.ts` exercises the same public executable,
 actual native session and exact owned worktree against Gas City, bd and tmux.
-Its final observed result is recorded below after qualification completes.
+The live public launch/resume trial passed with the observations below.
 
 Retained failures exposed two native boundaries: formula checks receive the
 controller environment rather than the agent's workspace environment, and the
@@ -195,3 +195,21 @@ source-bearing outputs and credentials remain outside Git.
 This ticket does not implement independent bounded review, the fork/join graph,
 dashboard or installation/maintenance slice. Parent S2–S4 and S7–S11 remain
 outside this ticket's completion claim. The parent issue is unchanged.
+
+The live public native delivery passed in `/tmp/dalph-native-acceptance-VEPkvD`:
+workflow `fi-5uy`, native implementation session `na-wisp-5kn`, implementation
+node `fi-f0x`, immutable Base `102e75c3408f64b88426ba6c05ed976f520a73ef`.
+Gas City launched the configured direct Node 24.20.0 fixture harness in the exact
+`work-fi-f0x` attempt worktree. The configured project command was the pinned
+Node executable with `--test`, with a five-second timeout. Safe integration
+published and promoted `5fd604b2cfd02527eb35e2b2a2da44fedf8888c7`; target and remote
+matched, the target was clean, and owned worktrees were removed. Public resume
+preserved the original attempt and proposal. This controlled native provider
+proves delivery plumbing; the independent real Claude launch above proves the
+alternate supported harness launch, without claiming that probe delivered a task.
+
+The complete gate passed 139 pack tests, 47 example tests and the independent
+CLI oracle. Coverage was 99.80% statements, 99.29% branches, 100% functions and
+99.77% lines. A final gate rerun includes the subsequent conservative missing
+session-inventory refusal and authoritative live-test observation. Earlier
+bounded trial failures remain retained and are not acceptance receipts.
