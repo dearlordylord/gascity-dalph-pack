@@ -148,7 +148,7 @@ it.effect("S5 durable task positions survive stopped or uncertain native session
 
 it.effect("S5 public resume observes the same native session and refuses duplicate or miscorrelated writers", () =>
   Effect.gen(function* () {
-    for (const fault of ["live", "duplicate", "path", "unrelated"] as const) {
+    for (const fault of ["live", "duplicate", "path", "unrelated", "missing", "unknown", "runtime-missing"] as const) {
       const f = yield* nativeFixture
       yield* Effect.gen(function* () {
         const controller = makeNativeController(f.config, f.contract, f.commands, f.tracker)
@@ -156,6 +156,8 @@ it.effect("S5 public resume observes the same native session and refuses duplica
         yield* f.workflow.prepare(yield* f.row("prepare"))
         f.raw("session").status = "open"
         f.raw("session").metadata.state = "awake"
+        if (fault === "missing") delete f.raw("session").metadata.state
+        if (fault === "unknown" || fault === "runtime-missing") f.raw("session").metadata.state = fault
         if (fault === "path") f.raw("session").metadata.work_dir = "/foreign"
         if (fault === "unrelated") f.raw("session").metadata["gc.trigger_bead_id"] = "another-task"
         if (fault === "duplicate") {
@@ -172,7 +174,7 @@ it.effect("S5 public resume observes the same native session and refuses duplica
         }
         const before = f.raw("work").metadata["dalph.native_attempt"]
         const resume = makeNativeController(f.config, f.contract, f.commands, f.tracker).resume(BeadId.make("root"))
-        if (fault === "duplicate" || fault === "path") yield* Effect.flip(resume)
+        if (["duplicate", "path", "missing", "unknown", "runtime-missing"].includes(fault)) yield* Effect.flip(resume)
         else yield* resume
         expect(f.raw("work").metadata["dalph.native_attempt"]).toBe(before)
         expect(f.raw("work").metadata["dalph.native_settled"]).toBeUndefined()

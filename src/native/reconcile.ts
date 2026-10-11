@@ -18,6 +18,10 @@ const closedSession = Effect.fn("Native.closedSession")(function* (
   if ((yield* markedProcesses(`GC_SESSION_ID=${session.id}`, BirthTicks.make(1), commands.owner)).length)
     return yield* new BoundaryFailure({ message: "retained native descendants remain; resume blocked" })
 })
+const liveSession = Effect.fn("Native.liveSession")(function* (session: typeof NativeSession.Type) {
+  if (session.metadata.state !== "awake")
+    return yield* new BoundaryFailure({ message: "open native session liveness is uncertain; resume blocked" })
+})
 export const reconcileNativeAttempt = Effect.fn("Native.reconcileAttempt")(function* (
   config: RuntimeConfig,
   commands: Commands,
@@ -32,8 +36,10 @@ export const reconcileNativeAttempt = Effect.fn("Native.reconcileAttempt")(funct
     if (session.metadata["gc.trigger_bead_id"] !== attempt.plan.bead) continue
     if (session.metadata.work_dir !== attempt.plan.path || session.metadata.template !== attempt.contract.agent)
       return yield* new BoundaryFailure({ message: "retained native session has contradictory worktree correlation" })
-    if (!row.closed || session.status !== "closed") occupied++
-    else yield* closedSession(commands, session)
+    if (!row.closed || session.status !== "closed") {
+      yield* liveSession(session)
+      occupied++
+    } else yield* closedSession(commands, session)
   }
   if (occupied > 1)
     return yield* new BoundaryFailure({

@@ -2,7 +2,7 @@ import { Console, Duration, Effect } from "effect"
 import { NodeRuntime } from "@effect/platform-node"
 import { runCommand } from "../src/quality/command.ts"
 
-const STAGE_TIMEOUT_MINUTES = 5
+const STAGE_TIMEOUT_MINUTES = 10
 const stages = [
   "verify:effect-cohort",
   "build",

@@ -166,6 +166,11 @@ Node executable, whose startup uses Effect Config;
 immutable custody and acceptance reads use public `GC_NO_API=1` authoritative
 reads. A closed session's supported terminal `dead-runtime` state is accepted
 only alongside closed status and a fresh absence of correlated process writers.
+Native tracker subprocesses clear project writer markers; actual project
+commands retain them. Quiescent native hook responses complete without a claim.
+Open sessions with uncertain or missing liveness state block public resume.
+Terminal settlement also requires the exact accepted source result and candidate
+plan Base before freeing the retained position.
 Unknown process access, missing receipt and live descendants continue to fail
 closed and retain custody.
 
@@ -181,6 +186,8 @@ Hapsland completed the eligible function declaration review for
 `jev-latest`: one request, `body_reaches_undeclared` probability 0.04, clear
 against threshold >0.7. The eligible `src/native/shell.ts:2` function
 `shellQuote` completed another request with probability 0.05, also clear.
+The eligible `src/native/tracker-command.ts:2` function `nativeTrackerArgs`
+completed one request with probability 0.05, also clear.
 Effect/import-bearing selections were skipped by the
 installed selector and are not described as completed reviews. Private
 source-bearing outputs and credentials remain outside Git.

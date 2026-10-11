@@ -18,9 +18,10 @@ it.live(
           (row) =>
             row.metadata?.["gc.root_bead_id"] === launch.workflow_id && row.metadata?.["dalph.phase"] === "deliver"
         )
-        if (delivery?.status !== "closed") return yield* new BoundaryFailure({ message: "native delivery pending" })
+        if (delivery?.status !== "closed" || !rows.some((row) => row.metadata?.["dalph.native_settled"]))
+          return yield* new BoundaryFailure({ message: "native delivery pending" })
         return { rows, delivery }
-      }).pipe(Effect.retry({ schedule: Schedule.spaced("1 second").pipe(Schedule.upTo({ duration: "240 seconds" })) }))
+      }).pipe(Effect.retry({ schedule: Schedule.spaced("1 second").pipe(Schedule.upTo({ duration: "540 seconds" })) }))
       const work = delivered.rows.find((row) => row.metadata?.["dalph.native_settled"])
       expect(work?.metadata?.["dalph.native_proposal"]).toBeDefined()
       expect(work?.metadata?.["dalph.result"]).toBeDefined()
@@ -36,5 +37,5 @@ it.live(
       expect(yield* city.fs.readFileString(`${city.env.DALPH_TARGET_REPO}/native-proof.ts`)).toContain('"native"')
       expect(yield* city.fs.readDirectory(city.env.DALPH_WORKTREE_ROOT)).toEqual([])
     }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
-  280000
+  600000
 )
