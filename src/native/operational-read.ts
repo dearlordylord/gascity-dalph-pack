@@ -2,7 +2,13 @@ const OPTION_PAIR = 2
 function gitRead(args: ReadonlyArray<string>): boolean {
   const operation = args[1] === "-C" ? args[3] : args[1]
   if (["rev-parse", "status", "show", "show-ref", "merge-base"].includes(operation ?? "")) return true
-  if (operation === "symbolic-ref") return args[args.length - 1] === "HEAD"
+  if (operation === "symbolic-ref")
+    return (
+      args
+        .slice(args.indexOf(operation) + 1)
+        .filter((arg) => arg !== "-q" && arg !== "--short")
+        .join(" ") === "HEAD"
+    )
   return operation === "remote" && args.includes("get-url")
 }
 function nativeRead(args: ReadonlyArray<string>): boolean {

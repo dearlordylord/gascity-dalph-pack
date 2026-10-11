@@ -26,6 +26,7 @@ it.effect("native read classification excludes mutation operands and process lau
       [],
       ["git"],
       ["git", "symbolic-ref", "HEAD", "refs/heads/other"],
+      ["git", "symbolic-ref", "refs/heads/other", "HEAD"],
       ["git", "remote", "set-url", "origin", "/other"],
       ["git", "push"],
       ["node", "ready"],

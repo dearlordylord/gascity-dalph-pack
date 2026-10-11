@@ -51,6 +51,8 @@ it.effect("refresh retains immutable implementation, requalifies integration and
         expect(refreshed.result).toBe(prior.result)
         expect(refreshed.head).toBe(ADVANCED)
         expect(refreshed.tests.commit).toBe(REFRESHED)
+        expect(refreshed.tests.logfile).toContain("candidate_2_qualification-1")
+        expect(refreshed.tests.logfile).not.toBe(prior.tests.logfile)
         expect(f.state.modelCalls).toBe(0)
         expect(f.state.qualificationCalls).toBe(1)
         expect(calls.filter((args) => args.includes("merge"))).toHaveLength(resumed ? 0 : 1)

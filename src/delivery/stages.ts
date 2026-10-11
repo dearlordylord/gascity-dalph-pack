@@ -56,7 +56,7 @@ export const makeStages = (config: RuntimeConfig, commands: Commands, tracker: T
     const commitMetadata = commit ? { commit } : {}
     const slot = yield* commandSlot(history(id, namespace), plan.attempt, kind, commit)
     const fs = yield* FileSystem.FileSystem
-    const logdir = join(config.root, "evidence", plan.attempt, `${kind}-${slot.ordinal}`)
+    const logdir = join(config.root, "evidence", plan.attempt, `${namespace}${kind}-${slot.ordinal}`)
     const logfile = join(logdir, "stdout.log")
     if (slot.accepted) return logfile
     yield* fs.makeDirectory(logdir, { recursive: true })

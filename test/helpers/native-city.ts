@@ -29,7 +29,7 @@ export const makeNativeCity = (deliveryFaults = false) =>
     const sourcePack = yield* fs.realPath(".")
     const pack = join(root, "pack")
     yield* fs.makeDirectory(pack)
-    for (const relative of ["pack.toml", "agents", "formulas", "dist"])
+    for (const relative of ["pack.toml", "agents", "formulas", "dist", "trial"])
       yield* fs.copy(join(sourcePack, relative), join(pack, relative))
     yield* fs.symlink(join(sourcePack, "node_modules"), join(pack, "node_modules"))
     const apiPort = yield* port
