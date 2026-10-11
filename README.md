@@ -54,8 +54,8 @@ city, and [recovery](docs/RECOVERY.md) when a step stalls or an outcome is unkno
 The demo forks from a currency filter into CSV and JSON exports, then joins
 those branches into one export API. Every work step specifies its owned files,
 expected behavior, and acceptance tests in the formula. `examples/expenses`
-contains the completed prior demo at commit `9a771700…`, before these exports;
-it is a copyable application fixture, not a tracker database.
+contains the starting application fixture with formatting and report helpers.
+The formula adds the export features to that fixture.
 
 ## Use your own project
 

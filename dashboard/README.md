@@ -17,7 +17,7 @@ mise exec node@24.20.0 -- pnpm dashboard:serve
 
 Open `http://HOST:43597/?city=CITY&scope=RIG&run=WORKFLOW_ID`.
 Use the native city name, rig name, and the workflow ID returned at launch.
-The explicit rig scope avoids the slow ambiguous lookup observed in the trial.
+The explicit rig scope identifies the target project for the lookup.
 Done: the formula title and branched dependency graph appear.
 
 The server listens on `0.0.0.0:43597`. The browser makes same-origin API calls;
@@ -70,10 +70,8 @@ A failed refresh retains the last graph, marks it stale, and displays the error.
 A successful response may itself contain delayed native projection data:
 `Live` means the request succeeded, not that every upstream event has arrived.
 
-The trial observed a running tracker task while the API still returned all
-nodes pending, and a closed tracker graph before API terminality caught up.
-Native provider-health fan-out could delay requests by tens of seconds or
-more. Compare fresh tracker reads with API data before restarting execution;
+Native projection data can lag tracker changes, including task completion and
+run terminality. Compare fresh tracker reads with API data before restarting execution;
 see [recovery](../docs/RECOVERY.md). The UI owns no scheduler or persisted
 workflow state.
 
