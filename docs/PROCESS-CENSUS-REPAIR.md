@@ -54,3 +54,25 @@ The original integrator owns conflicts and combined qualification. Scope remains
 local Linux cooperative same-user processes; inaccessible foreign scopes are
 not qualified. This candidate does not publish #3 or complete #1–#7. Original
 Dalph owns publication and any later FullRerun against the compatible head.
+
+## Final qualification record
+
+Qualified and independently reviewed code candidate:
+`09bc64eba0ca4597e883f2d53d08ef2ca1a385b5` against the Base above.
+`mise exec -- pnpm check-all` exited 0 on that exact candidate: all stages
+passed, 13 test files / 126 tests; statements 99.68% (639/641), branches
+99.12% (340/343), functions 100% (160/160), lines 99.64% (564/566).
+The example suite passed 47 tests and the independent CLI oracle passed.
+
+Fresh independent same-model reviewer with medium reasoning, round one,
+reviewed Base..candidate, linked #1/#3, repository instructions, injected and
+physical tests, and compatibility handoff: no reasonable blocking findings.
+Review ended at the first clean verdict. The earlier reviewer launch was
+interrupted before review to select the explicitly required medium effort;
+it produced no verdict and consumed no review round.
+
+This final evidence-only commit adds this record; implementation and tests are
+identical to the qualified/reviewed candidate. Its exact result SHA is supplied
+to original Dalph by the accepted result. No remote publication or future
+combined native-primitives qualification is claimed here. Local gate logs and
+source-bearing Hapsland responses remain outside Git under `/tmp/census-*`.
