@@ -1,5 +1,7 @@
 # S7/S8 native delivery and cleanup
 
+**Status: incomplete; no accepted result.**
+
 This slice implements serialized native delivery and exact cleanup from
 [Specification #1](https://github.com/dearlordylord/gascity-dalph-pack/issues/1)
 and [the accepted native specification](NATIVE-PRIMITIVES-SPEC.md). It introduces
@@ -85,20 +87,50 @@ native tracker dependency observations.
 
 ## Observed qualification
 
-Qualification is still in progress. The first composed run stopped during native
-startup at its 60-second command bound; retained supervisor evidence showed about
-42 seconds in tracker initialization. Startup now has a separate 120-second
-bound. The second run reached native worktree preparation but exhausted the
-180-second accepted-result observation deadline while the runtime reported
-uncertain process attribution. The fixture now owns its tmux directory instead
-of inheriting another city's directory. No failed run establishes S7/S8 success.
+The composed public native test has **not passed**. Earlier runs exhausted the
+startup or accepted-result observation bounds. The latest isolated snapshot run
+(`s78-native-focus5`) failed with `native delivery observation pending` after
+240.50 seconds. Fresh retained native events showed both exact worktrees prepared,
+one preparation closed, both implementation results still absent and no candidate
+constructed. Neither lost-response barrier was reached. The native supervisor
+reported slow durable storage and unreadable process environments, including
+PIDs 2178874 and 3075204. This is observed runtime evidence; it does not establish
+that those conditions are the sole cause. Those resources and custody checks were
+preserved. S7 and S8 remain unqualified.
 
-Focused checks before the final native rerun passed 48 tests across six files;
-the subsequent production refresh-flow test passed four tests in its file.
-TypeScript, Effect diagnostics, lint and complexity checks passed after coherent
-helper extraction. Complete coverage and Hapsland results will be recorded after
-the final gate and fresh review. No other parent scenario or combined live trial
+Focused checks passed 48 tests across six files before the final fixture changes;
+the final refresh/classification checks passed six tests across two files in
+7.83 seconds. A separate recovery cohort passed eight tests across three files.
+The complete gate passed dependency coherence, build, TypeScript/Effect,
+Schema boundaries, circular dependency, complexity and lint stages; its coverage
+stage is still running in a detached invocation after two turn interruptions.
+No complete gate or 99% coverage result is claimed.
+
+Completed Hapsland declaration evaluations reported no findings for
+`acceptedResultMatches` (0.06), `candidateMatches` (0.05), `candidateKey` (0.03),
+`gitRead` (0.07), `nativeRead` (0.11) and `operationalRead` (0.22), against threshold
+0.7. Source-bearing classifier responses remain outside Git. The earlier
+`nativeRead` finding was fixed by making its operation map local to the callable.
+These are completed rule evaluations, not claims of exhaustive analysis.
+
+Fresh independent review round one found that revision qualification logs could
+overwrite earlier diagnostics. Revision-specific log directories now preserve
+those outputs. Fresh round two reviewed `368f610..89dbc24` and reported no
+reasonable blocking implementation findings; it expressly left live qualification
+and the complete gate pending. No other parent scenario or combined live trial
 is claimed completed by this handoff.
+
+| Required boundary | Status and next evidence |
+| --- | --- |
+| S7/S8 public native workflow with two accepted results and deterministic loss | Failed observation run; requires a passing composed native test reaching both barriers. |
+| Official integration policy comparison and precise reuse/adapters | Documented above with immutable source pin; no executable official refinery adoption claimed. |
+| Same-target serialization, correlation, pinned publication recovery and finite refresh | Implemented with focused adapter evidence; public composition remains unqualified. |
+| Completion after publication, local promotion and cleanup; fresh successor eligibility | Implemented and covered by focused workflow checks; complete native continuation remains unqualified. |
+| Exact native resource identity, preservation, absence reconciliation and branch compare-delete | Implemented with focused safety checks; S8 public recovery remains unqualified. |
+| Native custody, escaped writers and operational observations | Retained narrow process guard and classified native reads; unknown custody preserves resources. No dead-session equivalence claimed. |
+| Stable task/attempt/candidate metadata and immutable accepted implementation evidence | Implemented with changed-result/approval refusal and revision-specific qualification; composed propagation remains unqualified. |
+| TypeScript/Effect, focused checks, full 99% gate, Hapsland, separate project checks and no CI | Focused/static/Hapsland checks passed as described. Full gate remains unfinished. The fixture project check is separate from pack qualification. No CI added. |
+| Exact scenario handoff and parent preservation | This handoff records failed/missing observations; no parent completion or issue mutation claimed. |
 
 Reproduction in the provisioned native environment:
 

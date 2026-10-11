@@ -9,7 +9,7 @@ function gitRead(args: ReadonlyArray<string>): boolean {
         .filter((arg) => arg !== "-q" && arg !== "--short")
         .join(" ") === "HEAD"
     )
-  return operation === "remote" && args.includes("get-url")
+  return operation === "remote" && args[args.indexOf(operation) + 1] === "get-url"
 }
 function nativeRead(args: ReadonlyArray<string>): boolean {
   const nativeOperations = new Map([
