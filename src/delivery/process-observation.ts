@@ -1,11 +1,14 @@
-import { Effect, FileSystem, Option, type PlatformError, Schedule, Schema } from "effect"
+import { Effect, FileSystem, Option, PlatformError, Schedule, Schema } from "effect"
 import { join } from "node:path"
 import { BirthTicks, BoundaryFailure, ProcessId } from "../domain/shared.ts"
 
 const AFTER_PROCESS_NAME_OFFSET = 2
 const START_TICKS_INDEX = 19
-const PERMISSION_RECHECKS = 3
+const OBSERVATION_RECHECKS = 3
 const processState = Schema.Struct({ state: Schema.String, birth: BirthTicks })
+function isTerminal(state: string): boolean {
+  return state === "Z" || state === "X"
+}
 export const parseProcessStat = (source: string) => {
   const fields = source
     .slice(source.lastIndexOf(")") + AFTER_PROCESS_NAME_OFFSET)
@@ -36,15 +39,30 @@ export const markedProcesses: (
     const path = join(root, name)
     const observe = Effect.gen(function* () {
       const info = yield* fs.stat(path)
-      if (Option.getOrNull(info.uid) !== owner) return false
+      const observedOwner = yield* Schema.decodeUnknownEffect(Schema.Number)(Option.getOrNull(info.uid))
+      if (observedOwner !== owner) return false
       const stat = yield* fs.readFileString(join(path, "stat"))
       const state = yield* parseProcessStat(stat)
-      if (state.state === "Z" || state.state === "X" || state.birth < birth) return false
+      if (isTerminal(state.state) || state.birth < birth) return false
       const environment = yield* fs.readFileString(join(path, "environ"))
+      // An environment read is evidence only for the incarnation bracketed by
+      // these identity reads. A reused PID requires a complete fresh observation.
+      const currentInfo = yield* fs.stat(path)
+      const current = yield* parseProcessStat(yield* fs.readFileString(join(path, "stat")))
+      const currentOwner = yield* Schema.decodeUnknownEffect(Schema.Number)(Option.getOrNull(currentInfo.uid))
+      if (currentOwner !== owner || current.birth !== state.birth) {
+        return yield* PlatformError.systemError({
+          _tag: "Unknown",
+          module: "FileSystem",
+          method: "markedProcesses",
+          pathOrDescriptor: path
+        })
+      }
+      if (isTerminal(current.state)) return false
       return environment.split("\0").includes(marker)
     }).pipe(
       Effect.retry({
-        schedule: Schedule.recurs(PERMISSION_RECHECKS),
+        schedule: Schedule.recurs(OBSERVATION_RECHECKS),
         while: (error) => error._tag === "PlatformError" && error.reason._tag !== "NotFound"
       }),
       Effect.catch((error) =>

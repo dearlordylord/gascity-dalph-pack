@@ -1,6 +1,7 @@
 # Working in the pack
 
-Use pnpm and the pinned Node through mise. Source `trial/env.sh` only when a
+Use pnpm and the pinned Node through mise. In fresh worktrees with absent
+dependencies, run `mise exec -- pnpm install --frozen-lockfile` before checks. Source `trial/env.sh` only when a
 native Gas City boundary is required. Gas City owns tracker state and claims;
 Git owns commits and worktrees; the execution substrate owns writer liveness.
 Preserve the accepted scenarios in [ACCEPTANCE.md](ACCEPTANCE.md).
