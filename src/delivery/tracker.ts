@@ -2,31 +2,41 @@ import { Duration, Effect, Schema } from "effect"
 import * as HttpClient from "effect/http/HttpClient"
 import * as Request from "effect/http/HttpClientRequest"
 import * as Response from "effect/http/HttpClientResponse"
-import { BeadId, BoundaryFailure } from "../domain/shared.ts"
+import { type BeadId, BoundaryFailure } from "../domain/shared.ts"
 import type { RuntimeConfig } from "./config.ts"
 import { canonical } from "./files.ts"
+import { Bead, Claim, verifyCity } from "./tracker-observation.ts"
 import type { makeCommands } from "./command.ts"
 
-export const Bead = Schema.Struct({
-  id: BeadId,
-  status: Schema.String,
-  description: Schema.optionalKey(Schema.String),
-  metadata: Schema.optionalKey(Schema.Record(Schema.String, Schema.String))
-})
-export type Bead = typeof Bead.Type
+export { Bead } from "./tracker-observation.ts"
 export type Commands = Effect.Success<typeof makeCommands>
 const BOUNDARY_SECONDS = 60
+const CLAIM_SECONDS = 120
 const Status = Schema.Struct({ status: Schema.String })
 
 export const makeTracker = (config: RuntimeConfig, commands: Commands) => {
   const gc = ["gc", "--city", config.city, "--rig", config.rig]
   const bead = Effect.fn("Tracker.readBead")(function* (id: BeadId) {
-    const rows = yield* commands
-      .execute(config.root, ["bd", "-C", config.repo, "show", id, "--json"])
-      .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Bead)))))
-    const current = rows[0]
-    if (rows.length !== 1 || current?.id !== id)
-      return yield* new BoundaryFailure({ message: "tracker did not return the exact bead" })
+    const snapshots = yield* Effect.forEach(
+      ["open", "in_progress", "blocked", "closed"],
+      (status) =>
+        commands
+          .execute(
+            config.root,
+            [...gc, "ready", "--status", status, "--limit", "0", "--json"],
+            undefined,
+            Duration.seconds(BOUNDARY_SECONDS)
+          )
+          .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Bead))))),
+      { concurrency: 4 }
+    )
+    const rows = snapshots.flat()
+    const matches = rows.filter((row) => row.id === id)
+    const current = matches[0]
+    if (matches.length !== 1 || !current || (current._cache_age_s ?? 0) > 0)
+      return yield* new BoundaryFailure({ message: "tracker did not return one fresh exact bead" })
+    if (current.metadata?.["gc.root_store_ref"] !== `rig:${config.rig}`)
+      return yield* new BoundaryFailure({ message: "tracker task has foreign or missing native store scope" })
     return current
   })
   const fact = <A>(id: BeadId, key: string, schema: Schema.ConstraintDecoder<A, never>) =>
@@ -41,22 +51,35 @@ export const makeTracker = (config: RuntimeConfig, commands: Commands) => {
       if (current !== encoded) return yield* new BoundaryFailure({ message: `contradictory durable fact: ${key}` })
       return
     }
-    yield* commands.execute(
-      config.root,
-      [
-        ...gc,
-        "beads",
-        "metadata-cas",
-        id,
-        `--store-ref=rig:${config.rig}`,
-        `--key=dalph.${key}`,
-        "--expected=",
-        `--next=${encoded}`,
-        "--json"
-      ],
-      undefined,
-      Duration.seconds(BOUNDARY_SECONDS)
-    )
+    const reconciled = yield* commands
+      .execute(
+        config.root,
+        [
+          ...gc,
+          "beads",
+          "metadata-cas",
+          id,
+          `--store-ref=rig:${config.rig}`,
+          `--key=dalph.${key}`,
+          "--expected=",
+          `--next=${encoded}`,
+          "--json"
+        ],
+        undefined,
+        Duration.seconds(BOUNDARY_SECONDS)
+      )
+      .pipe(
+        Effect.as(false),
+        Effect.catch((error) =>
+          Effect.gen(function* () {
+            const observed = yield* bead(id)
+            if (error._tag !== "CommandRejected" || observed.metadata?.[`dalph.${key}`] !== encoded)
+              return yield* Effect.fail(error)
+            return true
+          })
+        )
+      )
+    if (reconciled) return
     if ((yield* bead(id)).metadata?.[`dalph.${key}`] !== encoded)
       return yield* new BoundaryFailure({ message: `durable fact not acknowledged: ${key}` })
   })
@@ -82,5 +105,18 @@ export const makeTracker = (config: RuntimeConfig, commands: Commands) => {
     if ((yield* bead(id)).status !== "closed")
       return yield* new BoundaryFailure({ message: "tracker completion not observed" })
   })
-  return { gc, bead, fact, record, close }
+  const claim = Effect.fn("Tracker.claim")(function* () {
+    yield* commands
+      .execute(config.root, [...gc, "config", "show"])
+      .pipe(Effect.flatMap((text) => verifyCity(config, text)))
+    return yield* commands
+      .execute(
+        config.root,
+        [...gc, "hook", "--claim", "--drain-ack", "--json"],
+        undefined,
+        Duration.seconds(CLAIM_SECONDS)
+      )
+      .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Claim))))
+  })
+  return { gc, bead, fact, record, close, claim }
 }

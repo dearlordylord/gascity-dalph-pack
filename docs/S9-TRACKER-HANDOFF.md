@@ -1,0 +1,37 @@
+# S9 native tracker delivery handoff
+
+This ticket implements the S9 tracker boundary slice of [Specification #1](https://github.com/dearlordylord/gascity-dalph-pack/issues/1), whose accepted scenario is recorded in [NATIVE-PRIMITIVES-SPEC.md](NATIVE-PRIMITIVES-SPEC.md). The production composition retains the existing workflow, Git integration and custody mechanisms. It adds no scheduler or persisted frontier.
+
+## Scenario-to-test map
+
+| S9 observation | Test and observed assertion |
+| --- | --- |
+| Compatible configured tracker without pack-side bd | `test/native-tracker-workflow.test.ts` launches a v2 workflow with public `gc sling ... --formula --json`; pack calls run with a restricted PATH where `command -v bd` fails. Gas City owns its configured backend. The production command, tracker, workflow, stage, Git and worktree composition runs against the real native supervisor. |
+| Failed task read preserves work | The first native claim succeeds, the injected ready read fails, no model runs and no task worktree exists. A fresh read observes the same task in progress without a result. The next public hook claim reports `existing_assignment` for that exact task and workflow root. |
+| Ambiguous applied mutation | The first native metadata CAS applies but its response is lost. Exact task rereads establish the fact; each work-phase metadata key is mutated once. `test/tracker.test.ts` also verifies that an unapplied CAS retains failure rather than blindly retrying. Existing `test/workflow.test.ts` covers ambiguous close and publication responses. |
+| Successful delivery | Worker returns `worked`; integrator returns `delivered`. A real Git commit is published to a local bare remote, promoted into the target checkout, and both owned worktrees are removed. Native observations show two closed task-phase records. Model and project qualification are controlled ports, not live provider or project qualification evidence. |
+| No-work and drain | Both native roles return `idle` after delivery with model calls remaining one. Controlled composed tests return idle for no-work, drain-pending and suspended-rig receipts with no task completion, model call or worktree creation. |
+| Explicit authority and failed-read safety | `test/tracker.test.ts` rejects missing, foreign, contradictory, duplicate, stale, malformed and unavailable observations. City configuration, rig path, native claim owner/route, workflow root, task phase, instructions and native dependencies are checked before work. Delivery rereads its exact implementation and rejects changed lifecycle/identity before push. |
+
+## Compatibility boundary
+
+The adapter requires the public native hook v1 receipt, fresh `gc ready --status` snapshots, scoped metadata CAS and supervisor close endpoint. Task rows must expose the native rig root-store scope, workflow/task identity and complete native dependency metadata. It accepts native `needs` or blocking dependency edges, and preserves parent-child and tracks grouping edges. Unknown lifecycle/dependency semantics or an errored claim are visible failures, never proof of no work.
+
+The native acceptance fixture uses Gas City revision `8fd6aa25ce73b3e8cf0c1e092e8a14ab00b4c15a` and configured Beads 1.3.0 (`1b7bf9b1910d8ecec3f461f70f478314b654eaa6`) with native backend telemetry disabled (`BD_DISABLE_METRICS=1`). Backend setup and its Dolt service belong to the isolated native fixture; production pack code invokes neither bd nor Dolt and reads no local tracker store. This qualifies that compatible native configuration, not every Gas City tracker provider. The tested revision's file tracker did not support the required native rig claim path; it remains incompatible with this acceptance fixture. Split-store roots outside the configured rig scope are rejected. No other parent scenario or final combined live trial is claimed complete here.
+
+## Verification
+
+Focused guard and workflow checks: 58 passed across five files (28 workflow, 10 tracker, 8 process-observation and 12 native command/command-slot tests). The focused covered native acceptance with the diagnosed compatible configuration passed all assertions: 1 test, 147.71 seconds, on 2026-10-11 (07:07:32 UTC start). Its 270-second test limit and 07:12:36 UTC outer hard stop were finite. Evidence is retained in `/tmp/s9-native-oEOvl3` and `/tmp/s9-native-covered-focus.log`. The diagnostic single-test coverage command retained the global 99% thresholds and failed those thresholds for untested source; it is not full-gate qualification. The complete `pnpm check-all` passed: 14 test files, 123 tests; statements 99.71% (706/708), branches 99.24% (395/398), functions 100% (180/180), and lines 99.68% (626/628). All static checks, example typecheck, 47 example tests and the independent example CLI oracle passed. The covered suite took 194.52 seconds. Full-gate evidence is retained in `/tmp/s9-complete-gate.log` and native receipts in `/tmp/s9-native-ioarAk`. The full operation started at 07:10:52 UTC with an expected duration of 180 seconds and an absolute hard stop of 07:16:57 UTC; it completed within that bound.
+
+Hapsland 0.1.0 completed supported declaration reviews of `cityScopeMatches`, `claimOwnershipMatches`, and `implementationIdentityMatches`: one evaluated request each, all clear for `body_reaches_undeclared`; probabilities 0.06, 0.03 and 0.04 respectively, threshold greater than 0.7. Doctor readiness and skipped imported Effect-wrapper selections are not counted as completed reviews. Source-bearing responses remain outside Git in `/tmp/s9-hapsland-{scope,claim,implementation}.txt`.
+
+Reproduction in the provisioned native environment:
+
+```sh
+DALPH_TRIAL_ROOT=/workspace/dalph-dogfood/gascity-dalph
+source trial/env.sh
+mise exec node@24.20.0 -- pnpm test test/native-tracker-workflow.test.ts
+mise exec node@24.20.0 -- pnpm check-all
+```
+
+Native fixture command receipts and failure evidence remain in `/tmp/s9-native-*`. An intermittent live-descendant refusal was retained at `/tmp/s9-native-13ywYt/evidence/boundaries/981a0c1e-ccfb-4c84-8158-8498d88952e6.json`; the first focused diagnostic run did not reproduce it. The subsequent covered run captured `/tmp/s9-native-FAYbWf/native-live-descendants.json`: the live child was `bd-candidate send-metrics`. The isolated configured backend now disables that detached telemetry sender with its supported `BD_DISABLE_METRICS=1` option. Fixture diagnostics capture the live PID command/state before teardown without suppressing the custody guard. Covered timing evidence showed extra sequential process-census cost. Independent per-process observations now run with concurrency bounded to 16, retaining the same owner, birth, nonce, stopped-state and four-attempt unknown-read checks. CAS response reconciliation now requires a `CommandRejected` response after observed descendant quiescence; an applied fact cannot release unknown writer custody. Native provisioning-owned scaffolding and `.beads.gate.lock` are excluded only from the isolated product fixture checkout; production promotion and exact cleanup guards remain unchanged. Credentials and classifier source responses are not committed. No CI workflows were added.

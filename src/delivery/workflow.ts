@@ -1,6 +1,6 @@
-import { Duration, Effect, FileSystem, Ref, Schema } from "effect"
+import { Effect, FileSystem, Ref, Schema } from "effect"
 import { Plan, Result, Candidate } from "../domain/attempt.ts"
-import { BeadId, BoundaryFailure, CommitSha } from "../domain/shared.ts"
+import { type BeadId, BoundaryFailure, CommitSha } from "../domain/shared.ts"
 import { exactParents } from "../domain/candidate.ts"
 import type { RuntimeConfig } from "./config.ts"
 import type { Bead, Commands, makeTracker } from "./tracker.ts"
@@ -9,10 +9,13 @@ import type { Git } from "./git.ts"
 import type { makeStages } from "./stages.ts"
 import type { makeWorktrees } from "./worktrees.ts"
 
+import { observePrerequisites } from "./tracker-eligibility.ts"
+import { implementationIdentityMatches } from "./tracker-scope.ts"
+import { verifyClaim } from "./tracker-observation.ts"
+
 type Tracker = ReturnType<typeof makeTracker>
 type Stages = ReturnType<typeof makeStages>
 type Worktrees = ReturnType<typeof makeWorktrees>
-const CLAIM_SECONDS = 120
 const implementationPrompt =
   "You own this exact isolated attempt. Implement the assigned task, add meaningful tests, run mise exec -- pnpm test, review against the requested behavior and code quality, fix findings and commit all owned changes. Do not push, merge, touch other worktrees, close tracker records, or launch other agents. Prerequisite delivery beads are closed. Use git -c user.name='Dalph Trial' -c user.email='dalph-trial@local' -c commit.gpgsign=false commit if needed."
 
@@ -32,8 +35,6 @@ export const makeWorkflow = (
     if (!retained) yield* fetch()
     const base = retained?.base ?? (yield* commitAt(git.remote))
     const plan = yield* worktrees.prepare(current.id, "work", base)
-    if (!current.description)
-      return yield* new BoundaryFailure({ message: "work bead has no implementation instructions" })
     let prompt = `${current.description}\n\n${implementationPrompt}`
     if (config.contract) {
       const fs = yield* FileSystem.FileSystem
@@ -50,21 +51,16 @@ export const makeWorkflow = (
     yield* tracker.close(current.id, "Accepted implementation result; task delivery remains open")
   })
   const implementationFor = Effect.fn("Delivery.implementationFor")(function* (current: Bead) {
-    const task = current.metadata?.["dalph.task"]
-    const root = current.metadata?.["gc.root_bead_id"]
-    if (!task || !root) return yield* new BoundaryFailure({ message: "delivery has no tracker task/root identity" })
     const rows = yield* commands
       .execute(config.root, [...tracker.gc, "ready", "--status", "closed", "--limit", "0", "--json"])
       .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(BeadSchema)))))
-    const matches = rows.filter(
-      (row) =>
-        row.metadata?.["dalph.task"] === task &&
-        row.metadata?.["dalph.phase"] === "work" &&
-        row.metadata?.["gc.root_bead_id"] === root
-    )
+    const matches = rows.filter((row) => implementationIdentityMatches(current.metadata, row.metadata))
     if (matches.length !== 1 || !matches[0])
       return yield* new BoundaryFailure({ message: "delivery needs one exact closed implementation result" })
-    return matches[0]
+    const source = yield* tracker.bead(matches[0].id)
+    if (source.status !== "closed" || !implementationIdentityMatches(current.metadata, source.metadata))
+      return yield* new BoundaryFailure({ message: "implementation result has foreign or unfinished native scope" })
+    return source
   })
   const constructCandidate = Effect.fn("Delivery.constructCandidate")(function* (
     id: BeadId,
@@ -159,21 +155,22 @@ export const makeWorkflow = (
   })
   const run = Effect.fn("Delivery.turn")(function* (role: "worker" | "integrator") {
     yield* commands.reconcile(config.root, null, true)
-    const claim = yield* commands
-      .execute(config.root, [...tracker.gc, "hook", "--claim", "--json"], undefined, Duration.seconds(CLAIM_SECONDS))
-      .pipe(
-        Effect.flatMap(
-          Schema.decodeUnknownEffect(
-            Schema.fromJsonString(Schema.Struct({ action: Schema.Literal("work"), bead_id: BeadId }))
-          )
-        )
-      )
+    const claim = yield* tracker.claim()
+    if (claim.action === "drain") return { outcome: "idle" as const, reason: claim.reason }
     const current = yield* tracker.bead(claim.bead_id)
+    yield* verifyClaim(config, claim, current, role)
     const phase = role === "worker" ? "work" : "deliver"
     if (current.metadata?.["dalph.phase"] !== phase)
       return yield* new BoundaryFailure({ message: "claimed bead belongs to a different workflow phase" })
-    if (role === "worker") yield* worker(current)
-    else yield* integrator(current)
+    if (current.status === "closed") return { outcome: "settled" as const }
+    if (!current.description) return yield* new BoundaryFailure({ message: "claimed task has no instructions" })
+    yield* observePrerequisites(current, tracker.bead)
+    if (role === "worker") {
+      yield* worker(current)
+      return { outcome: "worked" as const }
+    }
+    yield* integrator(current)
+    return { outcome: "delivered" as const }
   })
   return { run }
 }

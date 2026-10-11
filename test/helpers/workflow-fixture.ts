@@ -27,7 +27,10 @@ export const makeFixture = Effect.gen(function* () {
     endpoint: "http://127.0.0.1:8372",
     branch: "master"
   })
-  const rows = new Map<string, { id: BeadId; status: string; description?: string; metadata: Record<string, string> }>()
+  const rows = new Map<
+    string,
+    { id: BeadId; status: string; assignee?: string; description?: string; metadata: Record<string, string> }
+  >()
   for (const [id, phase] of [
     ["work", "work"],
     ["delivery", "deliver"]
@@ -35,8 +38,16 @@ export const makeFixture = Effect.gen(function* () {
     rows.set(String(id), {
       id: BeadId.make(String(id)),
       status: "open",
+      assignee: "fixture-session",
       description: "Implement assigned behavior",
-      metadata: { "dalph.task": "task", "dalph.phase": String(phase), "gc.root_bead_id": "root" }
+      metadata: {
+        "dalph.task": "task",
+        "dalph.phase": String(phase),
+        "gc.root_bead_id": "root",
+        "gc.root_store_ref": "rig:fixture",
+        "gc.native_step_dependencies.v1": "[]",
+        "gc.routed_to": `fixture/dalph.${phase === "work" ? "worker" : "integrator"}`
+      }
     })
   }
   const state = {
@@ -75,10 +86,7 @@ export const makeFixture = Effect.gen(function* () {
   const current = yield* Ref.make<AttemptId | null>(null)
   const native = Effect.fn("Fixture.native")(function* (args: ReadonlyArray<string>, cwd?: string) {
     events.push(args.join(" "))
-    if (args[0] === "bd") {
-      const row = rows.get(String(args[4]))
-      return JSON.stringify(row ? [row] : [])
-    }
+    if (args.includes("config")) return '[workspace]\nname="trial"\n[[rigs]]\nname="fixture"\npath="/fixture/repo"'
     if (args.includes("metadata-cas")) {
       const id = args[args.indexOf("metadata-cas") + 1]
       const key = args.find((arg) => arg.startsWith("--key="))?.slice("--key=".length)
@@ -90,13 +98,19 @@ export const makeFixture = Effect.gen(function* () {
     }
     if (args.includes("hook"))
       return JSON.stringify({
+        schema_version: "1",
+        ok: true,
+        command: "hook",
         action: "work",
+        reason: "claimed",
+        assignee: "fixture-session",
+        route: `fixture/dalph.${state.role}`,
         bead_id: state.wrongClaim ? "unknown" : state.role === "worker" ? "work" : "delivery"
       })
     if (args.includes("ready")) {
-      const source = rows.get("work")
-      const closed = source?.status === "closed" ? [source] : []
-      return JSON.stringify(state.duplicateSource ? [...closed, ...closed] : closed)
+      const status = args[args.indexOf("--status") + 1]
+      const observed = [...rows.values()].filter((row) => row.status === status)
+      return JSON.stringify(state.duplicateSource && status === "closed" ? [...observed, ...observed] : observed)
     }
     if (args[0] === "gc" && args[1] === "worktree") {
       const path = args[args.indexOf("--path") + 1] ?? ""
