@@ -22,29 +22,29 @@ const main = Effect.gen(function* () {
   }
   const fs = yield* FileSystem.FileSystem
   yield* fs.makeDirectory(`${config.root}/evidence`, { recursive: true })
-  const commands = yield* makeCommands
-  if ((yield* commands.execute(config.root, ["getconf", "CLK_TCK"])) !== "100") {
-    return yield* new BoundaryFailure({ message: "Unsupported Linux clock tick profile" })
-  }
-  const tracker = makeTracker(config, commands)
-  const git = makeGit(config, commands)
-  const worktrees = makeWorktrees(config, commands, tracker, git)
-  const stages = makeStages(config, commands, tracker, git)
-  yield* Effect.log(`Native Gas City ${role} turn started`)
   const session = yield* Config.schema(Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_.-]+$/)), "GC_SESSION_ID")
   const logdir = `${config.root}/evidence/sessions`
   yield* fs.makeDirectory(logdir, { recursive: true })
-  yield* makeWorkflow(config, commands, tracker, git, stages, worktrees)
-    .run(role)
-    .pipe(
-      Effect.tapCause((cause) => Effect.logError(cause)),
-      Effect.provide(
-        Logger.layer(
-          [Logger.toFile(Logger.formatLogFmt, `${logdir}/${session}.log`, { flag: "a", batchWindow: "100 millis" })],
-          { mergeWithExisting: true }
-        )
+  yield* Effect.gen(function* () {
+    const commands = yield* makeCommands
+    if ((yield* commands.execute(config.root, ["getconf", "CLK_TCK"])) !== "100") {
+      return yield* new BoundaryFailure({ message: "Unsupported Linux clock tick profile" })
+    }
+    const tracker = makeTracker(config, commands)
+    const git = makeGit(config, commands)
+    const worktrees = makeWorktrees(config, commands, tracker, git)
+    const stages = makeStages(config, commands, tracker, git)
+    yield* Effect.log(`Native Gas City ${role} turn started`)
+    yield* makeWorkflow(config, commands, tracker, git, stages, worktrees).run(role)
+    yield* Effect.log("Exact claimed turn completed")
+  }).pipe(
+    Effect.tapCause((cause) => Effect.logError(cause)),
+    Effect.provide(
+      Logger.layer(
+        [Logger.toFile(Logger.formatLogFmt, `${logdir}/${session}.log`, { flag: "a", batchWindow: "100 millis" })],
+        { mergeWithExisting: true }
       )
     )
-  yield* Effect.log("Exact claimed turn completed")
+  )
 })
 NodeRuntime.runMain(main.pipe(Effect.provide(Layer.merge(NodeHttpClient.layerUndici, NodeServices.layer))))

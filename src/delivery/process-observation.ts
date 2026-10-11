@@ -45,7 +45,7 @@ export const markedProcesses: (
     }).pipe(
       Effect.retry({
         schedule: Schedule.recurs(PERMISSION_RECHECKS),
-        while: (error) => error._tag === "PlatformError" && error.reason._tag === "PermissionDenied"
+        while: (error) => error._tag === "PlatformError" && error.reason._tag !== "NotFound"
       }),
       Effect.catch((error) =>
         error._tag === "PlatformError" && error.reason._tag === "NotFound"

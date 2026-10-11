@@ -110,3 +110,13 @@ authorize workflow operations; crashes and retries remain native runtime concern
 Acceptance: `test/dashboard.test.ts` verifies task aggregation and fork/join;
 `dashboard/browser.test.ts` verifies four boxes, selection, stale retention and
 layout through the real page.
+
+## Process observation race repair
+
+A same-user process can exit after the census and before reading its stat file.
+Linux may surface that race as an unknown filesystem error. The existing bounded
+recheck now covers every filesystem failure except definite absence. Only a fresh
+observation of absence or a stopped process releases custody; persistent unknown
+reads still fail closed. `test/process-observation.test.ts` reproduces the race
+through an injected filesystem port. Bootstrap errors are retained in the native
+session log before commands run, so a closed tmux pane cannot erase the diagnosis.

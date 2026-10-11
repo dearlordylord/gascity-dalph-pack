@@ -50,38 +50,40 @@ it.live("treats a disappearing process as absence", () =>
     })
   )
 )
-it.live("unreadable live writers fail closed after bounded rechecks", () =>
-  provide(
-    Effect.gen(function* () {
-      const { fs, owner, root } = yield* makeFixture
-      let observations = 0
-      const denied = {
-        ...fs,
-        readFileString: (path: string) =>
-          path.endsWith("environ")
-            ? Effect.suspend(() => {
-                observations++
-                return Effect.fail(
-                  PlatformError.systemError({
-                    _tag: "PermissionDenied",
-                    module: "FileSystem",
-                    method: "readFileString",
-                    pathOrDescriptor: path
-                  })
-                )
-              })
-            : fs.readFileString(path)
-      }
-      const failure = yield* Effect.flip(
-        markedProcesses("DALPH_BOUNDARY=owned", BirthTicks.make(100), owner, root).pipe(
-          Effect.provide(Layer.succeed(FileSystem.FileSystem, denied))
+for (const reason of ["PermissionDenied", "Unknown"] as const) {
+  it.live(`unreadable live writers fail closed after bounded ${reason} rechecks`, () =>
+    provide(
+      Effect.gen(function* () {
+        const { fs, owner, root } = yield* makeFixture
+        let observations = 0
+        const denied = {
+          ...fs,
+          readFileString: (path: string) =>
+            path.endsWith("environ")
+              ? Effect.suspend(() => {
+                  observations++
+                  return Effect.fail(
+                    PlatformError.systemError({
+                      _tag: reason,
+                      module: "FileSystem",
+                      method: "readFileString",
+                      pathOrDescriptor: path
+                    })
+                  )
+                })
+              : fs.readFileString(path)
+        }
+        const failure = yield* Effect.flip(
+          markedProcesses("DALPH_BOUNDARY=owned", BirthTicks.make(100), owner, root).pipe(
+            Effect.provide(Layer.succeed(FileSystem.FileSystem, denied))
+          )
         )
-      )
-      expect(failure._tag).toBe("BoundaryFailure")
-      expect(observations).toBe(4)
-    })
+        expect(failure._tag).toBe("BoundaryFailure")
+        expect(observations).toBe(4)
+      })
+    )
   )
-)
+}
 it.live("permission race is reconciled by a fresh stopped observation", () =>
   provide(
     Effect.gen(function* () {
@@ -111,6 +113,37 @@ it.live("permission race is reconciled by a fresh stopped observation", () =>
           Effect.provide(Layer.succeed(FileSystem.FileSystem, exiting))
         )
       ).toEqual([])
+    })
+  )
+)
+
+it.live("rechecks an unknown stat read when the process disappears during observation", () =>
+  provide(
+    Effect.gen(function* () {
+      const { fs, owner, path, root } = yield* makeFixture
+      let reads = 0
+      const exiting = {
+        ...fs,
+        readFileString: (file: string) =>
+          file.endsWith("stat")
+            ? Effect.gen(function* () {
+                reads++
+                yield* fs.remove(path, { recursive: true })
+                return yield* PlatformError.systemError({
+                  _tag: "Unknown",
+                  module: "FileSystem",
+                  method: "readFileString",
+                  pathOrDescriptor: file
+                })
+              })
+            : fs.readFileString(file)
+      }
+      expect(
+        yield* markedProcesses("DALPH_BOUNDARY=owned", BirthTicks.make(100), owner, root).pipe(
+          Effect.provide(Layer.succeed(FileSystem.FileSystem, exiting))
+        )
+      ).toEqual([])
+      expect(reads).toBe(1)
     })
   )
 )
