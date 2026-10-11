@@ -2,7 +2,7 @@ import * as HttpClient from "effect/http/HttpClient"
 import { Config, Effect, FileSystem, Layer, Schema } from "effect"
 import { NodeHttpClient, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { configuration } from "../src/delivery/config.ts"
-import { makeCommands } from "../src/delivery/command.ts"
+import { makeNativeCommands } from "../src/delivery/command.ts"
 import { makeTracker } from "../src/delivery/tracker.ts"
 import { makeGit } from "../src/delivery/git.ts"
 import { makeNativeWorkflow } from "../src/native/workflow.ts"
@@ -20,7 +20,7 @@ const main = Effect.gen(function* () {
     .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(NativeContract))))
   const config = { ...settings, executionVersion: "native-v1" as const, projectCheck: contract.check }
   const session = yield* Config.schema(BeadId, "GC_SESSION_ID")
-  const commands = yield* makeCommands
+  const commands = yield* makeNativeCommands
   const tracker = makeTracker(config, commands, yield* HttpClient.HttpClient)
   const git = makeGit(config, commands)
   const workflow = makeNativeWorkflow(config, contract, commands, tracker, git)
@@ -35,8 +35,10 @@ const main = Effect.gen(function* () {
   const fault = yield* Config.String("DALPH_NATIVE_FIXTURE_FAULT").pipe(Config.withDefault("none"))
   if (fault === "hold") yield* Effect.sleep("90 seconds")
   if (fault === "missing") return
-  yield* fs.writeFileString(`${attempt.plan.path}/native-proof.ts`, 'export const delivered = "native"\n')
-  yield* git.git(["add", "native-proof.ts"], attempt.plan.path)
+  const distinct = yield* Config.Boolean("DALPH_NATIVE_FIXTURE_DISTINCT").pipe(Config.withDefault(false))
+  const filename = distinct ? `native-proof-${work.id}.ts` : "native-proof.ts"
+  yield* fs.writeFileString(`${attempt.plan.path}/${filename}`, 'export const delivered = "native"\n')
+  yield* git.git(["add", filename], attempt.plan.path)
   yield* git.git(
     [
       "-c",

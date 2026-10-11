@@ -1,8 +1,9 @@
+import type { integrationCustody } from "../native/integration-custody.ts"
 import { isImplementationMetadata } from "../native/nodes.ts"
 import { Effect, FileSystem, Ref, Schema } from "effect"
-import { Plan, Result, Candidate } from "../domain/attempt.ts"
+import { Plan, Result, type Candidate } from "../domain/attempt.ts"
 import { BeadId, BoundaryFailure, CommitSha } from "../domain/shared.ts"
-import { exactParents } from "../domain/candidate.ts"
+import { acceptedResultMatches, candidateMatches, exactParents } from "../domain/candidate.ts"
 import type { RuntimeConfig } from "./config.ts"
 import type { Bead, Commands, makeTracker } from "./tracker.ts"
 import { Bead as BeadSchema } from "./tracker.ts"
@@ -12,6 +13,7 @@ import type { makeWorktrees } from "./worktrees.ts"
 
 import { observePrerequisites } from "./tracker-eligibility.ts"
 import { implementationIdentityMatches } from "./tracker-scope.ts"
+import { refreshCandidate, retainedCandidate, unfinishedRefresh } from "./candidate-refresh.ts"
 import { Claim, verifyClaim } from "./tracker-observation.ts"
 
 type Tracker = ReturnType<typeof makeTracker>
@@ -26,7 +28,13 @@ export const makeWorkflow = (
   tracker: Tracker,
   git: Git,
   stages: Stages,
-  worktrees: Worktrees
+  worktrees: Worktrees,
+  custody: ReturnType<typeof integrationCustody> = Effect.void,
+  candidateObserved: (
+    current: Bead,
+    candidate: typeof Candidate.Type,
+    ordinal: number
+  ) => ReturnType<typeof integrationCustody> = () => Effect.void
 ) => {
   const fetch = () => git.git(["fetch", "origin", `${git.target}:${git.remote}`])
   const commitAt = (ref: string, cwd = config.repo) =>
@@ -108,27 +116,56 @@ export const makeWorkflow = (
     yield* tracker.record(id, "candidate", candidate)
     return candidate
   })
-  const publish = Effect.fn("Delivery.publish")(function* (id: BeadId, candidate: typeof Candidate.Type) {
-    yield* tracker.record(id, "push_intent", {
-      candidate: candidate.commit,
-      head: candidate.head,
-      endpoint: yield* git.git(["remote", "get-url", "origin"]),
-      ref: git.target
-    })
-    yield* fetch()
+  const PushIntent = Schema.Struct({
+    candidate: CommitSha,
+    head: CommitSha,
+    endpoint: Schema.String,
+    ref: Schema.String
+  })
+  const publicationEndpoint = Effect.fn("Delivery.publicationEndpoint")(function* (
+    id: BeadId,
+    candidate: typeof Candidate.Type,
+    ordinal: number
+  ) {
+    const endpoint = yield* git.git(["remote", "get-url", "--push", "origin"])
+    const pinned = yield* tracker.fact(id, "push_intent", PushIntent)
+    if (pinned && (pinned.endpoint !== endpoint || pinned.ref !== git.target))
+      return yield* new BoundaryFailure({ message: "publication endpoint changed; preserve pinned candidate" })
+    const key = ordinal === 1 ? "push_intent" : `push_intent_${ordinal}`
+    yield* tracker.record(id, key, { candidate: candidate.commit, head: candidate.head, endpoint, ref: git.target })
+    return endpoint
+  })
+  const pushCandidate = Effect.fn("Delivery.pushCandidate")(function* (
+    id: BeadId,
+    candidate: typeof Candidate.Type,
+    endpoint: string
+  ) {
+    const plan = yield* tracker.fact(id, "candidate_plan", Plan)
+    if (!plan) return yield* new BoundaryFailure({ message: "candidate lost its exact plan" })
+    yield* stages.qualifiedTree(plan, candidate.commit)
+    yield* git.git(["push", endpoint, `${candidate.commit}:${git.target}`])
+    if (config.faultAfterPush === id)
+      return yield* new BoundaryFailure({ message: "injected loss after push; intent retained" })
+  })
+  const publish = Effect.fn("Delivery.publish")(function* (id: BeadId, candidate: typeof Candidate.Type, ordinal = 1) {
+    const endpoint = yield* publicationEndpoint(id, candidate, ordinal)
+    yield* git.git(["fetch", endpoint, `${git.target}:${git.remote}`])
     let remote = yield* commitAt(git.remote)
+    if (config.executionVersion === "native-v1" && remote !== candidate.head) {
+      const applied = yield* git.git(["merge-base", "--is-ancestor", candidate.commit, remote]).pipe(
+        Effect.as(true),
+        Effect.catchTag("CommandRejected", (error) => (error.exit === 1 ? Effect.succeed(false) : Effect.fail(error)))
+      )
+      if (!applied) return { refresh: remote }
+    }
     if (remote === candidate.head) {
-      const plan = yield* tracker.fact(id, "candidate_plan", Plan)
-      if (!plan) return yield* new BoundaryFailure({ message: "candidate lost its exact plan" })
-      yield* stages.qualifiedTree(plan, candidate.commit)
-      yield* git.git(["push", "origin", `${candidate.commit}:${git.target}`])
-      if (config.faultAfterPush === id)
-        return yield* new BoundaryFailure({ message: "injected loss after push; intent retained" })
-      yield* fetch()
+      yield* pushCandidate(id, candidate, endpoint)
+      yield* git.git(["fetch", endpoint, `${git.target}:${git.remote}`])
       remote = yield* commitAt(git.remote)
     }
     yield* git.git(["merge-base", "--is-ancestor", candidate.commit, remote])
     yield* tracker.record(id, "published", { commit: candidate.commit })
+    return { refresh: null }
   })
   const promote = Effect.fn("Delivery.promote")(function* (id: BeadId, candidate: typeof Candidate.Type) {
     yield* tracker.record(id, "promotion_intent", { head: candidate.head, candidate: candidate.commit })
@@ -137,7 +174,8 @@ export const makeWorkflow = (
         if ((yield* git.git(["symbolic-ref", "-q", "HEAD"])) !== git.target)
           return yield* new BoundaryFailure({ message: "target checkout is on a different branch; promotion refused" })
         const local = yield* commitAt(git.target)
-        if (local === candidate.head) {
+        const plan = yield* tracker.fact(id, "candidate_plan", Plan)
+        if (local === candidate.head || local === plan?.base) {
           if (yield* git.git(["status", "--porcelain"]))
             return yield* new BoundaryFailure({ message: "target checkout dirty; promotion refused" })
           yield* git.git(["merge", "--ff-only", candidate.commit])
@@ -148,19 +186,47 @@ export const makeWorkflow = (
     yield* tracker.record(id, "promoted", { commit: candidate.commit })
   })
   const integrator = Effect.fn("Delivery.integrator")(function* (current: Bead) {
+    yield* custody
     const source = yield* implementationFor(current)
     const result = yield* tracker.fact(source.id, "result", Result)
     if (!result) return yield* new BoundaryFailure({ message: "missing exact accepted result" })
-    let candidate = yield* tracker.fact(current.id, "candidate", Candidate)
+    const sourcePlan = yield* tracker.fact(source.id, "work_plan", Plan)
+    if (!acceptedResultMatches(sourcePlan, result))
+      return yield* new BoundaryFailure({ message: "accepted result changed its attempt or qualification" })
+    const retained = yield* retainedCandidate(tracker, current.id)
+    let candidate = retained.candidate
+    let ordinal = retained.ordinal
     if (candidate) {
       const plan = yield* tracker.fact(current.id, "candidate_plan", Plan)
       if (!plan) return yield* new BoundaryFailure({ message: "candidate has no retained plan" })
       yield* Ref.set(commands.current, plan.attempt)
       yield* commands.reconcile(config.root, plan.attempt)
     } else candidate = yield* constructCandidate(current.id, result)
-    const decoded = yield* Schema.decodeUnknownEffect(Candidate)(candidate)
-    yield* publish(current.id, decoded)
-    yield* promote(current.id, decoded)
+    if (!candidateMatches(candidate, result))
+      return yield* new BoundaryFailure({ message: "candidate or approval differs from accepted result" })
+    const unfinished = yield* unfinishedRefresh(tracker, current.id, ordinal)
+    if (unfinished) {
+      candidate = yield* refreshCandidate(tracker, git, stages, current.id, candidate, result, unfinished.head, ordinal)
+      ordinal++
+    }
+    yield* candidateObserved(current, candidate, ordinal)
+    let publication = yield* publish(current.id, candidate, ordinal)
+    while (publication.refresh) {
+      candidate = yield* refreshCandidate(
+        tracker,
+        git,
+        stages,
+        current.id,
+        candidate,
+        result,
+        publication.refresh,
+        ordinal
+      )
+      ordinal++
+      yield* candidateObserved(current, candidate, ordinal)
+      publication = yield* publish(current.id, candidate, ordinal)
+    }
+    yield* promote(current.id, candidate)
     yield* worktrees.cleanup(current.id, source.id, "work")
     yield* worktrees.cleanup(current.id, current.id, "candidate")
     yield* tracker.close(current.id, "Exact result integrated, remote verified, promoted and owned resources cleaned")
@@ -215,8 +281,9 @@ export const makeWorkflow = (
       yield* worker(current)
       return { outcome: "worked" as const }
     }
-    yield* integrator(current)
+    yield* git.integrating(integrator(current))
     return { outcome: "delivered" as const }
   })
-  return { run, accept, integrator }
+  const serializedIntegrator = (current: Bead) => git.integrating(integrator(current))
+  return { run, accept, integrator: serializedIntegrator }
 }

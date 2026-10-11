@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto"
 import { join } from "node:path"
 import { Effect, FileSystem, Ref, Schema } from "effect"
-import { Plan, Prepared, Publication, Result, Candidate, CommandIntent } from "../domain/attempt.ts"
+import { Plan, Prepared, Publication, Result, CommandIntent } from "../domain/attempt.ts"
 import { AttemptId, type BeadId, BirthTicks, BoundaryFailure, type CommitSha } from "../domain/shared.ts"
 import { authorizeCleanup, worktreeAction } from "../domain/protocol.ts"
 import type { RuntimeConfig } from "./config.ts"
 import type { Commands, makeTracker } from "./tracker.ts"
 import type { Git } from "./git.ts"
+import { retainedCandidate } from "./candidate-refresh.ts"
 import { markedProcesses } from "./process-observation.ts"
 
 type Tracker = ReturnType<typeof makeTracker>
@@ -75,7 +76,7 @@ export const makeWorktrees = (config: RuntimeConfig, commands: Commands, tracker
   })
   const birthFor = Effect.fn("Worktree.cleanupBirth")(function* (source: BeadId) {
     const births: BirthTicks[] = []
-    for (const stage of ["model", "qualification"]) {
+    for (const stage of ["model", "qualification", "candidate_2_qualification", "candidate_3_qualification"]) {
       for (const suffix of ["", "_2", "_3"]) {
         const intent = yield* tracker.fact(source, `${stage}${suffix}_intent`, CommandIntent)
         if (intent) births.push(intent.birth_ticks)
@@ -99,10 +100,10 @@ export const makeWorktrees = (config: RuntimeConfig, commands: Commands, tracker
     const result =
       kind === "work"
         ? yield* tracker.fact(source, "result", Result)
-        : yield* tracker.fact(source, "candidate", Candidate)
+        : (yield* retainedCandidate(tracker, source)).candidate
     if (!result || tip !== result.commit)
       return yield* new BoundaryFailure({ message: "owned branch moved; cleanup preserves it" })
-    yield* git.git(["update-ref", "-d", `refs/heads/${plan.branch}`, result.commit])
+    return result.commit
   })
   const cleanup = Effect.fn("Worktree.cleanup")(function* (
     delivery: BeadId,
@@ -117,6 +118,7 @@ export const makeWorktrees = (config: RuntimeConfig, commands: Commands, tracker
     const birth = yield* birthFor(source)
     const writers = yield* markedProcesses(`DALPH_ATTEMPT=${plan.attempt}`, birth, commands.owner)
     yield* authorizeCleanup(published !== null, writers.length === 0)
+    const tip = yield* cleanBranch(source, kind, plan)
     yield* tracker.record(delivery, `${kind}_cleanup_intent`, { plan, attempt_id: prepared.provenance.attempt_id })
     const report = yield* commands
       .execute(config.root, [
@@ -135,8 +137,10 @@ export const makeWorktrees = (config: RuntimeConfig, commands: Commands, tracker
         )
       )
     if (report.cleanup_pending) return yield* new BoundaryFailure({ message: "safe cleanup refused; retain resources" })
+    if (tip) yield* git.git(["update-ref", "-d", `refs/heads/${plan.branch}`, tip])
     yield* tracker.record(delivery, `${kind}_cleaned`, { path: plan.path, attempt: plan.attempt })
-    yield* cleanBranch(source, kind, plan)
   })
-  return { prepare, cleanup }
+  const settledCleanup = (delivery: BeadId, source: BeadId, kind: "work" | "candidate") =>
+    git.guarded(cleanup(delivery, source, kind))
+  return { prepare, cleanup: settledCleanup }
 }

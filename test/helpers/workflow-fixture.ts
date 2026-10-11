@@ -206,6 +206,7 @@ export const makeFixture = Effect.gen(function* () {
   const git: Git = {
     git: gitCall,
     guarded: (operation) => Effect.scoped(operation),
+    integrating: (operation) => Effect.scoped(operation),
     target: "refs/heads/master",
     remote: "refs/remotes/origin/master"
   }

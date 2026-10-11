@@ -1,5 +1,5 @@
 import { Effect, FileSystem, Schema } from "effect"
-import { Prepared } from "../domain/attempt.ts"
+import { Plan, Prepared, Publication } from "../domain/attempt.ts"
 import { BeadId, BoundaryFailure } from "../domain/shared.ts"
 import type { RuntimeConfig } from "../delivery/config.ts"
 import { Bead as BeadSchema, type Bead, type Commands, type makeTracker } from "../delivery/tracker.ts"
@@ -44,6 +44,35 @@ export const makeNativeController = (
     yield* tracker.record(result.workflow_id, "native_launch", { version: "native-v1", contract })
     return result
   })
+  const cleanupMayResume = Effect.fn("Native.cleanupMayResume")(function* (
+    delivery: Bead,
+    attempt: typeof NativeAttempt.Type,
+    prepared: typeof Prepared.Type
+  ) {
+    const intent = yield* tracker.fact(
+      delivery.id,
+      "work_cleanup_intent",
+      Schema.Struct({ plan: Plan, attempt_id: Plan.fields.attempt })
+    )
+    if (
+      !intent ||
+      canonical(intent.plan) !== canonical(attempt.plan) ||
+      intent.attempt_id !== prepared.provenance.attempt_id
+    )
+      return false
+    const published = yield* tracker.fact(delivery.id, "published", Publication)
+    const promoted = yield* tracker.fact(delivery.id, "promoted", Publication)
+    return published !== null && promoted !== null && published.commit === promoted.commit
+  })
+  const resourceMissing = Effect.fn("Native.resourceMissing")(function* (
+    delivery: Bead,
+    attempt: typeof NativeAttempt.Type,
+    prepared: typeof Prepared.Type
+  ) {
+    const fs = yield* FileSystem.FileSystem
+    if (yield* fs.exists(attempt.plan.path)) return false
+    return !(yield* cleanupMayResume(delivery, attempt, prepared))
+  })
   const retainedResource = Effect.fn("Native.retainedResource")(function* (
     row: Bead,
     rows: ReadonlyArray<Bead>,
@@ -70,11 +99,11 @@ export const makeNativeController = (
       attempt,
       yield* tracker.fact(row.id, "native_proposal", NativeProposal)
     )
-    const fs = yield* FileSystem.FileSystem
-    if (!(yield* fs.exists(attempt.plan.path)))
+    if (yield* resourceMissing(delivery, attempt, prepared)) {
       return yield* new BoundaryFailure({
         message: "prepared native worktree is lost; no recreation or resume authorized"
       })
+    }
   })
   const retainedResources = Effect.fn("Native.retainedResources")(function* (root: BeadId) {
     const rows = yield* nativeRows(config, commands)

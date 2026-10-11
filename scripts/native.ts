@@ -2,7 +2,7 @@ import * as HttpClient from "effect/http/HttpClient"
 import { Config, Console, Effect, FileSystem, Layer, Ref, Schema } from "effect"
 import { NodeHttpClient, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { configuration } from "../src/delivery/config.ts"
-import { makeCommands } from "../src/delivery/command.ts"
+import { makeNativeCommands } from "../src/delivery/command.ts"
 import { makeTracker } from "../src/delivery/tracker.ts"
 import { makeGit } from "../src/delivery/git.ts"
 import { AbsolutePath } from "../src/domain/attempt.ts"
@@ -22,7 +22,7 @@ const main = Effect.gen(function* () {
     .readFileString(contractPath)
     .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(NativeContract))))
   const config = { ...configured, executionVersion: "native-v1" as const, projectCheck: contract.check }
-  const commands = yield* makeCommands
+  const commands = yield* makeNativeCommands
   const tracker = makeTracker(config, commands, yield* HttpClient.HttpClient)
   const git = makeGit(config, commands)
   const workflow = makeNativeWorkflow(config, contract, commands, tracker, git)

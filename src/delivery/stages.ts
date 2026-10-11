@@ -14,12 +14,12 @@ const MODEL_SECONDS = 600
 const QUALIFICATION_SECONDS = 90
 type Tracker = ReturnType<typeof makeTracker>
 export const makeStages = (config: RuntimeConfig, commands: Commands, tracker: Tracker, git: Git) => {
-  const history = (id: BeadId) => ({
+  const history = (id: BeadId, namespace = "") => ({
     read: (prefix: string) =>
       Effect.gen(function* () {
-        const intent = yield* tracker.fact(id, `${prefix}_intent`, CommandIntent)
-        const finished = yield* tracker.fact(id, `${prefix}_finished`, CommandFinished)
-        const reconciled = yield* tracker.fact(id, `${prefix}_reconciled`, CommandReconciled)
+        const intent = yield* tracker.fact(id, `${namespace}${prefix}_intent`, CommandIntent)
+        const finished = yield* tracker.fact(id, `${namespace}${prefix}_finished`, CommandFinished)
+        const reconciled = yield* tracker.fact(id, `${namespace}${prefix}_reconciled`, CommandReconciled)
         return { ...(intent ? { intent } : {}), ...(finished ? { finished } : {}), reconciled: reconciled !== null }
       }),
     writers: (attempt: Plan["attempt"], birth: typeof CommandIntent.Type.birth_ticks) =>
@@ -30,7 +30,7 @@ export const makeStages = (config: RuntimeConfig, commands: Commands, tracker: T
       birth: typeof CommandIntent.Type.birth_ticks,
       observed: number
     ) =>
-      tracker.record(id, `${prefix}_reconciled`, {
+      tracker.record(id, `${namespace}${prefix}_reconciled`, {
         state: "stopped_without_receipt",
         attempt,
         birth_ticks: birth,
@@ -50,9 +50,11 @@ export const makeStages = (config: RuntimeConfig, commands: Commands, tracker: T
     plan: Plan,
     kind: "model" | "qualification",
     args: ReadonlyArray<string>,
-    commit?: CommitSha
+    commit?: CommitSha,
+    namespace = ""
   ) {
-    const slot = yield* commandSlot(history(id), plan.attempt, kind, commit)
+    const commitMetadata = commit ? { commit } : {}
+    const slot = yield* commandSlot(history(id, namespace), plan.attempt, kind, commit)
     const fs = yield* FileSystem.FileSystem
     const logdir = join(config.root, "evidence", plan.attempt, `${kind}-${slot.ordinal}`)
     const logfile = join(logdir, "stdout.log")
@@ -60,14 +62,14 @@ export const makeStages = (config: RuntimeConfig, commands: Commands, tracker: T
     yield* fs.makeDirectory(logdir, { recursive: true })
     const birth = yield* commands.birth
     const timeout = kind === "model" ? MODEL_SECONDS : (config.projectCheck?.timeoutSeconds ?? QUALIFICATION_SECONDS)
-    yield* tracker.record(id, `${slot.prefix}_intent`, {
+    yield* tracker.record(id, `${namespace}${slot.prefix}_intent`, {
       attempt: plan.attempt,
       birth_ticks: birth,
       command: [...args],
       timeout_seconds: timeout,
       logdir,
       logfile,
-      ...(commit ? { commit } : {})
+      ...commitMetadata
     })
     yield* commands
       .execute(config.root, args, plan.path, Duration.seconds(timeout), {
@@ -78,11 +80,11 @@ export const makeStages = (config: RuntimeConfig, commands: Commands, tracker: T
         Effect.catchTag("CommandRejected", (error) =>
           Effect.gen(function* () {
             if (error.exit !== undefined)
-              yield* tracker.record(id, `${slot.prefix}_finished`, {
+              yield* tracker.record(id, `${namespace}${slot.prefix}_finished`, {
                 attempt: plan.attempt,
                 exit: error.exit,
                 stopped: yield* Clock.currentTimeMillis,
-                ...(commit ? { commit } : {})
+                ...commitMetadata
               })
             return yield* Effect.fail(error)
           })
@@ -90,15 +92,15 @@ export const makeStages = (config: RuntimeConfig, commands: Commands, tracker: T
       )
     if ((yield* markedProcesses(`DALPH_ATTEMPT=${plan.attempt}`, birth, commands.owner)).length)
       return yield* new BoundaryFailure({ message: "stage exit did not stop all marked writers" })
-    yield* tracker.record(id, `${slot.prefix}_finished`, {
+    yield* tracker.record(id, `${namespace}${slot.prefix}_finished`, {
       attempt: plan.attempt,
       exit: 0,
       stopped: yield* Clock.currentTimeMillis,
-      ...(commit ? { commit } : {})
+      ...commitMetadata
     })
     return logfile
   })
-  const qualify = Effect.fn("Qualification.run")(function* (id: BeadId, plan: Plan) {
+  const qualify = Effect.fn("Qualification.run")(function* (id: BeadId, plan: Plan, revision = "") {
     const commit = yield* git
       .git(["rev-parse", "HEAD"], plan.path)
       .pipe(Effect.flatMap(Schema.decodeUnknownEffect(CommitSha)))
@@ -108,7 +110,8 @@ export const makeStages = (config: RuntimeConfig, commands: Commands, tracker: T
       plan,
       "qualification",
       config.projectCheck?.command ?? ["mise", "exec", "node@24.20.0", "--", "pnpm", "test"],
-      commit
+      commit,
+      revision ? `${revision}_` : ""
     )
     yield* qualifiedTree(plan, commit)
     return yield* Schema.decodeUnknownEffect(Qualification)({ commit, exit: 0, logfile })

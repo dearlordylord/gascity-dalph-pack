@@ -3,12 +3,13 @@ import { canonical } from "../delivery/files.ts"
 import { BoundaryFailure } from "../domain/shared.ts"
 import { Candidate, Plan, Publication, Result } from "../domain/attempt.ts"
 import type { Bead, makeTracker } from "../delivery/tracker.ts"
+import { retainedCandidate } from "../delivery/candidate-refresh.ts"
 import { NativeProposal, type NativeAttempt } from "./contract.ts"
 
 type Tracker = ReturnType<typeof makeTracker>
 const Cleaned = Schema.Struct({ path: Plan.fields.path, attempt: Plan.fields.attempt })
 const publicationProof = Effect.fn("Native.publicationProof")(function* (tracker: Tracker, delivery: Bead) {
-  const candidate = yield* tracker.fact(delivery.id, "candidate", Candidate)
+  const candidate = (yield* retainedCandidate(tracker, delivery.id)).candidate
   const published = yield* tracker.fact(delivery.id, "published", Publication)
   const promoted = yield* tracker.fact(delivery.id, "promoted", Publication)
   if (!candidate || !published || !promoted)
@@ -64,7 +65,8 @@ export const settleNative = Effect.fn("Native.settle")(function* (
   yield* sourceProof(tracker, attempt, candidate)
   yield* cleanupProof(tracker, delivery.id, "work", attempt.plan)
   const candidatePlan = yield* tracker.fact(delivery.id, "candidate_plan", Plan)
-  if (!candidatePlan || candidatePlan.bead !== delivery.id || candidatePlan.base !== candidate.head)
+  const initial = yield* tracker.fact(delivery.id, "candidate", Candidate)
+  if (!candidatePlan || candidatePlan.bead !== delivery.id || candidatePlan.base !== initial?.head)
     return yield* new BoundaryFailure({ message: "closed native delivery has no candidate plan" })
   yield* cleanupProof(tracker, delivery.id, "candidate", candidatePlan)
   yield* tracker.record(attempt.plan.bead, "native_settled", { attempt: attempt.plan.attempt })

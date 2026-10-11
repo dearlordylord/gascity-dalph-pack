@@ -140,3 +140,10 @@ The isolated public workflow launch/resume test uses the production delivery
 composition with Gas City owning the tracker backend and claim authority.
 Controlled model and qualification ports are not live-provider proof; the parent
 specification's remaining scenarios and combined trial stay separate.
+
+## S7/S8 native delivery slice
+
+The scenario-to-test map and current qualification status are maintained in
+[docs/S7-S8-DELIVERY-HANDOFF.md](docs/S7-S8-DELIVERY-HANDOFF.md). Failed native
+launch/resume runs are retained as failure evidence, not accepted scenario proof.
+The parent scenarios and combined trial remain separately accountable.
