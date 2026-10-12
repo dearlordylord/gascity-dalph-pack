@@ -52,6 +52,7 @@ export const makeNativeCity = (fault: boolean | string = false) =>
       GC_HOME: home,
       TMUX_TMPDIR: join(root, "tmux"),
       GC_BEADS: "bd",
+      GC_BD_TRACE_JSON: join(root, "native-beads-trace.jsonl"),
       BD_DISABLE_METRICS: "1",
       DALPH_NATIVE_FIXTURE_DISTINCT: String(deliveryFaults),
       DALPH_NATIVE_REVIEW_FIXTURE: reviewFault,

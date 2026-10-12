@@ -37,6 +37,10 @@ suite has ten cases; tests within each file run sequentially. This limit governs
 qualification fixtures; application concurrency is unchanged.
 Native scenarios remain
 unchanged in `vitest.native.config.ts`; they are not part of routine fast runs.
+Native city fixtures enable Gas City's `GC_BD_TRACE_JSON` in their own retained
+root. Its `native-beads-trace.jsonl` records native Beads command durations and
+call sites for focused latency diagnosis. This fixture observation does not
+change pack runtime behavior, scenario assertions or production configuration.
 Retain each full result and diagnose its failed boundary through focused checks
 before another full run. A timeout ceiling is not evidence
 that the full suite successfully finishes inside it. Preparation or missing
