@@ -47,7 +47,7 @@ it.effect("native observation follows open producer retirement or reassignment w
           }
         })
         Object.assign(f.raw("session").metadata, {
-          "gc.trigger_bead_id": "other",
+          current_claim_bead_id: "other",
           work_dir: "/fixture/worktrees/other"
         })
       }

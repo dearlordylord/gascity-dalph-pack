@@ -14,12 +14,12 @@ import {
   ReviewRound,
   REVIEW_ROUNDS
 } from "./review-contract.ts"
-import { reviewBatch, reviewIdentityMatches, reviewNodes, reviewSessionMatches } from "./review-correlation.ts"
+import { reviewBatch, reviewIdentityMatches, reviewNodes, reviewPublicationMatches } from "./review-correlation.ts"
 import { reviewWritersStopped } from "./review-writers.ts"
 import { publishSharedWorkspace } from "./shared-workspace.ts"
 import { reviewFactKey } from "./review-fact-key.ts"
 import { isExecutionMetadata, isReviewControlMetadata } from "./nodes.ts"
-import { correlateCompletedReview } from "./completed-review.ts"
+import { correlateCompletedReview, retainedReviewMatches } from "./completed-review.ts"
 
 type Tracker = ReturnType<typeof makeTracker>
 const reviewRound = (row: Bead) =>
@@ -86,8 +86,10 @@ export const makeNativeReview = (config: RuntimeConfig, commands: Commands, trac
         message: "review verdict does not correlate to the exact independent candidate"
       })
     const session = yield* nativeSession(config, commands, verdict.session)
-    if (!reviewSessionMatches(session, current, facts.attempt.plan.path))
+    const writer = yield* tracker.bead(current.id)
+    if (!reviewPublicationMatches(session, writer, facts.attempt.plan.path))
       yield* correlateCompletedReview(config, commands, tracker, current, facts.attempt, verdict, session)
+    else if (writer.status === "closed") yield* retainedReviewMatches(tracker, writer, facts.attempt, verdict)
     return { ...facts, session }
   })
   const submit = Effect.fn("NativeReview.submit")(function* (current: Bead, input: unknown) {
@@ -178,16 +180,19 @@ export const makeNativeReview = (config: RuntimeConfig, commands: Commands, trac
       return yield* new BoundaryFailure({ message: "only a native fix node may finish review repairs" })
     const facts = yield* context(current)
     const session = yield* nativeSession(config, commands, sessionId)
-    if (
-      session.metadata["gc.trigger_bead_id"] !== current.id ||
-      session.metadata.work_dir !== facts.attempt.plan.path ||
-      session.metadata.template !== current.metadata?.["gc.run_target"]
-    )
+    const writer = yield* tracker.bead(current.id)
+    if (!reviewPublicationMatches(session, writer, facts.attempt.plan.path))
       return yield* new BoundaryFailure({ message: "fix session/task/worktree correlation is unproven" })
-    yield* tracker.record(current.id, reviewFactKey("native_fix", facts.batch, facts.round), {
-      session: sessionId,
-      commit: facts.commit
-    })
+    const key = reviewFactKey("native_fix", facts.batch, facts.round)
+    if (writer.status === "closed") {
+      const retained = yield* tracker.fact(
+        writer.id,
+        key,
+        Schema.Struct({ session: NativeProposal.fields.session, commit: NativeProposal.fields.commit })
+      )
+      if (!retained) return yield* new BoundaryFailure({ message: "closed fix has no retained result" })
+    }
+    yield* tracker.record(current.id, key, { session: sessionId, commit: facts.commit })
     yield* pin(current)
     yield* tracker.metadata(current.id, "gc.outcome", "pass")
     yield* tracker.close(current.id, "Exact native review iteration work settled")

@@ -31,7 +31,7 @@ it.effect("resume ignores another product's writer but refuses its intrusion int
             state: "awake",
             template: "fixture/dalph.native-reviewer",
             work_dir: shared ? "/fixture/worktrees/work-work" : "/fixture/worktrees/other-work",
-            "gc.trigger_bead_id": "other-review"
+            current_claim_bead_id: "other-review"
           }
         })
         const execute = f.commands.execute

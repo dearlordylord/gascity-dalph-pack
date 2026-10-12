@@ -228,7 +228,7 @@ export const nativeFixture = Effect.gen(function* () {
             if (!state.retireCompleted) return
             for (const session of fixture.rows.values()) {
               if (session.metadata.pool_managed !== "true") continue
-              const writer = fixture.rows.get(session.metadata["gc.trigger_bead_id"] ?? "")
+              const writer = fixture.rows.get(session.metadata.current_claim_bead_id ?? "")
               if (writer?.status !== "closed") continue
               session.status = "closed"
               session.metadata.state = "closed"

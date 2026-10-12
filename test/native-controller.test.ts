@@ -236,7 +236,11 @@ it.effect("S5 public resume observes the same native session and refuses duplica
       "unknown",
       "runtime-missing",
       "inventory",
-      "proposal-session"
+      "proposal-session",
+      "claim-missing",
+      "owner",
+      "cleared-closed",
+      "cleared-foreign"
     ] as const) {
       const f = yield* nativeFixture
       yield* Effect.gen(function* () {
@@ -248,7 +252,12 @@ it.effect("S5 public resume observes the same native session and refuses duplica
         if (fault === "missing") delete f.raw("session").metadata.state
         if (fault === "unknown" || fault === "runtime-missing") f.raw("session").metadata.state = fault
         if (fault === "path") f.raw("session").metadata.work_dir = "/foreign"
-        if (fault === "unrelated") f.raw("session").metadata["gc.trigger_bead_id"] = "another-task"
+        if (fault === "unrelated") f.raw("session").metadata["current_claim_bead_id"] = "another-task"
+        if (["claim-missing", "cleared-closed", "cleared-foreign"].includes(fault))
+          delete f.raw("session").metadata.current_claim_bead_id
+        if (fault === "cleared-closed" || fault === "cleared-foreign") f.raw("session").status = "closed"
+        if (fault === "owner" || fault === "cleared-foreign")
+          f.raw("work").metadata["gc.session_id"] = "foreign-session"
         if (fault === "duplicate") {
           f.rows.set("duplicate", { ...f.raw("session"), id: BeadId.make("duplicate") })
           const execute = f.commands.execute
@@ -278,8 +287,19 @@ it.effect("S5 public resume observes the same native session and refuses duplica
         const resume = makeNativeController(f.config, f.contract, f.commands, f.tracker, process.execPath).resume(
           BeadId.make("root")
         )
-        if (["duplicate", "path", "unrelated", "inventory", "proposal-session"].includes(fault))
-          yield* Effect.flip(resume)
+        if (
+          [
+            "duplicate",
+            "path",
+            "unrelated",
+            "inventory",
+            "proposal-session",
+            "claim-missing",
+            "owner",
+            "cleared-foreign"
+          ].includes(fault)
+        )
+          expect(yield* Effect.isFailure(resume), fault).toBe(true)
         else yield* resume
         expect(f.raw("work").metadata["dalph.native_attempt"]).toBe(before)
         expect(f.raw("work").metadata["dalph.native_settled"]).toBeUndefined()

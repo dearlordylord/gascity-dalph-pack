@@ -33,10 +33,10 @@ const observeReviewWritersStopped = Effect.fn("NativeReview.observeWritersStoppe
     }
     if (!reviewSessionMatches(session, node, path))
       return yield* new BoundaryFailure({
-        message: `native writer has contradictory session/worktree/template correlation: session ${session.id}, node ${node.id}, trigger ${session.metadata["gc.trigger_bead_id"]}, workspace ${session.metadata.work_dir}, template ${session.metadata.template}; expected ${path}, ${node.metadata?.["gc.run_target"]}`
+        message: `native writer has contradictory session/worktree/template correlation: session ${session.id}, node ${node.id}, claim ${session.metadata.current_claim_bead_id}, workspace ${session.metadata.work_dir}, template ${session.metadata.template}; expected ${path}, ${node.metadata?.["gc.run_target"]}`
       })
     seen.add(session.id)
-    yield* stopNativeWriter(config, commands, tracker, session)
+    yield* stopNativeWriter(config, commands, tracker, session, node.id)
   }
   if (required.some((id) => !seen.has(id)))
     return yield* new BoundaryFailure({ message: "native review/fix writer inventory is incomplete" })

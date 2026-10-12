@@ -36,6 +36,7 @@ export const nativeReviewFixture = Effect.gen(function* () {
         "dalph.phase": phase,
         "gc.iteration": String(round),
         "gc.run_target": phase === "review" ? "fixture/dalph.native-reviewer" : f.contract.agent,
+        ...(phase === "review" || phase === "fix" ? { "gc.session_id": `${phase}-session` } : {}),
         ...(phase === "review-control"
           ? {
               "gc.kind": "ralph",
@@ -71,6 +72,7 @@ export const nativeReviewFixture = Effect.gen(function* () {
         pool_managed: "true",
         session_origin: "ephemeral",
         "gc.trigger_bead_id": trigger,
+        current_claim_bead_id: trigger,
         template,
         work_dir: "/fixture/worktrees/work-work"
       }

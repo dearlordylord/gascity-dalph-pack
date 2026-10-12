@@ -10,6 +10,36 @@ import { RESULT, BASE } from "./helpers/workflow-fixture.ts"
 import { canonical } from "../src/delivery/files.ts"
 import { reconcileNativeAttempt } from "../src/native/reconcile.ts"
 
+it.effect("native recovery refuses multiple occupied observations across a task ownership change", () =>
+  Effect.gen(function* () {
+    const f = yield* nativeFixture
+    yield* Effect.gen(function* () {
+      yield* f.workflow.prepare(yield* f.row("prepare"))
+      const attempt = yield* f.tracker.fact(BeadId.make("work"), "native_attempt", NativeAttempt)
+      if (!attempt) throw new Error("missing attempt")
+      f.rows.set("duplicate", { ...f.raw("session"), id: BeadId.make("duplicate") })
+      const execute = f.commands.execute
+      f.commands.execute = (root, args, cwd, timeout, logs) =>
+        Effect.gen(function* () {
+          if (args.includes("session") && args.includes("list"))
+            return JSON.stringify({
+              sessions: ["session", "duplicate"].map((id) => ({ id, template: f.contract.agent, closed: false }))
+            })
+          const id = args[args.indexOf("show") + 1]
+          if (args.includes("beads") && args.includes("show") && (id === "session" || id === "duplicate"))
+            f.raw("work").metadata["gc.session_id"] = id
+          return yield* execute(root, args, cwd, timeout, logs)
+        })
+      expect(
+        String(yield* Effect.flip(reconcileNativeAttempt(f.config, f.commands, attempt, null, f.tracker)))
+      ).toContain("multiple retained native writers")
+      expect(f.paths.has(attempt.plan.path)).toBe(true)
+      expect(f.events).not.toContain("native-close:session")
+      expect(f.events).not.toContain("native-close:duplicate")
+    }).pipe(Effect.provide(f.layer))
+  })
+)
+
 it.effect("replayed historical native proposals preserve their original durable payload", () =>
   Effect.gen(function* () {
     const f = yield* nativeFixture
@@ -244,7 +274,7 @@ it.effect(
           }
         })
         Object.assign(f.raw("session").metadata, {
-          "gc.trigger_bead_id": "other",
+          current_claim_bead_id: "other",
           work_dir: "/fixture/worktrees/other"
         })
         f.nativeState.stopFailure = true
@@ -255,6 +285,8 @@ it.effect(
         yield* Effect.flip(stoppedNativeSession(f.config, f.commands, proposal, attempt, f.tracker))
         f.raw("other").status = "closed"
         f.raw("session").status = "closed"
+        yield* Effect.flip(stoppedNativeSession(f.config, f.commands, proposal, attempt, f.tracker))
+        f.raw("other").metadata["gc.session_id"] = "session"
         yield* stoppedNativeSession(f.config, f.commands, proposal, attempt, f.tracker)
         yield* reconcileNativeAttempt(f.config, f.commands, attempt, proposal, f.tracker)
         expect(f.events).not.toContain("native-close:session")

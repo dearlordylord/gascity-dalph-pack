@@ -12,7 +12,70 @@ import { ReviewRound } from "../src/native/review-contract.ts"
 import { BeadId } from "../src/domain/shared.ts"
 import { BASE } from "./helpers/workflow-fixture.ts"
 import { reconcileNativeReviews } from "../src/native/reconcile.ts"
-import { reviewNodes } from "../src/native/review-correlation.ts"
+import { nativeWriterNode, reviewNodes, reviewSessionMatches } from "../src/native/review-correlation.ts"
+import { reviewFactKey } from "../src/native/review-fact-key.ts"
+
+it.effect("terminal cleared claims cannot publish unfinished reviews or fixes or recreate closed history", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture
+    yield* Effect.gen(function* () {
+      yield* f.start
+      yield* f.review.prepare(yield* f.row("review-prepare"))
+      const verdict = yield* f.verdict
+      f.raw("review-session").status = "closed"
+      f.raw("review-session").metadata.current_claim_bead_id = ""
+      yield* Effect.flip(f.review.submit(yield* f.row("review"), verdict))
+      expect(f.raw("review").metadata[`dalph.${reviewFactKey("native_review", "initial", 1)}`]).toBeUndefined()
+      expect(f.raw("review").status).toBe("open")
+      f.raw("review-session").metadata.current_claim_bead_id = "review"
+      f.raw("review").status = "closed"
+      yield* Effect.flip(f.review.submit(yield* f.row("review"), verdict))
+      expect(f.raw("review").metadata[`dalph.${reviewFactKey("native_review", "initial", 1)}`]).toBeUndefined()
+      const fixKey = `dalph.${reviewFactKey("native_fix", "initial", 1)}`
+      yield* Effect.flip(f.review.finishFix(yield* f.row("fix"), BeadId.make("fix-session")))
+      expect(f.raw("fix").metadata[fixKey]).toBeUndefined()
+      f.raw("fix").status = "open"
+      delete f.raw("fix").metadata["gc.outcome"]
+      f.raw("fix-session").metadata.current_claim_bead_id = ""
+      yield* Effect.flip(f.review.finishFix(yield* f.row("fix"), BeadId.make("fix-session")))
+      expect(f.raw("fix").metadata[fixKey]).toBeUndefined()
+      f.raw("fix-session").metadata.current_claim_bead_id = "fix"
+      yield* f.review.finishFix(yield* f.row("fix"), BeadId.make("fix-session"))
+      const retained = f.raw("fix").metadata[fixKey]
+      f.raw("fix-session").metadata.current_claim_bead_id = ""
+      yield* f.review.finishFix(yield* f.row("fix"), BeadId.make("fix-session"))
+      expect(f.raw("fix").metadata[fixKey]).toBe(retained)
+    }).pipe(Effect.provide(f.layer))
+  })
+)
+
+it.effect("native reviewers use actual claims and only unique terminal historical bindings", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture
+    yield* Effect.gen(function* () {
+      yield* f.start
+      yield* f.review.prepare(yield* f.row("review-prepare"))
+      f.raw("review-session").metadata["gc.trigger_bead_id"] = "unrelated-spawn"
+      yield* f.review.submit(yield* f.row("review"), yield* f.verdict)
+      delete f.raw("review-session").metadata.current_claim_bead_id
+      const row = yield* f.row("review")
+      const closed = yield* nativeSession(f.config, f.commands, BeadId.make("review-session"))
+      expect(reviewSessionMatches(closed, row, closed.metadata.work_dir ?? "")).toBe(true)
+      expect(nativeWriterNode([row], closed, ["review"])?.id).toBe(row.id)
+      const unclassified = { ...row, metadata: { "gc.session_id": closed.id } }
+      expect(nativeWriterNode([unclassified], closed, ["review"])).toBeUndefined()
+      expect(nativeWriterNode([row, { ...row, id: BeadId.make("ambiguous") }], closed, ["review"])).toBeUndefined()
+      f.raw("review-session").metadata.current_claim_bead_id = ""
+      yield* f.review.gate(yield* f.row("review-control"))
+      f.raw("review-session").status = "open"
+      const open = yield* nativeSession(f.config, f.commands, closed.id)
+      expect(reviewSessionMatches(open, row, open.metadata.work_dir ?? "")).toBe(false)
+      expect(nativeWriterNode([row], open, ["review"])).toBeUndefined()
+      yield* Effect.flip(f.review.submit(row, yield* f.verdict))
+      expect(f.raw("review-session").metadata["gc.trigger_bead_id"]).toBe("unrelated-spawn")
+    }).pipe(Effect.provide(f.layer))
+  })
+)
 
 it.effect("native transport retries select the latest physical reviewer within the same semantic round", () =>
   Effect.gen(function* () {
@@ -87,7 +150,7 @@ it.effect("a retained verdict survives native reviewer pool reassignment without
         }
       })
       Object.assign(f.raw("review-session").metadata, {
-        "gc.trigger_bead_id": "other-review",
+        current_claim_bead_id: "other-review",
         work_dir: "/fixture/worktrees/other-review"
       })
       const attempt = yield* f.tracker.fact(BeadId.make("work"), "native_attempt", NativeAttempt)
@@ -206,7 +269,7 @@ it.effect(
             if (fault === "batch") changed.batch = "foreign"
             if (fault === "basis") changed.basis = { ...original.basis, projectContract: false }
             if (fault === "pin") delete f.raw("work").metadata["dalph.native_review_candidate_initial_1"]
-            if (fault === "trigger") f.raw("review-session").metadata["gc.trigger_bead_id"] = "foreign"
+            if (fault === "trigger") f.raw("review-session").metadata["current_claim_bead_id"] = "foreign"
             if (fault === "path") f.raw("review-session").metadata.work_dir = "/foreign"
             if (fault === "template") f.raw("review-session").metadata.template = "foreign"
             yield* Effect.flip(f.review.submit(yield* f.row("review"), changed))
@@ -336,7 +399,8 @@ it.effect("review recovery preserves occupied sessions and rejects missing or co
             f.config,
             f.commands,
             f.tracker,
-            yield* nativeSession(f.config, f.commands, session.id)
+            yield* nativeSession(f.config, f.commands, session.id),
+            BeadId.make("review")
           )
         }
         const resume = makeNativeController(f.config, f.contract, f.commands, f.tracker, process.execPath).resume(

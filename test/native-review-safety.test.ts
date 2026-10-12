@@ -91,7 +91,7 @@ it.effect("review preparation refuses missing fix identity or previous completed
 
 it.effect("fix completion refuses a foreign session trigger, worktree or template", () =>
   Effect.gen(function* () {
-    for (const key of ["gc.trigger_bead_id", "work_dir", "template"]) {
+    for (const key of ["current_claim_bead_id", "work_dir", "template"]) {
       const f = yield* nativeReviewFixture
       yield* Effect.gen(function* () {
         yield* f.start
@@ -173,7 +173,7 @@ it.effect("closed writer readback cannot authorize another task or workspace", (
                 // The identity changes after verdict validation, before stop reconciliation.
                 const metadata = f.raw("review-session").metadata
                 if (fault === "task") {
-                  metadata["gc.trigger_bead_id"] = "foreign-task"
+                  metadata["current_claim_bead_id"] = "foreign-task"
                   metadata.work_dir = "/foreign/worktree"
                 } else if (fault === "workspace") metadata.work_dir = "/foreign/worktree"
                 else if (fault === "template") metadata.template = "foreign/worker"
@@ -182,7 +182,7 @@ it.effect("closed writer readback cannot authorize another task or workspace", (
               })
             : execute(root, args, cwd, timeout, logs)
         expect(String(yield* Effect.flip(f.review.gate(yield* f.row("review-control"))))).toContain(
-          fault === "task" ? "incomplete" : "contradictory"
+          fault === "task" ? "reassignment" : "contradictory"
         )
         expect(f.raw("work").metadata["dalph.native_approved_initial_1"]).toBeUndefined()
         expect(f.events).not.toContain("native-close:review-session")
@@ -225,7 +225,7 @@ it.effect("an unrelated native session sharing the attempt workspace retains cus
           status: "open",
           metadata: {
             state: "awake",
-            "gc.trigger_bead_id": "foreign-task",
+            current_claim_bead_id: "foreign-task",
             template: "outside/worker",
             work_dir: sameWorkspace ? "/fixture/worktrees/work-work" : "/foreign/worktree"
           }
@@ -286,7 +286,7 @@ it.effect("mirrored native controls are excluded from writers while shared-works
           status: "open",
           metadata: {
             state: "awake",
-            "gc.trigger_bead_id": "control",
+            current_claim_bead_id: "control",
             template: "fixture/controller",
             work_dir: "/fixture"
           }

@@ -3,7 +3,7 @@ import { Effect, Schema } from "effect"
 import { AbsolutePath } from "../domain/attempt.ts"
 import { BeadId, BoundaryFailure } from "../domain/shared.ts"
 import type { RuntimeConfig } from "../delivery/config.ts"
-import type { Commands, makeTracker } from "../delivery/tracker.ts"
+import type { Bead, Commands, makeTracker } from "../delivery/tracker.ts"
 import { canonical } from "../delivery/files.ts"
 import type { NativeSession } from "./contract.ts"
 import { nativeSession } from "./session-observation.ts"
@@ -32,28 +32,40 @@ export const nativeStopKey = (session: typeof BeadId.Type) =>
 
 const confirmStoppedSession = Effect.fn("Native.confirmStoppedSession")(function* (
   stopped: typeof NativeSession.Type,
-  intent: typeof NativeStopIntent.Type
+  intent: typeof NativeStopIntent.Type,
+  tracker: ReturnType<typeof makeTracker>
 ) {
+  const writer = yield* tracker.bead(intent.node)
   if (
     stopped.status !== "closed" ||
-    stopped.metadata["gc.trigger_bead_id"] !== intent.node ||
+    !stopBindingMatches(stopped, writer, intent) ||
     stopped.metadata.work_dir !== intent.path ||
     stopped.metadata.template !== intent.template
   )
     return yield* new BoundaryFailure({ message: "native close did not establish exact stopped session custody" })
 })
 
+const stopBindingMatches = (session: typeof NativeSession.Type, writer: Bead, intent: typeof NativeStopIntent.Type) => {
+  const claim = session.metadata.current_claim_bead_id
+  return (
+    (!claim || claim === intent.node) &&
+    writer.metadata?.["gc.session_id"] === intent.session &&
+    writer.metadata?.["gc.run_target"] === intent.template
+  )
+}
+
 export const stopNativeWriter = Effect.fn("Native.stopWriter")(function* (
   config: RuntimeConfig,
   commands: Commands,
   tracker: ReturnType<typeof makeTracker>,
   session: typeof NativeSession.Type,
+  node: typeof BeadId.Type,
   disposition: NativeStopDisposition = { _tag: "CompletedWork" }
 ) {
   const intent = yield* Schema.decodeUnknownEffect(NativeStopIntent)({
     version: 1,
     session: session.id,
-    node: session.metadata["gc.trigger_bead_id"],
+    node,
     path: session.metadata.work_dir,
     template: session.metadata.template
   })
@@ -63,11 +75,11 @@ export const stopNativeWriter = Effect.fn("Native.stopWriter")(function* (
     return yield* new BoundaryFailure({ message: "native stop belongs to another session incarnation or workspace" })
   const writer = yield* tracker.bead(intent.node)
   if (disposition._tag === "RetainedRecovery")
-    yield* confirmStoppedSession(yield* nativeSession(config, commands, session.id), intent)
+    yield* confirmStoppedSession(yield* nativeSession(config, commands, session.id), intent, tracker)
   else if (writer.status !== "closed")
     return yield* new BoundaryFailure({ message: "native writer has unfinished work; external stop is not authorized" })
   const retired = yield* retiredPoolSession(config, commands, session.id)
-  yield* confirmStoppedSession(retired, intent)
+  yield* confirmStoppedSession(retired, intent, tracker)
   if (!retained) yield* tracker.record(intent.node, key, intent)
   // Repeat the native idempotent boundary even for a closed row or a lost response.
   // Gas City owns runtime teardown and subsequent orphan reconciliation.
@@ -88,5 +100,5 @@ export const stopNativeWriter = Effect.fn("Native.stopWriter")(function* (
   if (response.session_id !== session.id)
     return yield* new BoundaryFailure({ message: "native close returned another session" })
   const stopped = yield* nativeSession(config, commands, session.id)
-  yield* confirmStoppedSession(stopped, intent)
+  yield* confirmStoppedSession(stopped, intent, tracker)
 })

@@ -29,9 +29,29 @@ const ownsProduct = (row: Bead, attempt: typeof NativeAttempt.Type): row is Scop
   )
 }
 const intrudesWorkspace = (session: typeof NativeSession.Type, attempt: typeof NativeAttempt.Type) =>
-  session.metadata.work_dir === attempt.plan.path && session.metadata["gc.trigger_bead_id"] !== attempt.plan.bead
+  session.status !== "closed" &&
+  session.metadata.work_dir === attempt.plan.path &&
+  session.metadata.current_claim_bead_id !== attempt.plan.bead
 const reassignedProposal = (proposal: typeof NativeProposal.Type | null, session: typeof NativeSession.Type) =>
   proposal?.session === session.id ? proposal : null
+const producerSessionMatches = Effect.fn("Native.producerSessionMatches")(function* (
+  tracker: ReturnType<typeof makeTracker>,
+  attempt: typeof NativeAttempt.Type,
+  session: typeof NativeSession.Type
+) {
+  const claim = session.metadata.current_claim_bead_id
+  const original = yield* tracker.bead(attempt.plan.bead)
+  if (claim) {
+    if (claim !== attempt.plan.bead) return false
+    if (original.metadata?.["gc.session_id"] !== session.id)
+      return yield* new BoundaryFailure({ message: "native claim has a contradictory task-to-session binding" })
+    return true
+  }
+  if (original.metadata?.["gc.session_id"] !== session.id) return false
+  if (session.status !== "closed")
+    return yield* new BoundaryFailure({ message: "retained native session has no proven current claim" })
+  return true
+})
 export const reconcileNativeAttempt = Effect.fn("Native.reconcileAttempt")(function* (
   config: RuntimeConfig,
   commands: Commands,
@@ -44,7 +64,7 @@ export const reconcileNativeAttempt = Effect.fn("Native.reconcileAttempt")(funct
   const seen: string[] = []
   for (const row of inventory.filter((row) => row.template === attempt.contract.agent)) {
     const session = yield* nativeSession(config, commands, row.id)
-    if (session.metadata["gc.trigger_bead_id"] !== attempt.plan.bead) {
+    if (!(yield* producerSessionMatches(tracker, attempt, session))) {
       const historical = reassignedProposal(proposal, session)
       if (historical) {
         yield* completedReassignedProducer(config, commands, tracker, attempt, historical, session)
@@ -57,7 +77,7 @@ export const reconcileNativeAttempt = Effect.fn("Native.reconcileAttempt")(funct
     seen.push(session.id)
     if (session.status !== "closed") {
       occupied++
-    } else yield* stopNativeWriter(config, commands, tracker, session, { _tag: "RetainedRecovery" })
+    } else yield* stopNativeWriter(config, commands, tracker, session, attempt.plan.bead, { _tag: "RetainedRecovery" })
   }
   yield* observedSession(seen, proposal)
   if (occupied > 1)
@@ -125,7 +145,7 @@ export const reconcileNativeReviews = Effect.fn("Native.reconcileReviews")(funct
       return yield* new BoundaryFailure({ message: "retained review/fix session correlation is contradictory" })
     if (session.status !== "closed") {
       occupied++
-    } else yield* stopNativeWriter(config, commands, tracker, session, { _tag: "RetainedRecovery" })
+    } else yield* stopNativeWriter(config, commands, tracker, session, node.id, { _tag: "RetainedRecovery" })
   }
   if (missingReviewSession(owned, seen))
     return yield* new BoundaryFailure({ message: "retained review/fix session inventory is missing; resume blocked" })

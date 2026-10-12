@@ -33,7 +33,7 @@ const reassigned = Effect.gen(function* () {
       "gc.work_dir": "/fixture/worktrees/other"
     }
   })
-  Object.assign(f.raw("session").metadata, { "gc.trigger_bead_id": "other", work_dir: "/fixture/worktrees/other" })
+  Object.assign(f.raw("session").metadata, { current_claim_bead_id: "other", work_dir: "/fixture/worktrees/other" })
   return { attempt, f }
 })
 

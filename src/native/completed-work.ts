@@ -20,7 +20,7 @@ const originalMatches = (original: Bead, session: typeof NativeSession.Type, bin
   )
 }
 const ownerSessionMatches = (owner: Bead, session: typeof NativeSession.Type) =>
-  owner.metadata?.["gc.session_id"] === session.id || (owner.status === "closed" && session.status === "closed")
+  owner.metadata?.["gc.session_id"] === session.id
 const ownerMatches = (owner: Bead, original: Bead, session: typeof NativeSession.Type) => {
   const metadata = owner.metadata ?? {}
   return (
@@ -33,7 +33,8 @@ const ownerMatches = (owner: Bead, original: Bead, session: typeof NativeSession
 const currentSessionMatches = (session: typeof NativeSession.Type, binding: typeof CompletedBinding.Type) =>
   ephemeralPoolSession(session) &&
   session.metadata.template === binding.template &&
-  session.metadata["gc.trigger_bead_id"] !== binding.node
+  !!session.metadata.current_claim_bead_id &&
+  session.metadata.current_claim_bead_id !== binding.node
 const occupiesWorkspace = (session: typeof NativeSession.Type, path: string) =>
   session.status !== "closed" && session.metadata.work_dir === path
 
@@ -53,8 +54,10 @@ export const completedReassignedWork = Effect.fn("Native.completedReassignedWork
     !(yield* nodeWorkspaceMatches(tracker, original, binding.path))
   )
     return yield* new BoundaryFailure({ message: "completed native work/session binding is unproven" })
-  const ownerId = yield* Schema.decodeUnknownEffect(BeadId)(session.metadata["gc.trigger_bead_id"])
-  const owner = yield* tracker.bead(ownerId)
+  const ownerId = yield* Schema.decodeUnknownEffect(BeadId)(session.metadata.current_claim_bead_id)
+  const owner = yield* tracker
+    .bead(ownerId)
+    .pipe(Effect.mapError(() => new BoundaryFailure({ message: "native pool reassignment owner is unavailable" })))
   const ownerPath = yield* Schema.decodeUnknownEffect(AbsolutePath)(session.metadata.work_dir)
   if (!ownerMatches(owner, original, session) || !(yield* nodeWorkspaceMatches(tracker, owner, ownerPath)))
     return yield* new BoundaryFailure({ message: "native pool reassignment is unproven" })

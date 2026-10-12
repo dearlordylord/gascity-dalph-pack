@@ -62,12 +62,13 @@ const observeStoppedNativeSession = Effect.fn("Native.observeStoppedSession")(fu
   tracker: ReturnType<typeof makeTracker>
 ) {
   const observed = yield* nativeSession(config, commands, proposal.session)
-  if (observed.metadata["gc.trigger_bead_id"] !== attempt.plan.bead) {
+  const claim = observed.metadata.current_claim_bead_id
+  if (claim && claim !== attempt.plan.bead) {
     yield* completedReassignedProducer(config, commands, tracker, attempt, proposal, observed)
     return
   }
   const session = yield* correlatedSession(config, commands, proposal, attempt, tracker)
-  yield* stopNativeWriter(config, commands, tracker, session)
+  yield* stopNativeWriter(config, commands, tracker, session, attempt.plan.bead)
 })
 export const stoppedNativeSession = Effect.fn("Native.stoppedSession")(
   (...args: Parameters<typeof observeStoppedNativeSession>) =>

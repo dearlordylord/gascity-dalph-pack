@@ -519,6 +519,51 @@ Native retirement, reassignment and review correlation must separately migrate
 from spawn-trigger assumptions; this proposal slice alone does not qualify those
 remaining boundaries or a new live run.
 
+### Pool ownership at producer retirement and recovery
+
+Gas City has finished B in an ephemeral pool seat spawned for A. B retains its
+task-to-session identity and exact attempt/proposal. The pack passes B explicitly
+to its stop boundary and reads the native session afresh. A matching actual claim,
+or a cleared claim on the terminal session, may retire B only with the exact
+task/session/template/workspace binding. A is never used as a stop target. An open
+session remains native-owned; neither an acknowledgement nor an empty claim
+proves stopped writers. A foreign current claim, wrong task-to-session link,
+workspace or template refuses close and retains resources.
+
+If the pool seat claims C, recovery must positively prove C's current claim,
+task-to-session link and exact workspace plus B's retained completed history.
+It preserves C without closing its session. Missing claims do not prove
+reassignment. A closed C with a contradictory task-to-session link also refuses.
+Lost native close responses replay only the exact stop intent, with fresh terminal
+native observations before and after the idempotent public close.
+If the tracker changes task ownership between two positive session observations,
+both occupied observations retain capacity and recovery refuses multiple writers;
+separate fresh reads are not an atomic ownership snapshot.
+
+`test/native-session-stop.test.ts`, `test/native-retirement.test.ts`,
+`test/native-workflow.test.ts` and `test/native-historical-authority.test.ts`
+cover these producer stop/recovery boundaries. Controlled checks do not substitute
+for the daily live native acceptance. Review claim migration remains separate.
+
+### Review and fix pool claim identity
+
+A reviewer or fix actor may run in a seat spawned for a different node. Before
+publishing a verdict or fix result, fresh public task/session observations prove
+the actual claim, task-to-session link, template and retained attempt workspace.
+An active seat with an absent or foreign claim refuses publication. Retirement
+uses the explicit completed node and fresh native terminal custody. A terminal
+seat with a cleared claim is associated only with its unique retained task binding;
+multiple candidate bindings refuse. A positively correlated new claim preserves
+that new owner and does not request close. Recovery never interprets a spawn
+trigger as current ownership or accepts a missing claim as reassignment.
+Closed reviewer retries additionally require the exact retained verdict and
+immutable attempt; a matching stamp cannot recreate missing history.
+
+`test/native-review.test.ts`, `test/native-review-safety.test.ts`,
+`test/native-resume-products.test.ts` and `test/native-shared-workspace.test.ts`
+exercise review, fix, stop and recovery boundaries. The native daily cases remain
+required for live provider and public session lifecycle acceptance.
+
 The actor's exact self-hook current/claim commands delegate session and claim
 custody to Gas City. Failed native calls retain output without creating a
 project-writer stopped receipt. Operator targets, extra operands, copied session
