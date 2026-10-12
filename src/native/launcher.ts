@@ -5,9 +5,21 @@ import type { RuntimeConfig } from "../delivery/config.ts"
 import type { Commands } from "../delivery/tracker.ts"
 import { shellQuote } from "./shell.ts"
 
+export function nativeLauncherSource(
+  env: Readonly<Record<string, string>>,
+  nodeExecutable: string,
+  script: string,
+  mode: "check" | "review-gate"
+) {
+  const values = Object.entries(env).map(([key, value]) => shellQuote(`${key}=${value}`))
+  return `#!/bin/sh\nset -eu\nexec env ${values.join(" ")} ${shellQuote(nodeExecutable)} ${shellQuote(script)} ${shellQuote(mode)}\n`
+}
+
 export const nativeCheckLauncher = Effect.fn("Native.checkLauncher")(function* (
   config: RuntimeConfig,
-  commands: Commands
+  commands: Commands,
+  nodeExecutable: string,
+  mode: "check" | "review-gate" = "check"
 ) {
   const loaded = yield* commands
     .execute(config.root, [...["gc", "--city", config.city], "config", "show", "--json"])
@@ -22,8 +34,12 @@ export const nativeCheckLauncher = Effect.fn("Native.checkLauncher")(function* (
         )
       )
     )
-  const env = Object.entries(loaded.config.Workspace.Env).map(([key, value]) => shellQuote(`${key}=${value}`))
-  const source = `#!/bin/sh\nset -eu\nexec env ${env.join(" ")} ${shellQuote(process.execPath)} ${shellQuote(`${config.pack}/dist/native.js`)} check\n`
+  const source = nativeLauncherSource(
+    loaded.config.Workspace.Env,
+    nodeExecutable,
+    `${config.pack}/dist/native.js`,
+    mode
+  )
   const hash = createHash("sha256").update(source).digest("hex")
   const path = `${config.city}/.gc/native-check-${hash}.sh`
   const fs = yield* FileSystem.FileSystem

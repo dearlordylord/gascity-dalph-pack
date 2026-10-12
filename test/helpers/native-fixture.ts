@@ -23,7 +23,11 @@ export const nativeFixture = Effect.gen(function* () {
   })
   for (const row of fixture.rows.values()) row.metadata["dalph.runtime"] = "native-v1"
   const initialWork = fixture.rows.get("work")
-  if (initialWork) initialWork.metadata["gc.kind"] = "run"
+  if (initialWork) {
+    initialWork.metadata["gc.kind"] = "run"
+    initialWork.metadata["gc.run_target"] = contract.agent
+    initialWork.metadata["gc.session_id"] = "session"
+  }
   fixture.rows.set("root", { id: BeadId.make("root"), status: "open", metadata: {} })
   fixture.rows.set("prepare", {
     id: BeadId.make("prepare"),
@@ -47,9 +51,11 @@ export const nativeFixture = Effect.gen(function* () {
   })
   fixture.rows.set("session", {
     id: BeadId.make("session"),
-    status: "closed",
+    status: "open",
     metadata: {
-      state: "closed",
+      state: "awake",
+      pool_managed: "true",
+      session_origin: "ephemeral",
       template: contract.agent,
       work_dir: "/fixture/worktrees/work-work",
       "gc.trigger_bead_id": "work"
@@ -63,9 +69,24 @@ export const nativeFixture = Effect.gen(function* () {
           Dir: "fixture",
           Provider: "fixture",
           StartCommand: "",
+          WorkDir: "/fixture/worktrees",
+          MaxActiveSessions: 2,
+          MinActiveSessions: 0,
+          OptionDefaults: Schema.decodeUnknownSync(Schema.NullOr(Schema.Record(Schema.String, Schema.String)))(null)
+        },
+        {
+          Name: "native-reviewer",
+          Dir: "fixture",
+          Provider: "fixture",
+          StartCommand: "",
+          WorkDir: "/fixture/worktrees",
+          MaxActiveSessions: 2,
+          MinActiveSessions: 0,
           OptionDefaults: Schema.decodeUnknownSync(Schema.NullOr(Schema.Record(Schema.String, Schema.String)))(null)
         }
       ],
+      Rigs: [{ Name: "fixture", MaxActiveSessions: 5 }],
+      NamedSessions: [] as Array<{ Template: string; Dir: string }>,
       Session: { Provider: "tmux" },
       Beads: { Provider: "bd", ConditionalWrites: "require", GuardedRelease: "require" },
       Workspace: { Provider: "fixture", Env: { DALPH_TRIAL_ROOT: "/fixture" } }
@@ -77,15 +98,54 @@ export const nativeFixture = Effect.gen(function* () {
     readiness: true,
     runtime: "tmux 3.3a",
     version: "fixture-1",
+    gasCityVersion: "dev-dalph-native-v3",
     providerPermission: "",
     permissionModes: {},
-    metadataAcknowledged: true
+    stopFailure: false,
+    closeWrongSession: false,
+    closeResponseLost: false,
+    legacyClose: true,
+    runtimeAbsent: true,
+    metadataAcknowledged: true,
+    retireCompleted: true
   }
   const commands: Commands = {
     ...fixture.commands,
     execute: (root, args, cwd, timeout, logs) =>
       Effect.gen(function* () {
-        if (args.includes("sling")) return JSON.stringify({ workflow_id: "root" })
+        if (args.includes("metadata-cas")) {
+          const key = args.find((arg) => arg.startsWith("--key="))?.slice(6)
+          if (key && !/^[a-zA-Z_][a-zA-Z0-9_./]*$/.test(key))
+            return yield* new BoundaryFailure({ message: "native metadata key is invalid" })
+        }
+        if (args.includes("session") && args.includes("close")) {
+          const id = String(args[args.indexOf("close") + 1])
+          fixture.events.push(`native-close:${id}`)
+          const session = fixture.rows.get(id)
+          // Stock close is idempotent for closed rows; supervisor owns orphan cleanup.
+          // The alternate response models an optional platform extension.
+          if (session && (!state.legacyClose || session.status !== "closed")) {
+            if (state.stopFailure) return yield* new BoundaryFailure({ message: "native stop failed" })
+            fixture.events.push(`native-runtime-stop:${id}`)
+            session.status = "closed"
+            if (!state.legacyClose) session.metadata.state = "closed"
+          }
+          if (state.closeResponseLost) return yield* new BoundaryFailure({ message: "native close response lost" })
+          return JSON.stringify({
+            schema_version: "1",
+            ok: true,
+            action: "close",
+            session_id: state.closeWrongSession ? "foreign" : id,
+            state: "closed",
+            ...(state.legacyClose ? {} : { runtime_absent: state.runtimeAbsent })
+          })
+        }
+        if (args.includes("cook")) {
+          fixture.events.push("native-cook")
+          return JSON.stringify({ schema_version: "1", ok: true, mode: "cook", root_id: "root" })
+        }
+        if (args.includes("gc") && args.includes("version"))
+          return JSON.stringify({ schema_version: "1", ok: true, version: state.gasCityVersion })
         if (args.includes("resume")) {
           fixture.events.push("native-resume")
           return "resumed"
@@ -107,7 +167,12 @@ export const nativeFixture = Effect.gen(function* () {
         if (args.includes("config") && args.includes("show")) return JSON.stringify(settings)
         if (args.includes("agent") && args.includes("list"))
           return JSON.stringify({
-            agents: state.configured ? [{ qualified_name: contract.agent, provider: contract.harness }] : []
+            agents: state.configured
+              ? [
+                  { qualified_name: contract.agent, provider: contract.harness },
+                  { qualified_name: "fixture/dalph.native-reviewer", provider: "fixture" }
+                ]
+              : []
           })
         if (args.includes("explain"))
           return JSON.stringify({
@@ -129,7 +194,21 @@ export const nativeFixture = Effect.gen(function* () {
       })
   }
   const http = HttpClient.make((request) => {
-    if (request.method !== "GET") return fixture.http.execute(request)
+    if (request.method !== "GET")
+      return fixture.http.execute(request).pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            if (!state.retireCompleted) return
+            for (const session of fixture.rows.values()) {
+              if (session.metadata.pool_managed !== "true") continue
+              const writer = fixture.rows.get(session.metadata["gc.trigger_bead_id"] ?? "")
+              if (writer?.status !== "closed") continue
+              session.status = "closed"
+              session.metadata.state = "closed"
+            }
+          })
+        )
+      )
     const id = decodeURIComponent(request.url.split("/").at(-1) ?? "")
     const row = fixture.rows.get(id)
     return Effect.succeed(

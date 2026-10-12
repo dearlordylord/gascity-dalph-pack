@@ -13,7 +13,14 @@ mise exec node@24.20.0 -- pnpm check-all
 ```
 
 The gate runs stages in order and stops at the first failure. Each child stage
-has a five-minute timeout and an owned process-group finalizer. Run the failing
+has a ten-minute timeout and an owned process-group finalizer. The coverage
+stage has a 160-minute ceiling for the serial native suite: three review cases
+allow at most 17 minutes each; the blocking case also proves a separate finite
+human batch followed by a clean human delivery and allows 51 minutes. Clean delivery allows 10 minutes, interrupted
+two-result delivery allows 25 minutes, tracker acceptance allows 4.5 minutes,
+and the remaining controlled tests fit inside the residual allowance. Each
+fixture also retains its own tighter deadline; this changes no product budget
+and excludes no tests. Run the failing
 stage directly to diagnose it before repeating the gate. Preparation or missing
 native tools are environment failures; neither counts as successful qualification.
 

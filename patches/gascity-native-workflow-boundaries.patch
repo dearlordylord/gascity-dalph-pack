@@ -1,0 +1,421 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index d50f5fb3..fd8d5185 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -35,6 +35,8 @@ next to that code; read the matching file before changing it.
+ | Anything under `docs/` | `.claude/skills/gascity-docs/SKILL.md` |
+ | New SDK surface or a new primitive | `engdocs/contributors/primitive-test.md` |
+ | A controller or session reconciler incident | `engdocs/contributors/reconciler-debugging.md` (use `gc trace`) |
++| Runtime heartbeat or execution backstop | `cmd/gc/cmd_runtime_heartbeat.go` and `cmd/gc/execution_backstop.go`; an active finite `held_until` prevents execution-stall observation and drain. Re-read the exact session before draining; expiry restores the bounded backstop, and controller restart never extends the hold. Keep `schemas/runtime/heartbeat/result.schema.json` embedded and verify the public root CLI JSON guard. |
++| Ralph outcome classification | `docs/reference/specs/formula-spec-v2.md` section 3.1; verify the compiled `KindRalph` and legacy `KindCheck` paths. Explicit hard subject failure terminates; launched infrastructure-blind checks retry within their separate bounded budget. Preserve the documented removed-work-directory start-failure rule. |
+ | Worktree isolation or worker cleanup | `engdocs/archive/backlogs/worktree-roadmap.md` (lifecycle analysis and cleanup-bug lessons) |
+ | A `release-gates/*.md` deploy gate | `engdocs/contributors/release-gate-criteria-conventions.md` |
+ | Bazel builds | `engdocs/bazel-quickstart.md` |
+diff --git a/BUILD.bazel b/BUILD.bazel
+index 7be17911..513e4873 100644
+--- a/BUILD.bazel
++++ b/BUILD.bazel
+@@ -210,6 +210,7 @@ go_library(
+         "schemas/runtime/drain-ack/result.schema.json",
+         "schemas/runtime/drain-check/result.schema.json",
+         "schemas/runtime/drain/result.schema.json",
++        "schemas/runtime/heartbeat/result.schema.json",
+         "schemas/runtime/undrain/result.schema.json",
+         "schemas/service/doctor/result.schema.json",
+         "schemas/service/list/result.schema.json",
+diff --git a/cmd/gc/cmd_runtime_heartbeat.go b/cmd/gc/cmd_runtime_heartbeat.go
+index fb0b289d..0615c3ed 100644
+--- a/cmd/gc/cmd_runtime_heartbeat.go
++++ b/cmd/gc/cmd_runtime_heartbeat.go
+@@ -21,7 +21,7 @@ const (
+ 	minimumHeartbeatDuration = 1 * time.Minute
+ 
+ 	// maximumHeartbeatDuration bounds how long a single heartbeat may suppress
+-	// the idle-timeout and max-session-age timers. A heartbeat is meant to be
++	// the idle-timeout, max-session-age, and execution-stall timers. A heartbeat is meant to be
+ 	// refreshed by re-calling this command during a long operation, so no single
+ 	// call needs an unbounded hold; the ceiling comfortably exceeds any realistic
+ 	// silent operation while stopping an oversized --duration (e.g. 8760h) from
+@@ -45,8 +45,8 @@ func validateHeartbeatDuration(d time.Duration) error {
+ 
+ // newRuntimeHeartbeatCmd creates the "gc runtime heartbeat" command.
+ //
+-// Called by agents at the start of long operations to suppress idle-timeout
+-// and max-session-age timers for the specified duration. The existing
++// Called by agents at the start of long operations to suppress idle-timeout,
++// max-session-age, and execution-stall timers for the specified duration. The existing
+ // held_until mechanism in the bead reconciler provides the timer-blocker
+ // semantics; this command is the agent-facing API for setting it without
+ // triggering a full user-hold suspend.
+@@ -58,10 +58,10 @@ func newRuntimeHeartbeatCmd(stdout, stderr io.Writer) *cobra.Command {
+ 	cmd := &cobra.Command{
+ 		Use:   "heartbeat",
+ 		Short: "Extend idle-timeout window during a long operation",
+-		Long: `Extend the idle-timeout and max-session-age windows during a long operation.
++		Long: `Extend the idle-timeout, max-session-age, and execution-stall windows during a long operation.
+ 
+-Sets held_until on the current session's bead, suppressing the idle-timeout
+-and max-session-age timers until the hold expires. Call this at the start of
++Sets held_until on the current session's bead, suppressing the idle-timeout,
++max-session-age, and execution-stall timers until the hold expires. Call this at the start of
+ slow operations that produce no terminal output and would otherwise trigger
+ a false-alarm watchdog kill.
+ 
+diff --git a/cmd/gc/cmd_runtime_heartbeat_test.go b/cmd/gc/cmd_runtime_heartbeat_test.go
+index 8b6f4d82..7ba1506f 100644
+--- a/cmd/gc/cmd_runtime_heartbeat_test.go
++++ b/cmd/gc/cmd_runtime_heartbeat_test.go
+@@ -22,6 +22,44 @@ func makeSessionBead(id, sessionName string) beads.Bead {
+ 	}
+ }
+ 
++func TestRuntimeHeartbeatPublicJSONContract(t *testing.T) {
++	clearGCEnv(t)
++	t.Setenv("GC_BEADS", "file")
++	cityPath := t.TempDir()
++	writeManagementJSONTestCity(t, cityPath, "[workspace]\nname = \"heartbeat-city\"\n")
++	store, err := openCityStoreAt(cityPath)
++	if err != nil {
++		t.Fatal(err)
++	}
++	const sessionName = "heartbeat-runtime"
++	created, err := store.Create(makeSessionBead("", sessionName))
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Setenv("GC_CITY_PATH", cityPath)
++	t.Setenv("GC_SESSION_ID", created.ID)
++	t.Setenv("GC_SESSION_NAME", sessionName)
++	var stdout, stderr bytes.Buffer
++	code := run([]string{"runtime", "heartbeat", "--duration=1m", "--json"}, &stdout, &stderr)
++	if code != 0 {
++		t.Fatalf("public heartbeat exit %d: stdout=%s stderr=%s", code, stdout.String(), stderr.String())
++	}
++	var result runtimeHeartbeatJSON
++	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
++		t.Fatal(err)
++	}
++	if !result.OK || result.Command != "runtime heartbeat" || result.HeldUntil == "" {
++		t.Fatalf("unexpected public heartbeat result: %+v", result)
++	}
++	current, err := store.Get(created.ID)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if current.Metadata["held_until"] != result.HeldUntil {
++		t.Fatalf("hold not durably acknowledged: %+v", current.Metadata)
++	}
++}
++
+ func TestDoRuntimeHeartbeatSetsHeldUntil(t *testing.T) {
+ 	const sessionName = "testpack__worker"
+ 	const beadID = "bead-123"
+diff --git a/cmd/gc/execution_backstop.go b/cmd/gc/execution_backstop.go
+index 82186245..a9757377 100644
+--- a/cmd/gc/execution_backstop.go
++++ b/cmd/gc/execution_backstop.go
+@@ -66,6 +66,7 @@ import (
+ 	"github.com/gastownhall/gascity/internal/config"
+ 	"github.com/gastownhall/gascity/internal/events"
+ 	"github.com/gastownhall/gascity/internal/runtime"
++	"github.com/gastownhall/gascity/internal/session"
+ )
+ 
+ // Session-bead metadata keys for the execution backstop. Persisted for the same
+@@ -96,8 +97,9 @@ const (
+ // Execution-backstop hold reasons recorded in executionClaimHoldKey, alongside
+ // the engine-level backstopHold* reasons.
+ const (
+-	executionHoldMultiClaim = "multi_claim"
+-	executionHoldNotQuiet   = "not_quiet"
++	executionHoldMultiClaim   = "multi_claim"
++	executionHoldNotQuiet     = "not_quiet"
++	executionHoldRuntimeTimer = "runtime_timer"
+ )
+ 
+ // executionStalledLatchRetryAfter bounds how long a latch silences
+@@ -257,6 +259,10 @@ func (p poolExecutionBackstop) resolve(s beads.Bead, _ map[string]beads.Bead, se
+ 		p.observeHold(p.store, &s, executionHoldMultiClaim, p.stdout)
+ 		return backstopTarget{}, backstopResolutionHold
+ 	}
++	if runtimeTimerHolds(s, p.now) {
++		p.observeHold(p.store, &s, executionHoldRuntimeTimer, p.stdout)
++		return backstopTarget{}, backstopResolutionHold
++	}
+ 	if !p.sessionIsQuiet(sessName) {
+ 		p.observeHold(p.store, &s, executionHoldNotQuiet, p.stdout)
+ 		return backstopTarget{}, backstopResolutionHold
+@@ -380,6 +386,22 @@ func (p poolExecutionBackstop) stalledLatchHolds(s *beads.Bead) bool {
+ // or one old enough that its drain must have been lost, escalates again; the
+ // re-written latch restarts both bounds.
+ func (p poolExecutionBackstop) exhausted(store beads.Store, s *beads.Bead, stdout io.Writer) {
++	// A heartbeat may have been accepted after the assigned-work snapshot.
++	// Re-read its durable timer before recording escalation or requesting drain.
++	live := beads.HandlesFor(store).Live
++	if live == nil {
++		p.observeHold(store, s, backstopHoldRevalidate, stdout)
++		return
++	}
++	current, err := live.Get(s.ID)
++	if err != nil || current.ID != s.ID {
++		p.observeHold(store, s, backstopHoldRevalidate, stdout)
++		return
++	}
++	if runtimeTimerHolds(current, p.now) {
++		p.observeHold(store, s, executionHoldRuntimeTimer, stdout)
++		return
++	}
+ 	if p.stalledLatchHolds(s) {
+ 		return
+ 	}
+@@ -420,6 +442,12 @@ func (p poolExecutionBackstop) exhausted(store beads.Store, s *beads.Bead, stdou
+ 	}
+ }
+ 
++// Future or unreadable durable timers retain custody; expiry restores the backstop.
++func runtimeTimerHolds(s beads.Bead, now time.Time) bool {
++	holds := session.Holds(s.Metadata, now)
++	return (holds.In|holds.Unknown)&session.HoldTimer != 0
++}
++
+ func (p poolExecutionBackstop) emitStepStalled(s *beads.Bead, beadID string, attempts int) {
+ 	if p.rec == nil {
+ 		return
+diff --git a/cmd/gc/execution_backstop_test.go b/cmd/gc/execution_backstop_test.go
+index b5d445f8..019ea0e8 100644
+--- a/cmd/gc/execution_backstop_test.go
++++ b/cmd/gc/execution_backstop_test.go
+@@ -142,6 +142,53 @@ func (f *executionBackstopFixture) nudgeCount() int {
+ 	return strings.Count(f.stdout.String(), "execution-claim-nudge: nudged")
+ }
+ 
++func TestExecutionBackstopRespectsFiniteRuntimeHeartbeat(t *testing.T) {
++	f := newExecutionBackstopFixture(t)
++	f.cfg.Agents[0].Nudge = ""
++	f.idleFor(t, 10*time.Minute)
++	until := f.now.Add(10 * time.Minute)
++	if err := f.store.SetMetadata(f.session.ID, "held_until", until.Format(time.RFC3339)); err != nil {
++		t.Fatal(err)
++	}
++	f.tick(t)
++	if got := f.sessionMeta(t, executionClaimNudgeWorkKey); got != "" {
++		t.Fatalf("heartbeat spent the observation budget: %q", got)
++	}
++	// Each tick reconstructs the controller predicate from durable rows.
++	f.now = f.now.Add(5 * time.Minute)
++	f.tick(t)
++	if len(f.drained) != 0 || f.nudgeCount() != 0 {
++		t.Fatal("active heartbeat did not survive controller reconstruction")
++	}
++	f.now = until.Add(time.Second)
++	f.tick(t)
++	f.now = f.now.Add(idleClaimNudgeGrace + time.Second)
++	f.tick(t)
++	if len(f.drained) != 1 {
++		t.Fatalf("expired heartbeat did not restore bounded drain: %v", f.drained)
++	}
++}
++
++func TestExecutionBackstopRechecksHeartbeatBeforeDrain(t *testing.T) {
++	f := newExecutionBackstopFixture(t)
++	f.cfg.Agents[0].Nudge = ""
++	f.idleFor(t, 10*time.Minute)
++	f.tick(t)
++	f.now = f.now.Add(idleClaimNudgeGrace + time.Second)
++	stale, err := loadSessionBeads(f.store)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if err := f.store.SetMetadata(f.session.ID, "held_until", f.now.Add(time.Minute).Format(time.RFC3339)); err != nil {
++		t.Fatal(err)
++	}
++	nudgeStalledPoolExecution(f.sp, f.cfg, f.store, stale, []beads.Bead{f.work}, []beads.Store{f.store}, []string{""}, false, f.now, f.rec,
++		func(beads.Bead) error { f.drained = append(f.drained, "drained"); return nil }, &f.stdout)
++	if len(f.drained) != 0 || f.sessionMeta(t, executionClaimNudgeStalledKey) != "" {
++		t.Fatal("stale snapshot drained a freshly heartbeating session")
++	}
++}
++
+ // TestExecutionBackstopNudgesAnIdleClaimHolderExactlyOnce is the core row: the
+ // slot holds an in-progress claim, the provider reports no activity past the
+ // grace, and the configured claim nudge is re-delivered once with the attempt
+diff --git a/internal/dispatch/control.go b/internal/dispatch/control.go
+index 20096b4a..17ef0651 100644
+--- a/internal/dispatch/control.go
++++ b/internal/dispatch/control.go
+@@ -29,7 +29,7 @@ const (
+ 	// attemptPass closes the control as passed.
+ 	attemptPass attemptDisposition = iota
+ 	// attemptHardFail closes the control as a terminal hard failure regardless
+-	// of attempts remaining (only the retry classifier produces this).
++	// of attempts remaining.
+ 	attemptHardFail
+ 	// attemptContinue spawns the next attempt when attempts remain, or disposes
+ 	// of the exhausted control via the strategy when max_attempts is reached.
+@@ -286,6 +286,18 @@ func evaluateRetryAttempt(store beads.Store, bead, attempt beads.Bead, _ int, op
+ // runs the check script. A GatePass closes the control; anything else spawns
+ // the next iteration or exhausts.
+ func evaluateRalphIteration(store beads.Store, bead, iteration beads.Bead, iterationNum int, opts ProcessOptions) (attemptEvaluation, error) {
++	// Explicit hard subject failures are terminal in both compiled and legacy
++	// Ralph lanes. A completed body with a blocking gate verdict still iterates.
++	if iteration.Metadata[beadmeta.OutcomeMetadataKey] == beadmeta.OutcomeFail &&
++		strings.TrimSpace(iteration.Metadata[beadmeta.FailureClassMetadataKey]) == beadmeta.FailureClassHard {
++		reason := retryFailureReason(iteration)
++		return attemptEvaluation{
++			disposition: attemptHardFail,
++			logOutcome:  "hard",
++			logDetail:   reason,
++			reason:      reason,
++		}, nil
++	}
+ 	// Propagate non-gc metadata from the iteration to the ralph control BEFORE
+ 	// running the check. This makes the iteration's output (e.g.,
+ 	// review.verdict) visible on the ralph bead for check scripts that read
+@@ -304,6 +316,34 @@ func evaluateRalphIteration(store beads.Store, bead, iteration beads.Bead, itera
+ 	if err != nil {
+ 		return attemptEvaluation{}, fmt.Errorf("%s: running check: %w", bead.ID, err)
+ 	}
++	_, blind := convergence.ClassifyInfraBlind(checkResult)
++	if blind {
++		checkResult.Outcome = convergence.GateError
++	}
++	if err := persistCheckResult(store, reloaded, checkResult); err != nil {
++		return attemptEvaluation{}, fmt.Errorf("%s: persisting check result: %w", bead.ID, err)
++	}
++	// A failed start after resolving a store-root fallback into a removed
++	// work_dir retains its existing graded-failure behavior. Only launched
++	// infrastructure-blind checks and timeouts take this retry lane.
++	if blind || checkResult.Outcome == convergence.GateTimeout {
++		infraRetries, _ := strconv.Atoi(reloaded.Metadata[beadmeta.CheckInfraRetryMetadataKey])
++		if infraRetries < maxCheckInfraRetries {
++			if err := store.SetMetadata(bead.ID, beadmeta.CheckInfraRetryMetadataKey, strconv.Itoa(infraRetries+1)); err != nil {
++				if controllerSpawnBoundaryPending(store, bead.ID, err, opts) {
++					return attemptEvaluation{}, ErrControlPending
++				}
++				return attemptEvaluation{}, fmt.Errorf("%s: recording gate infra-retry: %w", bead.ID, err)
++			}
++			return attemptEvaluation{}, ErrControlPending
++		}
++		return attemptEvaluation{
++			disposition: attemptHardFail,
++			logOutcome:  checkResult.Outcome,
++			logDetail:   checkResult.Stderr,
++			reason:      "check infrastructure retry budget exhausted",
++		}, nil
++	}
+ 	eval := attemptEvaluation{logOutcome: checkResult.Outcome, logDetail: checkResult.Stderr}
+ 	if checkResult.Outcome == convergence.GatePass {
+ 		eval.disposition = attemptPass
+diff --git a/internal/dispatch/control_test.go b/internal/dispatch/control_test.go
+index 39dd658e..a26f34bd 100644
+--- a/internal/dispatch/control_test.go
++++ b/internal/dispatch/control_test.go
+@@ -21,6 +21,89 @@ import (
+ // processRetryControl tests
+ // ---------------------------------------------------------------------------
+ 
++// A compiled Ralph must honor the same explicit hard subject disposition as
++// the legacy check lane, rather than spending a semantic iteration on it.
++func TestProcessRalphControlHardSubjectFailureDoesNotIterate(t *testing.T) {
++	t.Parallel()
++	store, control := newUnlaunchableCheckRalphControl(t, "not-needed.sh")
++	if err := store.SetMetadata(control.ID, beadmeta.MaxAttemptsMetadataKey, "4"); err != nil {
++		t.Fatal(err)
++	}
++	rows, err := store.List(beads.ListQuery{AllowScan: true, IncludeClosed: true})
++	if err != nil {
++		t.Fatal(err)
++	}
++	for _, row := range rows {
++		if row.Metadata[beadmeta.KindMetadataKey] == beadmeta.KindScope {
++			if err := store.SetMetadataBatch(row.ID, map[string]string{
++				beadmeta.OutcomeMetadataKey:       beadmeta.OutcomeFail,
++				beadmeta.FailureClassMetadataKey:  beadmeta.FailureClassHard,
++				beadmeta.FailureReasonMetadataKey: "review transport retries exhausted",
++			}); err != nil {
++				t.Fatal(err)
++			}
++		}
++	}
++	before := countAllBeads(t, store)
++	result, err := ProcessControl(store, mustGet(t, store, control.ID), ProcessOptions{})
++	if err != nil {
++		t.Fatalf("ProcessControl: %v", err)
++	}
++	got := mustGet(t, store, control.ID)
++	if result.Action != "hard-fail" || got.Status != "closed" || got.Metadata[beadmeta.FinalDispositionMetadataKey] != beadmeta.DispositionHardFail {
++		t.Fatalf("result=%+v control=%+v, want closed hard failure", result, got)
++	}
++	if got.Metadata[beadmeta.FailedAttemptMetadataKey] != "1" || countAllBeads(t, store) != before {
++		t.Fatalf("hard failure must retain iteration one without spawning a successor: %+v", got)
++	}
++}
++
++// Exit 75 is infrastructure blindness, not a semantic rejection. Reconciliation
++// must retry the same completed iteration and spend only the infrastructure budget.
++func TestProcessRalphControlInfraGateDoesNotBurnIteration(t *testing.T) {
++	t.Parallel()
++	city := t.TempDir()
++	path := filepath.Join(city, "infra.sh")
++	writeExecutableScript(t, path, "#!/bin/sh\nexit 75\n")
++	store, control := newUnlaunchableCheckRalphControl(t, "infra.sh")
++	before := countAllBeads(t, store)
++	_, err := ProcessControl(store, control, ProcessOptions{CityPath: city})
++	if !errors.Is(err, ErrControlPending) {
++		t.Fatalf("ProcessControl = %v, want attempt-free pending", err)
++	}
++	got := mustGet(t, store, control.ID)
++	if got.Status == "closed" || got.Metadata[beadmeta.CheckInfraRetryMetadataKey] != "1" || countAllBeads(t, store) != before {
++		t.Fatalf("infrastructure retry must preserve the same iteration: %+v", got)
++	}
++	writeExecutableScript(t, path, "#!/bin/sh\nexit 0\n")
++	result, err := ProcessControl(store, got, ProcessOptions{CityPath: city})
++	if err != nil || result.Action != "pass" || countAllBeads(t, store) != before {
++		t.Fatalf("recovered gate = %+v, %v; want same-iteration pass", result, err)
++	}
++}
++
++func TestProcessRalphControlInfraBudgetExhaustionIsTerminal(t *testing.T) {
++	t.Parallel()
++	city := t.TempDir()
++	writeExecutableScript(t, filepath.Join(city, "infra.sh"), "#!/bin/sh\nexit 75\n")
++	store, control := newUnlaunchableCheckRalphControl(t, "infra.sh")
++	if err := store.SetMetadataBatch(control.ID, map[string]string{
++		beadmeta.MaxAttemptsMetadataKey:     "4",
++		beadmeta.CheckInfraRetryMetadataKey: strconv.Itoa(maxCheckInfraRetries),
++	}); err != nil {
++		t.Fatal(err)
++	}
++	before := countAllBeads(t, store)
++	result, err := ProcessControl(store, mustGet(t, store, control.ID), ProcessOptions{CityPath: city})
++	if err != nil || result.Action != "hard-fail" {
++		t.Fatalf("ProcessControl = %+v, %v; want terminal infrastructure failure", result, err)
++	}
++	got := mustGet(t, store, control.ID)
++	if got.Status != "closed" || got.Metadata[beadmeta.FailedAttemptMetadataKey] != "1" || countAllBeads(t, store) != before {
++		t.Fatalf("spent infrastructure budget must terminate without another semantic iteration: %+v", got)
++	}
++}
++
+ func TestProcessRetryControlPass(t *testing.T) {
+ 	t.Parallel()
+ 	store := beads.NewMemStore()
+diff --git a/schemas/runtime/heartbeat/result.schema.json b/schemas/runtime/heartbeat/result.schema.json
+new file mode 100644
+index 00000000..e49d94a8
+--- /dev/null
++++ b/schemas/runtime/heartbeat/result.schema.json
+@@ -0,0 +1,13 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "type": "object",
++  "required": ["schema_version", "ok", "command", "session", "held_until"],
++  "properties": {
++    "schema_version": { "const": "1" },
++    "ok": { "const": true },
++    "command": { "const": "runtime heartbeat" },
++    "session": { "type": "string", "minLength": 1 },
++    "held_until": { "type": "string", "format": "date-time" }
++  },
++  "additionalProperties": true
++}

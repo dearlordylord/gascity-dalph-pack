@@ -1,0 +1,56 @@
+formula = "native-independent-review"
+description = "Independent native review with early clean exit and four completed rounds"
+type = "expansion"
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[vars.batch]
+default = "initial"
+[vars.product_root]
+default = ""
+[vars.previous_batch]
+default = ""
+[vars.delivery_scope]
+required = true
+
+[vars.workspace]
+required = true
+[vars.agent]
+required = true
+[vars.reviewer]
+required = true
+[vars.review_check]
+required = true
+
+[[template]]
+id = "{target}"
+title = "Retained independent review and fix convergence"
+metadata = { "gc.failure_class" = "hard", "gc.scope_ref" = "{delivery_scope}", "gc.scope_role" = "member", "gc.on_fail" = "abort_scope", "dalph.task" = "task", "dalph.phase" = "review-control", "dalph.runtime" = "native-v1", "dalph.review_batch" = "{batch}", "dalph.product_root" = "{product_root}", "dalph.previous_review_batch" = "{previous_batch}" }
+[template.check]
+max_attempts = 4
+[template.check.check]
+mode = "exec"
+path = "{review_check}"
+timeout = "2m"
+
+[[template.children]]
+id = "{target}.prepare"
+title = "Prepare the exact review candidate or retained findings"
+metadata = { "gc.run_target" = "dalph.native-review-prepare", "dalph.task" = "task", "dalph.phase" = "review-prepare", "dalph.runtime" = "native-v1", "dalph.review_batch" = "{batch}", "dalph.product_root" = "{product_root}", "dalph.previous_review_batch" = "{previous_batch}" }
+
+[[template.children]]
+id = "{target}.fix"
+title = "Fix retained blocking findings in the same attempt"
+needs = ["{target}.prepare"]
+metadata = { "gc.run_target" = "{agent}", "dalph.task" = "task", "dalph.phase" = "fix", "gc.pack_workspace" = "{workspace}", "dalph.runtime" = "native-v1", "dalph.review_batch" = "{batch}", "dalph.product_root" = "{product_root}", "dalph.previous_review_batch" = "{previous_batch}" }
+
+[[template.children]]
+id = "{target}.review"
+title = "Independently review requirements, contract and Base-to-candidate changes"
+needs = ["{target}.fix"]
+metadata = { "gc.run_target" = "{reviewer}", "dalph.task" = "task", "dalph.phase" = "review", "gc.pack_workspace" = "{workspace}", "dalph.runtime" = "native-v1", "dalph.review_batch" = "{batch}", "dalph.product_root" = "{product_root}", "dalph.previous_review_batch" = "{previous_batch}" }
+
+[template.children.retry]
+max_attempts = 3
+on_exhausted = "hard_fail"

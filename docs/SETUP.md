@@ -11,7 +11,7 @@ Codex CLI. These are the versions used by the completed trials:
 
 | Component | Trial input |
 | --- | --- |
-| Gas City | `8fd6aa25ce73b3e8cf0c1e092e8a14ab00b4c15a` |
+| Gas City | `8fd6aa25ce73b3e8cf0c1e092e8a14ab00b4c15a` plus the bundled native workflow boundary patch |
 | Bundled core/BD packs | `e38ce9cc55d15fa351199c042f0d07aba1a347af` |
 | Beads | `1b7bf9b1910d8ecec3f461f70f478314b654eaa6` |
 | Dolt | `2.4.2` |
@@ -41,11 +41,22 @@ Build the pinned sources into the trial's `bin/`:
 ```sh
 git clone https://github.com/gastownhall/gascity.git "$DALPH_TRIAL_ROOT/sources/gascity"
 git -C "$DALPH_TRIAL_ROOT/sources/gascity" checkout 8fd6aa25ce73b3e8cf0c1e092e8a14ab00b4c15a
-(cd "$DALPH_TRIAL_ROOT/sources/gascity" && mise exec go@1.27.2 -- go build -o "$DALPH_TRIAL_ROOT/bin/gc" ./cmd/gc)
+git -C "$DALPH_TRIAL_ROOT/sources/gascity" apply "$DALPH_PACK_ROOT/patches/gascity-native-workflow-boundaries.patch"
+(cd "$DALPH_TRIAL_ROOT/sources/gascity" && mise exec go@1.27.2 -- go build -ldflags '-X main.version=dev-dalph-native-v3' -o "$DALPH_TRIAL_ROOT/bin/gc" ./cmd/gc)
 git clone https://github.com/gastownhall/beads.git "$DALPH_TRIAL_ROOT/sources/beads"
 git -C "$DALPH_TRIAL_ROOT/sources/beads" checkout 1b7bf9b1910d8ecec3f461f70f478314b654eaa6
 (cd "$DALPH_TRIAL_ROOT/sources/beads" && CGO_ENABLED=0 mise exec go@1.27.2 -- go build -tags gms_pure_go -ldflags '-X main.Build=1b7bf9b1910d8ecec3f461f70f478314b654eaa6' -o "$DALPH_TRIAL_ROOT/bin/bd" ./cmd/bd)
 ```
+
+The native review workflow requires the bundled patch and its public build
+identifier `dev-dalph-native-v3`. Stock compiled Ralph spends semantic
+iterations on infrastructure failures; its older check lane has separate handling.
+The patch repairs the active native dispatcher, keeping budgets and recovery in
+Gas City. It also makes the execution backstop honor finite public heartbeat
+holds and revalidate them before draining a quiet session. Pack preflight rejects an unqualified identifier before cooking a
+workflow. The marker identifies this source qualification; it does not qualify
+other revisions or arbitrary builds. See
+[native API fit](NATIVE-SESSION-API-FIT.md) for the observed boundary and evidence.
 
 Install Dolt 2.4.2 from its [release](https://github.com/dolthub/dolt/releases/tag/v2.4.2)
 and make `dolt` available on PATH. Check `gc version`, `bd version`,

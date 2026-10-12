@@ -18,6 +18,8 @@ it.effect("native read classification excludes mutation operands and process lau
       ["gc", "beads", "list"],
       ["gc", "session", "list"],
       ["gc", "config", "show"],
+      ["gc", "config", "explain", "--provider", "fixture", "--json"],
+      ["gc", "--city", "/city", "--rig", "fixture", "version", "--json"],
       ["gc", "agent", "list"],
       ["gc", "provider", "explain", "fixture"]
     ])
@@ -31,6 +33,12 @@ it.effect("native read classification excludes mutation operands and process lau
       ["git", "remote", "add", "get-url", "/other"],
       ["git", "push"],
       ["node", "ready"],
+      ["gc"],
+      ["gc", "--city", "/city"],
+      ["gc", "beads"],
+      ["gc", "config"],
+      ["gc", "config", "set", "explain"],
+      ["gc", "beads", "health"],
       ["gc", "session", "close", "list"],
       ["gc", "beads", "metadata-cas", "show"],
       ["gc", "hook", "--claim"],

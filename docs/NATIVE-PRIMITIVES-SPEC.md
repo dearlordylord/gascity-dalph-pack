@@ -62,6 +62,10 @@ task correlation. Repeat with Codex and different configured model/reasoning
 settings. No nested hardcoded agent CLI, model, reasoning or permissions override
 may substitute for Gas City configuration. A crash after preparation uses S5;
 invalid capabilities fail before an agent or task worktree starts.
+The public formula boundary leaves the workflow root unrouted. Only authored
+execution steps reach their configured roles; a workflow root must not repeatedly
+wake a preparer without product task identity. S1's composed native test checks
+the root route separately from the actual implementation session.
 
 **S2 — Gas City delivers a bounded fork/join graph.** Four open tasks form
 A → {B, C} → D. The task-work limit is two and integration limit is one per
@@ -96,6 +100,12 @@ rounds. Process loss after a verdict or fix preserves consumed budgets and the
 candidate that was actually reviewed. An explicit human continuation may grant
 a new finite batch without a lifetime cap on human retry; duplicate submission
 of that same continuation must not grant another batch.
+On exhausted native review failure, the native delivery scope aborts remaining
+open qualification and delivery members. The Operator sees a failed batch with
+retained findings/worktree, rather than repeated qualifier launches that merely
+refuse approval. Each new human batch gets its own native delivery scope while
+reusing the same product attempt. Native scope/check observations, including a
+crash before scope evaluation, govern reconciliation; the pack adds no scheduler.
 
 **S5 — A restarted workflow retains its attempt and live agent.** Gas City has
 claimed a task and acknowledged its Base, worktree and native session. The
@@ -105,6 +115,10 @@ worktree and pending controls. A live session remains owned; a safely recoverabl
 session resumes using its native provider contract. Completed model work is not
 repeated solely because a wrapper lost its response. Unknown writer liveness
 blocks a competing writer, resource deletion and release of its occupied position.
+An exact-correlated open session therefore remains occupied while public native
+resume restores it; `awake` metadata is not a prerequisite for that call. Fresh
+exact closed status supersedes a stale inventory summary. Retained recovery may
+repeat close for that already closed session without completing its task.
 The Operator can locate the session and the exact pending boundary. A missing
 previously prepared worktree is a retained failure, not permission to recreate it.
 
@@ -254,10 +268,12 @@ launches a second root workflow.
 - Remove direct backend tracker reads. Use native scoped tracker boundaries
   and claims, preserving typed unavailable/conflicting outcomes and completion
   read-back. Native protocol idle/drain results are successful quiescence.
-- Replace custom session/process plumbing only where native evidence proves
-  the required writer custody. Runtime death alone cannot prove escaped
-  descendants stopped. Unsupported runtime safety must fail preflight or retain
-  an explicit narrow adapter, not silently weaken cleanup authority.
+- Delegate native session teardown and orphan reconciliation to Gas City.
+  Product decision of 2026-10-11 accepts successful stock session close with
+  fresh exact session/task/workspace correlation, without a separate complete
+  escaped-process-absence acknowledgement. Unknown close outcomes require
+  reconciliation; known foreign writers and unfinished work remain refusals.
+  Pack-owned command recovery retains its distinct boundary checks.
 - Classify every trial maintenance override as removed, necessary with a
   documented boundary, or replaced by native configuration. Restore safe native
   defaults; do not blindly enable destructive maintenance over legacy resources.

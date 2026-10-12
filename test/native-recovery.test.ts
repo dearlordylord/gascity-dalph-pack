@@ -23,7 +23,8 @@ it.effect("closed native delivery reconciles settlement only from exact durable 
       yield* f.workflow.check(yield* f.row("work"))
       yield* f.workflow.integrate(yield* f.row("delivery"))
       delete f.raw("work").metadata["dalph.native_settled"]
-      const resume = () => makeNativeController(f.config, f.contract, f.commands, f.tracker).resume(BeadId.make("root"))
+      const resume = () =>
+        makeNativeController(f.config, f.contract, f.commands, f.tracker, process.execPath).resume(BeadId.make("root"))
       const metadata = f.raw("delivery").metadata
       for (const key of ["candidate", "published", "promoted", "work_cleaned", "candidate_plan", "candidate_cleaned"]) {
         const field = `dalph.${key}`

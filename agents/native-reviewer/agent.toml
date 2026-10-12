@@ -1,0 +1,6 @@
+scope = "rig"
+prompt_template = "native-reviewer.md"
+sleep_after_idle = "10s"
+min_active_sessions = 0
+max_active_sessions = 2
+work_query = 'gc ready --metadata-field "gc.routed_to=$GC_TEMPLATE" --unassigned --exclude-type=epic --sort oldest --limit 20 --json'

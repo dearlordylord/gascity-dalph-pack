@@ -7,11 +7,22 @@ import { capture } from "./capture.ts"
 import { persistReceipt } from "./files.ts"
 import { markedProcesses, parseProcessStat } from "./process-observation.ts"
 import { operationalRead } from "../native/operational-read.ts"
+import { nativeTrackerCas } from "../native/tracker-cas.ts"
+import { nativeSessionClose } from "../native/session-close-command.ts"
+import { nativeActorRetirement } from "../native/actor-retirement.ts"
+import { nativeRuntimeHeartbeat } from "../native/runtime-heartbeat.ts"
 
 const MILLISECONDS_PER_SECOND = 1000
 const DEFAULT_COMMAND_SECONDS = 30
 const LINUX_CLOCK_TICKS = 100
 const WRITER_RECHECKS = 100
+const delegatedBoundary = (native: boolean, args: ReadonlyArray<string>) =>
+  native &&
+  (operationalRead(args) ||
+    nativeTrackerCas(args) ||
+    nativeSessionClose(args) ||
+    nativeRuntimeHeartbeat(args) ||
+    nativeActorRetirement(args))
 export class CommandRejected extends Schema.TaggedError<CommandRejected>()("CommandRejected", {
   message: Schema.String,
   receipt: Schema.String,
@@ -57,13 +68,27 @@ const commandService = (native: boolean) =>
       const uptime = yield* fs.readFileString("/proc/uptime")
       return yield* Schema.decodeUnknownEffect(BirthTicks)(Math.floor(Number(uptime.split(" ")[0]) * ticks))
     })
+    const nativeResult = Effect.fn("Execution.nativeResult")(function* (
+      output: Effect.Success<ReturnType<typeof capture>>,
+      path: string,
+      stdout: string,
+      stderr: string,
+      retainLogs: boolean
+    ) {
+      if (output._tag === "Failure") return yield* rejected(path, output.failure)
+      const text = (yield* fs.readFileString(stdout)).trim()
+      if (!retainLogs) {
+        yield* fs.remove(stdout)
+        yield* fs.remove(stderr)
+      }
+      return text
+    })
     const finishCommand = Effect.fn("Execution.finishCommand")(function* (
       path: string,
       stdout: string,
       stderr: string,
       intent: typeof Receipt.Type.intent,
-      output: Effect.Success<ReturnType<typeof capture>>,
-      read: boolean
+      output: Effect.Success<ReturnType<typeof capture>>
     ) {
       const writers = yield* markedProcesses(`DALPH_BOUNDARY=${intent.nonce}`, intent.birth_ticks, owner).pipe(
         Effect.repeat({
@@ -79,15 +104,11 @@ const commandService = (native: boolean) =>
         ...observedExit(output),
         outcome: output._tag === "Success" ? "ExitedSuccessfully" : "Failed"
       }
-      if (!read || writers.length) yield* persistReceipt(path, { intent, observation })
+      yield* persistReceipt(path, { intent, observation })
       if (writers.length)
         return yield* new BoundaryFailure({ message: `boundary descendants still live; retain custody: ${path}` })
       if (output._tag === "Failure") return yield* rejected(path, output.failure)
       const text = (yield* fs.readFileString(stdout)).trim()
-      if (read) {
-        yield* fs.remove(stdout)
-        yield* fs.remove(stderr)
-      }
       return text
     })
     const execute = Effect.fn("Execution.command")(function* (
@@ -100,13 +121,19 @@ const commandService = (native: boolean) =>
       const executable = args[0]
       if (!executable) return yield* new BoundaryFailure({ message: "Command requires an executable" })
       const directory = join(root, "evidence", "boundaries")
-      const read = native && operationalRead(args)
+      const delegated = delegatedBoundary(native, args)
       yield* fs.makeDirectory(directory, { recursive: true })
       const nonce = yield* Effect.sync(randomUUID)
       const path = join(directory, `${nonce}.json`)
       const { stderr, stdout } = logs ?? {
         stdout: join(directory, `${nonce}.stdout`),
         stderr: join(directory, `${nonce}.stderr`)
+      }
+      // Native observations and conditional tracker writes have no project-writer custody.
+      // Tracker mutations reconcile their exact outcome through the native tracker authority.
+      if (delegated) {
+        const output = yield* capture(executable, args, cwd, timeout, stdout, stderr, nonce, null)
+        return yield* nativeResult(output, path, stdout, stderr, logs !== undefined)
       }
       const start = yield* birth
       const ownerState = yield* fs.readFileString("/proc/self/stat").pipe(Effect.flatMap(parseProcessStat))
@@ -122,9 +149,9 @@ const commandService = (native: boolean) =>
         timeout_seconds: Duration.toMillis(timeout) / MILLISECONDS_PER_SECOND,
         started: (yield* Clock.currentTimeMillis) / MILLISECONDS_PER_SECOND
       }
-      if (!read) yield* persistReceipt(path, { intent })
+      yield* persistReceipt(path, { intent })
       const output = yield* capture(executable, args, cwd, timeout, stdout, stderr, nonce, attempt)
-      return yield* finishCommand(path, stdout, stderr, intent, output, read)
+      return yield* finishCommand(path, stdout, stderr, intent, output)
     })
     const ownerAlive = Effect.fn("Execution.ownerAlive")(function* (intent: typeof Receipt.Type.intent) {
       const ownerPath = `/proc/${intent.owner_pid}/stat`

@@ -8,7 +8,8 @@ import { makeGit } from "../src/delivery/git.ts"
 import { AbsolutePath } from "../src/domain/attempt.ts"
 import { NativeAttempt, NativeContract } from "../src/native/contract.ts"
 import { makeNativeWorkflow } from "../src/native/workflow.ts"
-import { BoundaryFailure } from "../src/domain/shared.ts"
+import { BeadId, BoundaryFailure } from "../src/domain/shared.ts"
+import { runtimeHeartbeat } from "../src/native/runtime-heartbeat.ts"
 
 // Fault ports belong exclusively to the isolated acceptance provider.
 const main = Effect.gen(function* () {
@@ -25,7 +26,11 @@ const main = Effect.gen(function* () {
       Effect.flatMap((released) =>
         released ? Effect.void : Effect.fail(new BoundaryFailure({ message: `${name} barrier pending` }))
       ),
-      Effect.retry({ schedule: Schedule.spaced("100 millis").pipe(Schedule.upTo({ duration: "90 seconds" })) })
+      Effect.retry({
+        schedule: Schedule.spaced("100 millis").pipe(
+          Schedule.upTo({ duration: name === "integration" ? "10 minutes" : "90 seconds" })
+        )
+      })
     )
   const commands: Commands = {
     ...actual,
@@ -57,6 +62,12 @@ const main = Effect.gen(function* () {
         return text
       })
   }
+  yield* runtimeHeartbeat(
+    config,
+    commands,
+    yield* Config.schema(BeadId, "GC_SESSION_ID"),
+    yield* Config.NonEmptyString("GC_TMUX_SESSION").pipe(Config.orElse(() => Config.NonEmptyString("GC_SESSION_NAME")))
+  )
   yield* wait("integration")
   const tracker = makeTracker(config, commands, yield* HttpClient.HttpClient)
   const git = makeGit(config, commands)

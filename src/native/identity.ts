@@ -11,6 +11,7 @@ import { canonical } from "../delivery/files.ts"
 import { NativeAttempt, NativeTaskIdentity, type NativeContract } from "./contract.ts"
 
 import { isImplementationMetadata } from "./nodes.ts"
+import { WorkspaceSlug } from "./shared-workspace.ts"
 
 type Tracker = ReturnType<typeof makeTracker>
 const TASK_POSITIONS = 2
@@ -51,7 +52,9 @@ export const nativeRows = (config: RuntimeConfig, commands: Commands) =>
     )
     .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Bead)))))
 export const nativeGroup = Effect.fn("Native.group")(function* (config: RuntimeConfig, commands: Commands, bead: Bead) {
-  const metadata = yield* Schema.decodeUnknownEffect(NativeTaskIdentity)(bead.metadata).pipe(
+  const input = { ...bead.metadata }
+  if (!input["dalph.product_root"]) delete input["dalph.product_root"]
+  const metadata = yield* Schema.decodeUnknownEffect(NativeTaskIdentity)(input).pipe(
     Effect.mapError(
       () =>
         new BoundaryFailure({
@@ -59,9 +62,14 @@ export const nativeGroup = Effect.fn("Native.group")(function* (config: RuntimeC
         })
     )
   )
-  const root = metadata["gc.root_bead_id"]
+  const workflowRoot = metadata["gc.root_bead_id"]
+  const root = metadata["dalph.product_root"] ?? workflowRoot
   const task = metadata["dalph.task"]
-  const rows = (yield* nativeRows(config, commands)).filter((row) => row.metadata?.["gc.root_bead_id"] === root)
+  const roots: ReadonlyArray<string> = [root, workflowRoot]
+  const rows = (yield* nativeRows(config, commands)).filter(
+    (row): row is Bead & { readonly metadata: NonNullable<Bead["metadata"]> } =>
+      !!row.metadata && roots.includes(row.metadata["gc.root_bead_id"] ?? "")
+  )
   if (rows.some((row) => row.metadata?.["dalph.task"] && row.metadata["dalph.task"] !== task))
     return yield* new BoundaryFailure({ message: "native workflow has contradictory product task identity" })
   const work = rows.filter(implementation)
@@ -90,12 +98,15 @@ export const bindNativeAttempt = Effect.fn("Native.bindAttempt")(function* (
       if (rows.filter(occupiedPosition).length >= TASK_POSITIONS)
         return yield* new BoundaryFailure({ message: "both task-work positions remain occupied by retained attempts" })
       const base = yield* admissionBase(git)
+      const workspace = yield* Schema.decodeUnknownEffect(WorkspaceSlug)(
+        work.metadata?.["gc.pack_workspace"] ?? `work-${work.id}`
+      )
       const plan = yield* Schema.decodeUnknownEffect(Plan)({
         bead: work.id,
         attempt: AttemptId.make(randomUUID().replaceAll("-", "")),
         base,
         branch: `dalph/work/${work.id}`,
-        path: join(config.worktrees, `work-${work.id}`)
+        path: join(config.worktrees, workspace)
       })
       const attempt = yield* Schema.decodeUnknownEffect(NativeAttempt)({
         version: "native-v1",

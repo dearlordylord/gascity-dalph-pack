@@ -34,6 +34,16 @@ source = "@@PACK_ROOT@@"
 name = "bd.dog"
 suspended = true
 
+[[patches.agent]]
+name = "native-worker"
+rig = "@@RIG@@"
+work_dir = "@@WORKTREE_ROOT@@"
+
+[[patches.agent]]
+name = "native-reviewer"
+rig = "@@RIG@@"
+work_dir = "@@WORKTREE_ROOT@@"
+
 [orders]
 skip = ["beads-health", "cascade-nudge-on-blocker-close", "cross-rig-deps", "dolt-health", "dolt-remotes-patrol", "gate-sweep", "jsonl-export", "mol-dog-backup", "mol-dog-compactor", "mol-dog-doctor", "mol-dog-phantom-db", "mol-dog-stale-db", "notify-on-human-gate-creation", "nudge-mail-sweep", "nudge-on-route", "order-tracking-sweep", "orphan-sweep", "prune-branches", "reaper", "renudge-stale-human-gates", "spawn-storm-detect", "wisp-compact"]
 

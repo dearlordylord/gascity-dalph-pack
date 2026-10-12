@@ -3,6 +3,8 @@ import { NodeRuntime } from "@effect/platform-node"
 import { runCommand } from "../src/quality/command.ts"
 
 const STAGE_TIMEOUT_MINUTES = 10
+// The serial native fixture suite has independently bounded review and recovery cases.
+const NATIVE_COVERAGE_TIMEOUT_MINUTES = 160
 const stages = [
   "verify:effect-cohort",
   "build",
@@ -22,7 +24,7 @@ const main = Effect.gen(function* () {
     const result = yield* runCommand({
       executable: "pnpm",
       args: [stage],
-      timeout: Duration.minutes(STAGE_TIMEOUT_MINUTES)
+      timeout: Duration.minutes(stage === "test:coverage" ? NATIVE_COVERAGE_TIMEOUT_MINUTES : STAGE_TIMEOUT_MINUTES)
     })
     yield* Console.log(result.stdout.trim())
   }

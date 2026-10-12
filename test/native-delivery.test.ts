@@ -1,4 +1,4 @@
-import { Effect, Schedule, Schema } from "effect"
+import { Effect, Schedule, Schema, type Duration } from "effect"
 import { expect, it } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import { makeNativeCity } from "./helpers/native-city.ts"
@@ -10,14 +10,18 @@ it.live(
   () =>
     Effect.gen(function* () {
       const city = yield* makeNativeCity(true)
-      const observe = <A, E, R>(read: Effect.Effect<A, E, R>, ready: (value: A) => boolean) =>
+      const observe = <A, E, R>(
+        read: Effect.Effect<A, E, R>,
+        ready: (value: A) => boolean,
+        window: Duration.Input = "180 seconds"
+      ) =>
         read.pipe(
           Effect.flatMap((value) =>
             ready(value)
               ? Effect.succeed(value)
               : Effect.fail(new BoundaryFailure({ message: "native delivery observation pending" }))
           ),
-          Effect.retry({ schedule: Schedule.spaced("1 second").pipe(Schedule.upTo({ duration: "180 seconds" })) })
+          Effect.retry({ schedule: Schedule.spaced("1 second").pipe(Schedule.upTo({ duration: window })) })
         )
       const launch = () =>
         city
@@ -28,10 +32,13 @@ it.live(
       const first = yield* launch()
       const second = yield* launch()
       const roots = [first.workflow_id, second.workflow_id]
-      const accepted = yield* observe(city.rows(), (rows) =>
-        roots.every((root) =>
-          rows.some((row) => row.metadata?.["gc.root_bead_id"] === root && row.metadata?.["dalph.result"])
-        )
+      const accepted = yield* observe(
+        city.rows(),
+        (rows) =>
+          roots.every((root) =>
+            rows.some((row) => row.metadata?.["gc.root_bead_id"] === root && row.metadata?.["dalph.result"])
+          ),
+        "10 minutes"
       )
       const work = accepted.filter(
         (row) =>
@@ -84,7 +91,8 @@ it.live(
       expect(yield* city.git("rev-parse", "HEAD")).toBe(
         yield* city.execute(["git", "--git-dir", `${city.root}/remote.git`, "rev-parse", "refs/heads/master"])
       )
-      expect(yield* city.fs.readDirectory(city.env.DALPH_WORKTREE_ROOT)).toEqual([])
+      expect(yield* city.worktreeEntries()).toEqual([])
+      expect((yield* city.git("worktree", "list", "--porcelain")).match(/^worktree /gm)).toHaveLength(1)
       expect(settled.filter((row) => row.metadata?.["dalph.native_settled"])).toHaveLength(2)
       const trace = (yield* city.fs.readFileString(`${city.root}/delivery-trace.jsonl`))
         .trim()
@@ -104,5 +112,5 @@ it.live(
           original.metadata?.["dalph.result"]
         )
     }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
-  600000
+  1500000
 )

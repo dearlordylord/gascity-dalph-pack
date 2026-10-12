@@ -6,11 +6,17 @@ formula_compiler = ">=2.0.0"
 
 [vars.instruction]
 required = true
+[vars.workspace]
+required = true
 [vars.agent]
 required = true
 [vars.pack]
 required = true
 [vars.check]
+required = true
+[vars.review_check]
+required = true
+[vars.reviewer]
 required = true
 
 [[steps]]
@@ -23,16 +29,28 @@ id = "work"
 title = "Implement assigned task through configured native harness"
 description = "{{instruction}}"
 needs = ["prepare"]
-metadata = { "gc.run_target" = "{{agent}}", "dalph.task" = "task", "dalph.phase" = "work", "dalph.runtime" = "native-v1" }
-[steps.check]
-max_attempts = 1
-[steps.check.check]
-mode = "exec"
-path = "{{check}}"
-timeout = "12m"
+metadata = { "gc.run_target" = "{{agent}}", "dalph.task" = "task", "dalph.phase" = "work", "gc.pack_workspace" = "{{workspace}}", "dalph.runtime" = "native-v1", "dalph.review_required" = "true" }
+
+[[steps]]
+id = "review"
+expand = "native-independent-review"
+needs = ["work"]
+expand_vars = { agent = "{{agent}}", reviewer = "{{reviewer}}", review_check = "{{review_check}}", delivery_scope = "delivery-scope", workspace = "{{workspace}}" }
+
+[[steps]]
+id = "qualify"
+title = "Qualify the exact independently approved candidate"
+needs = ["review"]
+metadata = { "gc.scope_ref" = "delivery-scope", "gc.scope_role" = "member", "gc.on_fail" = "abort_scope", "gc.run_target" = "dalph.native-qualifier", "dalph.task" = "task", "dalph.phase" = "qualify", "dalph.runtime" = "native-v1" }
 
 [[steps]]
 id = "deliver"
 title = "Qualify, publish, promote and safely settle owned resources"
-needs = ["work"]
-metadata = { "gc.run_target" = "dalph.native-integrator", "dalph.task" = "task", "dalph.phase" = "deliver", "dalph.runtime" = "native-v1" }
+needs = ["qualify"]
+metadata = { "gc.scope_ref" = "delivery-scope", "gc.scope_role" = "member", "gc.on_fail" = "abort_scope", "gc.run_target" = "dalph.native-integrator", "dalph.task" = "task", "dalph.phase" = "deliver", "dalph.runtime" = "native-v1" }
+
+[[steps]]
+id = "delivery-scope"
+title = "Stop downstream delivery when the native review batch fails"
+needs = ["deliver"]
+metadata = { "gc.kind" = "scope", "gc.scope_name" = "delivery", "gc.scope_role" = "body" }

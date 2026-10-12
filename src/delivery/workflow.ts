@@ -62,10 +62,15 @@ export const makeWorkflow = (
     yield* stages.model(current.id, plan, prompt)
     yield* accept(current, plan)
   })
-  const matchesNativeIdentity = (delivery: Bead["metadata"], metadata: Bead["metadata"]) =>
-    isImplementationMetadata(metadata ?? {}) &&
-    metadata?.["dalph.task"] === delivery?.["dalph.task"] &&
-    metadata?.["gc.root_bead_id"] === delivery?.["gc.root_bead_id"]
+  const matchesNativeIdentity = (delivery: Bead["metadata"], metadata: Bead["metadata"]) => {
+    if (!delivery || !metadata) return false
+    const product = delivery["dalph.product_root"] || delivery["gc.root_bead_id"]
+    return (
+      isImplementationMetadata(metadata) &&
+      metadata["dalph.task"] === delivery["dalph.task"] &&
+      metadata["gc.root_bead_id"] === product
+    )
+  }
   const implementationFor = Effect.fn("Delivery.implementationFor")(function* (current: Bead) {
     const rows = yield* commands
       .execute(config.root, [...tracker.gc, "ready", "--status", "closed", "--limit", "0", "--json"])

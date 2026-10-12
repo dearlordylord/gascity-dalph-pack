@@ -1,4 +1,4 @@
-import { Effect, Ref, Schedule, Schema } from "effect"
+import { Effect, FileSystem, Ref, Schema } from "effect"
 import { BoundaryFailure, CommitSha, type BeadId } from "../domain/shared.ts"
 import { canonical } from "../delivery/files.ts"
 import { type Candidate, Plan, Prepared, Result } from "../domain/attempt.ts"
@@ -14,6 +14,13 @@ import { nativeClaim } from "./claim.ts"
 import { nativePreflight } from "./preflight.ts"
 import { bindNativeAttempt, nativeGroup, publishNativeWorkspace } from "./identity.ts"
 import { correlatedSession, stoppedNativeSession } from "./session.ts"
+import { NativeReviewVerdict } from "./review-contract.ts"
+import { reviewBatch } from "./review-correlation.ts"
+import { reviewWritersStopped } from "./review-writers.ts"
+import { publishSharedWorkspace } from "./shared-workspace.ts"
+import { isExecutionMetadata } from "./nodes.ts"
+import { reviewFactKey } from "./review-fact-key.ts"
+import { cleanupMayResume } from "./cleanup-resumption.ts"
 
 type Tracker = ReturnType<typeof makeTracker>
 export const makeNativeWorkflow = (
@@ -29,7 +36,13 @@ export const makeNativeWorkflow = (
   const delivery = makeWorkflow(
     configured,
     commands,
-    tracker,
+    {
+      ...tracker,
+      close: Effect.fn("Native.deliveryCompleted")(function* (id, reason) {
+        yield* tracker.metadata(id, "gc.outcome", "pass")
+        return yield* tracker.close(id, reason)
+      })
+    },
     git,
     stages,
     worktrees,
@@ -67,7 +80,14 @@ export const makeNativeWorkflow = (
     const group = yield* nativeGroup(config, commands, current)
     const attempt = yield* bindNativeAttempt(config, contract, commands, tracker, git, group.work)
     yield* Ref.set(commands.current, attempt.plan.attempt)
-    for (const node of group.rows) yield* tracker.record(node.id, "native_attempt", attempt)
+    yield* Effect.forEach(group.rows, (node) => tracker.record(node.id, "native_attempt", attempt), { concurrency: 2 })
+    yield* Effect.forEach(
+      group.rows.filter(
+        (row) => ["review", "fix"].includes(row.metadata["dalph.phase"] ?? "") && isExecutionMetadata(row.metadata)
+      ),
+      (node) => publishSharedWorkspace(config, tracker, node, attempt),
+      { concurrency: 2 }
+    )
     yield* tracker.record(group.root, "native_launch", { version: "native-v1", contract })
     // A retained prepared attempt keeps its already qualified original Base.
     if (!(yield* tracker.fact(group.work.id, "work_prepared", Prepared)))
@@ -95,19 +115,56 @@ export const makeNativeWorkflow = (
         attempt: attempt.plan.attempt,
         base: attempt.plan.base,
         task: attempt.task,
-        path: attempt.plan.path,
-        birth: yield* commands.birth
+        path: attempt.plan.path
       }))
     if (proposal.session !== session || proposal.commit !== commit)
       return yield* new BoundaryFailure({
         message: "retained native proposal differs from the current writer or commit"
       })
     yield* correlatedSession(config, commands, proposal, attempt)
-    yield* tracker.record(current.id, "native_proposal", proposal)
+    if (!retained) yield* tracker.record(current.id, "native_proposal", proposal)
     yield* tracker.close(
       current.id,
       "Native implementation proposed a committed result; acceptance and delivery remain pending"
     )
+  })
+  const reviewedCandidate = Effect.fn("Native.reviewedCandidate")(function* (
+    group: { work: Bead; rows: ReadonlyArray<Bead> },
+    attempt: typeof NativeAttempt.Type,
+    proposal: typeof NativeProposal.Type,
+    batch: string
+  ) {
+    if (group.work.metadata?.["dalph.review_required"] !== "true") return proposal.commit
+    const rounds = group.rows
+      .filter(
+        (row) =>
+          row.metadata?.["dalph.phase"] === "review" && isExecutionMetadata(row.metadata) && reviewBatch(row) === batch
+      )
+      .map((row) => Number(row.metadata?.["gc.iteration"]))
+      .filter(Number.isInteger)
+    const round = Math.max(0, ...rounds)
+    const approved = yield* tracker.fact(
+      group.work.id,
+      reviewFactKey("native_approved", batch, round),
+      NativeReviewVerdict
+    )
+    if (
+      !approved ||
+      approved.attempt !== attempt.plan.attempt ||
+      approved.task !== attempt.task ||
+      approved.base !== attempt.plan.base ||
+      approved.findings.some((finding) => finding.disposition === "blocking")
+    )
+      return yield* new BoundaryFailure({ message: "no correlated clean independent review; qualification refused" })
+    yield* reviewWritersStopped(
+      config,
+      commands,
+      group.rows,
+      attempt.plan.path,
+      [proposal.session, approved.session],
+      tracker
+    )
+    return approved.commit
   })
   const check = Effect.fn("Native.check")(function* (current: Bead) {
     const group = yield* nativeGroup(config, commands, current)
@@ -115,19 +172,15 @@ export const makeNativeWorkflow = (
     const proposal = yield* tracker.fact(group.work.id, "native_proposal", NativeProposal)
     if (!proposal)
       return yield* new BoundaryFailure({ message: "missing native implementation proposal; no acceptance" })
-    yield* stoppedNativeSession(config, commands, proposal, attempt).pipe(
-      Effect.retry({
-        schedule: Schedule.spaced("250 millis").pipe(Schedule.upTo({ times: 40 })),
-        while: (error) => error._tag === "NativeSessionPending"
-      })
-    )
+    yield* stoppedNativeSession(config, commands, proposal, attempt, tracker)
     yield* Ref.set(commands.current, attempt.plan.attempt)
     yield* worktrees.prepare(group.work.id, "work", attempt.plan.base)
-    yield* stages.qualifiedTree(attempt.plan, proposal.commit)
+    const candidate = yield* reviewedCandidate(group, attempt, proposal, reviewBatch(current))
+    yield* stages.qualifiedTree(attempt.plan, candidate)
     yield* delivery.accept(group.work, attempt.plan, false)
     for (const node of group.rows)
       yield* tracker.record(node.id, "native_candidate", {
-        commit: proposal.commit,
+        commit: candidate,
         attempt: proposal.attempt,
         base: proposal.base,
         task: proposal.task
@@ -138,10 +191,20 @@ export const makeNativeWorkflow = (
     const attempt = yield* attemptFor(group.work)
     const proposal = yield* tracker.fact(group.work.id, "native_proposal", NativeProposal)
     if (!proposal) return yield* new BoundaryFailure({ message: "native delivery has no correlated result" })
+    yield* stoppedNativeSession(config, commands, proposal, attempt, tracker)
+    const candidate = yield* reviewedCandidate(group, attempt, proposal, reviewBatch(current))
     const result = yield* tracker.fact(group.work.id, "result", Result)
-    if (!result || result.commit !== proposal.commit || result.attempt !== attempt.plan.attempt)
+    if (!result || result.commit !== candidate || result.attempt !== attempt.plan.attempt)
       return yield* new BoundaryFailure({ message: "changed native implementation requires fresh acceptance evidence" })
-    yield* stoppedNativeSession(config, commands, proposal, attempt)
+    const fs = yield* FileSystem.FileSystem
+    if (yield* fs.exists(attempt.plan.path)) yield* stages.qualifiedTree(attempt.plan, candidate)
+    else {
+      const prepared = yield* tracker.fact(group.work.id, "work_prepared", Prepared)
+      if (!prepared || !(yield* cleanupMayResume(tracker, current, attempt, prepared)))
+        return yield* new BoundaryFailure({
+          message: "native source worktree is lost without exact applied cleanup proof"
+        })
+    }
     yield* delivery.integrator(current)
     yield* tracker.record(group.work.id, "native_settled", { attempt: attempt.plan.attempt })
   })

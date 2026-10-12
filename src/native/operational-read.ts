@@ -15,14 +15,14 @@ function nativeRead(args: ReadonlyArray<string>): boolean {
   const nativeOperations = new Map([
     ["beads", ["show", "list"]],
     ["session", ["list"]],
-    ["config", ["show"]],
+    ["config", ["show", "explain"]],
     ["agent", ["list"]],
     ["provider", ["explain"]]
   ])
   let index = args.indexOf("gc") + 1
   while (args[index] === "--city" || args[index] === "--rig") index += OPTION_PAIR
   const command = args[index] ?? ""
-  if (command === "ready") return true
+  if (command === "ready" || command === "version") return true
   return (nativeOperations.get(command) ?? []).includes(args[index + 1] ?? "")
 }
 /** These observations cannot mutate the owned Git refs or native workflow facts. */

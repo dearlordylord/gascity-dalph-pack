@@ -1,17 +1,16 @@
-import { ByteSize, Effect, FileSystem, Layer, Option, Schema } from "effect"
+import { Effect, Fiber, Schema } from "effect"
+import { TestClock } from "effect/testing"
 import { expect, it } from "@effect/vitest"
 import { nativeFixture } from "./helpers/native-fixture.ts"
-import { NativeAttempt, NativeProposal } from "../src/native/contract.ts"
+import { NativeAttempt } from "../src/native/contract.ts"
 import { BeadId } from "../src/domain/shared.ts"
 import { CommandRejected } from "../src/delivery/command.ts"
 import { makeTracker } from "../src/delivery/tracker.ts"
 import { makeWorkflow } from "../src/delivery/workflow.ts"
 import { makeStages } from "../src/delivery/stages.ts"
 import { makeWorktrees } from "../src/delivery/worktrees.ts"
-import { makeNativeController } from "../src/native/controller.ts"
 import { makeNativeWorkflow } from "../src/native/workflow.ts"
 import { isImplementationMetadata } from "../src/native/nodes.ts"
-import { stoppedNativeSession } from "../src/native/session.ts"
 import { nativePreflight } from "../src/native/preflight.ts"
 import { RESULT } from "./helpers/workflow-fixture.ts"
 
@@ -68,6 +67,27 @@ it.effect("native metadata writes require acknowledgement and reject contradicti
   })
 )
 
+it.effect("an applied native conditional write cannot be acknowledged by another bead", () =>
+  Effect.gen(function* () {
+    const f = yield* nativeFixture
+    const execute = f.commands.execute
+    f.commands.execute = (root, args, cwd, timeout, logs) =>
+      execute(root, args, cwd, timeout, logs).pipe(
+        Effect.tap(() => {
+          if (args.includes("metadata-cas")) f.nativeState.wrongRead = true
+          return Effect.void
+        })
+      )
+    yield* Effect.gen(function* () {
+      const failure = yield* Effect.flip(f.tracker.metadata(BeadId.make("work"), "exact_ack", "value"))
+      expect(String(failure)).toContain("acknowledgement returned another bead")
+      expect(f.raw("work").metadata.exact_ack).toBe("value")
+      expect(f.raw("work").status).toBe("open")
+      expect(f.state.pushCalls).toBe(0)
+    }).pipe(Effect.provide(f.layer))
+  })
+)
+
 it.effect("native preparation never substitutes another immutable plan", () =>
   Effect.gen(function* () {
     const f = yield* nativeFixture
@@ -92,58 +112,19 @@ it.effect("native preparation never substitutes another immutable plan", () =>
   })
 )
 
-it.effect("native descendants keep a stopped session occupied", () =>
+it.effect("native terminal close response failure retains workflow custody", () =>
   Effect.gen(function* () {
     const f = yield* nativeFixture
     yield* Effect.gen(function* () {
       yield* f.workflow.prepare(yield* f.row("prepare"))
       f.state.workHead = RESULT
       yield* f.workflow.finish(yield* f.row("work"), BeadId.make("session"))
-      const attempt = yield* f.tracker.fact(BeadId.make("work"), "native_attempt", NativeAttempt)
-      const proposal = yield* f.tracker.fact(BeadId.make("work"), "native_proposal", NativeProposal)
-      if (!attempt || !proposal) throw new Error("missing attempt")
-      const fs = {
-        ...f.fs,
-        readDirectory: () => Effect.succeed(["42"]),
-        stat: () =>
-          Effect.succeed({
-            type: "Directory" as const,
-            mtime: Option.none(),
-            atime: Option.none(),
-            birthtime: Option.none(),
-            dev: 0,
-            ino: Option.none(),
-            mode: 0,
-            nlink: Option.none(),
-            uid: Option.some(f.commands.owner),
-            gid: Option.none(),
-            rdev: Option.none(),
-            size: ByteSize.bytes(0),
-            blksize: Option.none(),
-            blocks: Option.none()
-          }),
-        readFileString: (path: string) =>
-          Effect.succeed(
-            path.endsWith("stat")
-              ? `42 (writer) ${["R", ...Array(18).fill("0"), "100"].join(" ")}`
-              : "GC_SESSION_ID=session\0"
-          )
-      }
-      yield* f.tracker.record(BeadId.make("root"), "native_launch", { version: "native-v1", contract: f.contract })
-      const resumed = yield* Effect.flip(
-        makeNativeController(f.config, f.contract, f.commands, f.tracker)
-          .resume(BeadId.make("root"))
-          .pipe(Effect.provide(Layer.succeed(FileSystem.FileSystem, fs)))
-      )
-      expect(String(resumed)).toContain("descendants remain")
-      expect(f.events).not.toContain("native-resume")
-      expect(
-        (yield* Effect.flip(
-          stoppedNativeSession(f.config, f.commands, proposal, attempt).pipe(
-            Effect.provide(Layer.succeed(FileSystem.FileSystem, fs))
-          )
-        ))._tag
-      ).toBe("NativeSessionPending")
+      f.nativeState.closeResponseLost = true
+      const failure = yield* Effect.flip(f.workflow.check(yield* f.row("work")))
+      expect(String(failure)).toContain("native close response lost")
+      expect(f.raw("work").metadata["dalph.result"]).toBeUndefined()
+      expect(f.raw("session").status).toBe("closed")
+      expect(f.paths.size).toBe(1)
     }).pipe(Effect.provide(f.layer))
   })
 )
@@ -166,7 +147,11 @@ it.effect("native admission reads inherited provider and ignores metadata-less u
     const execute = f.commands.execute
     f.commands.execute = (root, args, cwd, timeout, logs) => {
       if (args.includes("agent") && args.includes("list"))
-        return Effect.succeed(JSON.stringify({ agents: [{ qualified_name: f.contract.agent }] }))
+        return Effect.succeed(
+          JSON.stringify({
+            agents: [{ qualified_name: f.contract.agent }, { qualified_name: "fixture/dalph.native-reviewer" }]
+          })
+        )
       if (args.includes("beads") && args.includes("list"))
         return Effect.succeed(JSON.stringify([...f.rows.values(), { id: "unrelated", status: "open" }]))
       return execute(root, args, cwd, timeout, logs)
@@ -182,7 +167,14 @@ it.effect("selected alternate native harness uses its own qualified version", ()
     f.settings.config.Workspace.Provider = "claude"
     f.commands.execute = (root, args, cwd, timeout, logs) => {
       if (args.includes("agent") && args.includes("list"))
-        return Effect.succeed(JSON.stringify({ agents: [{ qualified_name: f.contract.agent, provider: "claude" }] }))
+        return Effect.succeed(
+          JSON.stringify({
+            agents: [
+              { qualified_name: f.contract.agent, provider: "claude" },
+              { qualified_name: "fixture/dalph.native-reviewer" }
+            ]
+          })
+        )
       if (args[0] === "claude") return Effect.succeed("2.1.289")
       return execute(root, args, cwd, timeout, logs)
     }
@@ -230,22 +222,34 @@ it.effect("retained candidate boundaries cannot switch their configured project 
   })
 )
 
-it.effect("native terminal dead-runtime state is accepted only with closed status and no descendants", () =>
+it.effect("native dead-runtime observation requires terminal status before workflow qualification", () =>
   Effect.gen(function* () {
-    const f = yield* nativeFixture
-    yield* Effect.gen(function* () {
-      yield* f.workflow.prepare(yield* f.row("prepare"))
-      f.state.workHead = RESULT
-      yield* f.workflow.finish(yield* f.row("work"), BeadId.make("session"))
-      f.raw("session").metadata.state = "dead-runtime"
-      yield* f.workflow.check(yield* f.row("work"))
-      expect(f.raw("work").metadata["dalph.result"]).toBeDefined()
-      delete f.raw("session").metadata.state
-      yield* Effect.flip(f.workflow.integrate(yield* f.row("delivery")))
-      f.raw("session").status = "open"
-      yield* Effect.flip(f.workflow.integrate(yield* f.row("delivery")))
-      expect(f.raw("work").metadata["dalph.native_settled"]).toBeUndefined()
-    }).pipe(Effect.provide(f.layer))
+    for (const status of ["closed", "open"] as const) {
+      const f = yield* nativeFixture
+      yield* Effect.gen(function* () {
+        yield* f.workflow.prepare(yield* f.row("prepare"))
+        f.state.workHead = RESULT
+        f.branches.set("dalph/work/work", RESULT)
+        yield* f.workflow.finish(yield* f.row("work"), BeadId.make("session"))
+        f.nativeState.retireCompleted = false
+        f.raw("session").status = status
+        f.raw("session").metadata.state = "dead-runtime"
+        if (status === "closed") {
+          yield* f.workflow.check(yield* f.row("work"))
+          expect(f.raw("work").metadata["dalph.result"]).toBeDefined()
+          delete f.raw("session").metadata.state
+          yield* f.workflow.integrate(yield* f.row("delivery"))
+          expect(f.raw("work").metadata["dalph.native_settled"]).toBeDefined()
+        } else {
+          const observation = yield* f.workflow.check(yield* f.row("work")).pipe(Effect.flip, Effect.forkChild)
+          yield* TestClock.adjust("45 seconds")
+          expect((yield* Fiber.join(observation))._tag).toBe("NativeSessionPending")
+          expect(f.raw("work").metadata["dalph.result"]).toBeUndefined()
+          expect(f.events).not.toContain("native-close:session")
+          expect(f.paths.size).toBe(1)
+        }
+      }).pipe(Effect.provide(f.layer))
+    }
   })
 )
 

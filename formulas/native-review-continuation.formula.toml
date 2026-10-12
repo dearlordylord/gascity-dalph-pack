@@ -1,0 +1,43 @@
+formula = "native-review-continuation"
+description = "Explicit finite human-authorized review batch for a retained product attempt"
+[requires]
+formula_compiler = ">=2.0.0"
+[vars.workspace]
+required = true
+[vars.agent]
+required = true
+[vars.reviewer]
+required = true
+[vars.review_check]
+required = true
+[vars.batch]
+required = true
+[vars.product_root]
+required = true
+[vars.previous_batch]
+required = true
+[[steps]]
+id = "prepare"
+title = "Bind the retained implementation attempt for human continuation"
+metadata = { "gc.run_target" = "dalph.native-prepare", "dalph.task" = "task", "dalph.phase" = "prepare", "dalph.runtime" = "native-v1", "dalph.product_root" = "{{product_root}}", "dalph.review_batch" = "{{batch}}" }
+[[steps]]
+id = "review"
+needs = ["prepare"]
+expand = "native-independent-review"
+expand_vars = { agent = "{{agent}}", reviewer = "{{reviewer}}", review_check = "{{review_check}}", batch = "{{batch}}", product_root = "{{product_root}}", previous_batch = "{{previous_batch}}", delivery_scope = "delivery-scope", workspace = "{{workspace}}" }
+[[steps]]
+id = "qualify"
+title = "Qualify the exact candidate approved by the continued review batch"
+needs = ["review"]
+metadata = { "gc.scope_ref" = "delivery-scope", "gc.scope_role" = "member", "gc.on_fail" = "abort_scope", "gc.run_target" = "dalph.native-qualifier", "dalph.task" = "task", "dalph.phase" = "qualify", "dalph.runtime" = "native-v1", "dalph.product_root" = "{{product_root}}", "dalph.review_batch" = "{{batch}}" }
+[[steps]]
+id = "deliver"
+title = "Publish, promote and settle the retained implementation attempt"
+needs = ["qualify"]
+metadata = { "gc.scope_ref" = "delivery-scope", "gc.scope_role" = "member", "gc.on_fail" = "abort_scope", "gc.run_target" = "dalph.native-integrator", "dalph.task" = "task", "dalph.phase" = "deliver", "dalph.runtime" = "native-v1", "dalph.product_root" = "{{product_root}}", "dalph.review_batch" = "{{batch}}" }
+
+[[steps]]
+id = "delivery-scope"
+title = "Stop downstream delivery when the continued review batch fails"
+needs = ["deliver"]
+metadata = { "gc.kind" = "scope", "gc.scope_name" = "delivery", "gc.scope_role" = "body" }

@@ -124,6 +124,16 @@ layout through the real page.
 
 ## Process observation race repair
 
+When native cleanup has removed the original implementation worktree but its
+response is lost, the next integrator invocation reconciles cleanup without
+reading or recreating that tree. This requires the original exact plan and
+prepared attempt in the cleanup intent, plus publication and promotion matching
+the retained candidate. The accepted result and approved source commit remain
+correlated; the delivery interpreter still verifies publication, promotion and
+both exact cleanup outcomes before closing delivery. Missing or contradictory
+proof refuses recovery. `test/native-cleanup-resume.test.ts` exercises the next
+integrator invocation with Git rejecting reads of the removed source tree.
+
 A same-user process can exit after the census and before reading its stat file.
 Linux may surface that race as an unknown filesystem error. The existing bounded
 recheck now covers every filesystem failure except definite absence. Only a fresh
@@ -147,3 +157,311 @@ The scenario-to-test map and current qualification status are maintained in
 [docs/S7-S8-DELIVERY-HANDOFF.md](docs/S7-S8-DELIVERY-HANDOFF.md). Failed native
 launch/resume runs are retained as failure evidence, not accepted scenario proof.
 The parent scenarios and combined trial remain separately accountable.
+
+## Native external session teardown
+
+The external check or review gate owns session teardown after the corresponding
+writer node has retained its result and closed. Workers and reviewers remain
+available without further workspace writes after submission and must not close
+their own sessions. Before calling Gas City's
+public `session close`, the gate records an exact session/node/worktree/template
+stop intent on the native workflow node. A successful stock native close and a
+fresh correlated closed-session observation permit acceptance. No separate
+complete-process-absence acknowledgement is required. Gas City owns runtime
+teardown and eventual orphan reconciliation. Stop failures retain custody.
+Stock close may leave lifecycle metadata such as `state: awake` on a closed
+bead, or retain `failed-create` after a creation failure. A closed writer task
+with exact session/node/workspace/template correlation permits requesting the
+idempotent public close even when lifecycle metadata is missing or unknown.
+Only its successful exact response and fresh correlated closed observation
+authorize release; lifecycle uncertainty alone never substitutes for that proof.
+`test/native-session-stop.test.ts` covers these starting observations and refusals
+for failed close or contradictory fresh correlation.
+
+Stock close may leave lifecycle metadata such as `state: awake` on a closed
+bead. With a valid exact close response and fresh `status: closed`, this stale
+metadata does not prevent acceptance; task, workspace and template correlation
+must still match. The stock replay case is covered by
+`test/native-session-stop.test.ts`.
+A lost response is reconciled by repeating the native idempotent close for the
+same exact session. Intent plus a closed session row is insufficient; an
+already-closed historical session requires a fresh idempotent native close.
+The adapter records no separate derived stop acknowledgement. This replaces
+pack-owned Linux process enumeration for native workers, not the native provider's
+internal process management. Changed session correlation and unfinished writers
+are refused before teardown. Controlled acceptance cases are recorded in
+`test/native-session-stop.test.ts`; real native process-child acceptance remains
+required before closing the delivery slice.
+
+S3/S8 foreign writer custody: after the implementer has retained its result and
+the reviewer has submitted its exact verdict, the review gate reads the native
+session inventory. A session outside this task's writer nodes that names the
+same exact attempt workspace makes custody uncertain, even if its row is closed.
+The gate refuses approval and does not stop the unrelated session. A missing
+required writer also refuses approval. Fresh recovery may proceed after the
+foreign owner clears that workspace correlation; retained native stop intents
+are reconciled through repeated native close. An interrupted observation cannot
+approve from a partial inventory. Controlled acceptance is in
+`test/native-review-safety.test.ts`; this does not waive live delivery acceptance.
+
+Product decision accepted on 2026-10-11: use stock Gas City close without an
+additional complete-teardown acknowledgement. If close succeeds after an
+intervening close, its idempotent success and exact fresh session correlation
+permit recovery. A lost or invalid response does not permit acceptance; repeat
+native close for the same session before proceeding. Foreign correlation,
+unfinished work and failed native close remain refusals. Pack cleanup does not
+claim that every detached process has been synchronously proved absent; native
+supervisor reconciliation owns those processes. This supersedes the experimental
+runtime_absent requirement and its unpublished native patch. Controlled acceptance
+uses stock responses by default in test/native-session-stop.test.ts; composed
+live workflow acceptance remains required.
+
+Native tracker conditional writes: given an exact bead, store, metadata key,
+expected value and next value, the adapter invokes Gas City's `metadata-cas`.
+Native success is returned without scanning unrelated host processes. A failed
+response remains a failure with retained command diagnostics; the owning tracker
+operation reconciles an ambiguous result by reading the exact key through Gas
+City before another conditional write. Read-only native and Git observations
+likewise require no project-writer census. A process-table permission failure
+must not discard a successful native conditional write. Project commands and Git
+mutations retain their existing command custody checks. Controlled acceptance:
+`test/native-tracker-cas.test.ts`, `test/operational-read.test.ts` and
+`test/native-boundaries.test.ts`. Native conditional-write semantics and readback
+own this boundary; these calls do not create project workspace writers.
+
+Native preflight reads `gc version --json` and `gc config explain --provider`
+through that same observation boundary. Their successful output remains usable
+when unrelated host process observations are unavailable; no project-writer
+receipt is created. `gc beads health` can perform provider recovery and remains
+outside this read classification. `test/operational-read.test.ts` distinguishes
+these calls from config writes, health recovery, and project commands.
+
+S3/S4 shared review workspace: an implementation attempt owns one native-verified
+worktree. Review and fix nodes borrow that same workspace without claiming its
+provenance. Before these nodes become ready, the pack records their exact attempt
+and publishes `gc.pack_workspace` naming the worktree's direct-child directory.
+Their configured agent `work_dir` must equal the configured worktree root; native
+pool routing then chooses the exact workspace on the initial launch, before any
+claim. A mismatched root, incompatible pack route, or path outside that root
+refuses publication. The provider still verifies its actual cwd and exact
+attempt before writing or submitting a verdict. Controller recovery retains the
+same slug and attempt; it must not transfer implementation ownership to review
+nodes or fabricate drain membership. The original worktree remains the only
+cleanup resource. Controlled tests cover routing and preflight refusals; native
+city/review tests must prove initial launch and later-round same-worktree fixes.
+
+Native control mirrors may retain `dalph.phase` from their subject. Ralph,
+specification, retry, check and scope controls are not project writer nodes.
+The writer inventory correlates actual execution nodes using native kind as
+well as product phase; it still refuses a non-writer session that shares the
+attempt workspace and never stops that unrelated session. A clean verdict does
+not waive required implementation/reviewer correlation. Controlled mirror
+cases are in `test/native-review-safety.test.ts`.
+
+Stock session listing omits closed sessions even with `--state all`. After
+implementation and independent review finish, the pack reads each retained
+required session by exact public tracker ID and verifies its closed status,
+task, template and workspace correlation. Open sessions still require inventory
+membership; an omitted open writer refuses approval. The open inventory still
+detects additional and unrelated workspace writers. No process-absence extension
+is required. Acceptance: `test/native-review-safety.test.ts`.
+
+After four blocking rounds, stock Ralph closes its logical control with
+`gc.outcome=fail` and `gc.failed_attempt=4`; its mirrored product phase and absent
+`gc.iteration` do not define exhaustion. Human continuation identifies the native
+logical review control by kind and exact step identity, checks its configured
+four-round budget and closed failure, and validates retained fourth-round
+findings. An early failure, hard terminal disposition, open control or changed
+budget cannot authorize another batch. A pending native continuation blocks a
+second batch even when its phase has been mirrored. Duplicate human submission
+returns the existing native workflow. Tests: `native-review.test.ts` and
+`native-continuation-safety.test.ts`.
+The composed blocking case in `native-review-city.test.ts` then submits a human
+batch twice through the public CLI, observes four additional blocking rounds
+and skipped delivery, resumes that workflow, and verifies the original attempt
+and worktree remain retained with no result. A duplicate submission after
+exhaustion returns the same workflow. No fifth automatic round or replacement
+attempt is permitted in either batch.
+
+For two retained product attempts in one city, resuming one reconciles only
+its original and continued fix/review writers. A correctly correlated foreign
+writer on a different workspace is left untouched; a foreign writer sharing
+this attempt's workspace refuses recovery. Acceptance:
+`native-resume-products.test.ts`.
+
+Human batch identities contain a hyphen. Before recording a candidate pin,
+fix completion, verdict or approval, the pack maps that logical batch to a
+bounded metadata-key-safe digest. The value retains the original batch identity;
+all reads use the same key mapping and initial-batch keys remain unchanged.
+Native CAS must accept the key, and recovery must use the same logical batch
+and original attempt. Acceptance: `native-continuation-safety.test.ts` with an
+actual `continuationBatch` identity and the composed continuation scenario.
+
+Before a native preparation, qualification or integration role starts quiet
+project commands, it requests one finite 40-minute hold through public
+`gc runtime heartbeat`, explicitly naming its current session in the command
+environment. An invalid or expired acknowledgement blocks the role. The native
+controller preserves the hold across restart without extending it, spends no
+execution-stall observation budget during the hold, and re-reads the session
+before draining. Expiry restores the bounded backstop. There is no pack timer
+or periodic renewal; a hold cannot reverse a drain already begun. Acceptance:
+`native-runtime-heartbeat.test.ts`, native `TestExecutionBackstop` and heartbeat
+tests, and the composed two-result delivery recovery scenario.
+
+The first fix of a human batch reads the previous batch's fourth-round findings
+through `review-context`. A clean verdict then qualifies and delivers the
+original product implementation even though the continuation has a new workflow
+root. Task, original attempt and accepted candidate remain exact through
+publication, promotion and cleanup. Acceptance:
+`native-continuation-safety.test.ts` and composed human continuation.
+The composed blocking fixture then explicitly grants a later human batch a
+clean verdict. That batch delivers the same original attempt, settles the
+product task and removes its exact work/candidate resources through native
+cleanup. No new product attempt is allocated to demonstrate this path.
+
+After native review aborts and closes delivery as `skipped`, public resume
+reconciles the original attempt's sessions and resources, then resumes that
+workflow without requiring successful publication/promotion facts. It preserves
+the attempt and owned workspace and records no result or settled marker.
+Unknown closed delivery outcomes still require successful-delivery evidence;
+`skipped` never authorizes cleanup. Acceptance: `native-controller.test.ts` and
+the transport/malformed composed cases in `native-review-city.test.ts`.
+
+Native restore may stage `.gc/settings.json` at the configured workspace root.
+That native cache is not an owned task worktree and is not deleted by task
+cleanup. Resource acceptance uses exact planned paths, native cleanup facts and
+Git worktree observations. Unexpected remaining non-cache directories still fail
+the fixture check. Multi-round native fixture observations have a finite
+15-minute deadline; this measurement allowance changes no native round, retry,
+session or resource budget.
+
+The exact idempotent native `session close <id> --json` command uses native
+result and correlated read-back even when host process census is unavailable.
+It does not add a private process-absence receipt. Lost or invalid outcomes are
+reconciled by the same exact close; stop intent and task/session/workspace checks
+remain required. Shell wrappers, unsupported operations and project/Git writers
+do not receive this delegation. Tests: `native-tracker-cas.test.ts` and
+`native-session-stop.test.ts`.
+
+During retained recovery, an exact public session read supersedes a stale list
+summary. An open session keeps its occupied position regardless of lifecycle
+metadata; only Gas City resumes it. Missing or contradictory identity and
+multiple open writers still block recovery. A `RetainedRecovery` close may
+repeat the exact native close for an already closed session of an unfinished
+task, after a fresh closed/correlation check. `CompletedWork` close still
+requires a completed task. Recovery closes no task, releases no worktree and
+records no result. Acceptance: `native-controller.test.ts` and
+`native-session-stop.test.ts`.
+
+Native transport retries retain the authored workspace selector in the frozen
+formula source. Before cook, the pack declares a validated unique slug; admission
+binds it beneath the configured worktree root and preparation remains a blocking
+edge until exact provisioning succeeds. Gas City reconstructs later reviewer
+subjects from that source. Those subjects read attempt ownership from the
+original implementation node. Physical `gc.retry_attempt` selects the latest
+reviewer independently of the semantic round; invalid ordinals cannot select an
+approval. Old frozen workflows are not rewritten. Controlled acceptance:
+`native-controller.test.ts` and `native-review.test.ts`; native retry exhaustion
+and downstream skipping: `native-review-city.test.ts`.
+
+After a producer records its exactly correlated proposal and closes its native
+work bead, Gas City may reuse its pool session for another work bead. Review and
+retained recovery read the original closed work, unchanged attempt and proposal,
+then positively correlate the session's new work, template and workspace. A
+fresh native inventory must show no current writer occupying the original
+workspace. They preserve the original attempt and continue without sending close
+to the reassigned session or inventing a stop receipt. An unfinished original
+work, changed proposal, unknown new owner or workspace intrusion blocks recovery
+without resource mutation. Acceptance: controlled producer reassignment tests
+in `native-workflow.test.ts`, followed by retained two-result native recovery.
+
+Admission accepts implementation/fix and reviewer pools only with explicit
+minimum zero and no configured named session targeting either role. These
+roles use native ephemeral pool retirement: an open producer session is observed
+within a finite deadline, never closed by the pack. A pending deadline retains
+the exact attempt/worktree for later public resume. A terminal closed ephemeral
+session may receive the existing idempotent public close; a positively proved
+reassignment receives none. Named/manual session ownership is refused. This
+replaces the earlier permission to close an open completed-work session, because
+Gas City may reassign that row before an unfenced close reaches it. Native
+retirement, not a private process acknowledgement, owns this transition.
+Admission acceptance: `native-review-capacity.test.ts`; transition acceptance:
+`native-session-stop.test.ts` and retained two-result recovery.
+
+Completed reviewers may likewise be reassigned outside the product graph. Review
+acceptance and public recovery both prove the original closed review node and
+its declared attempt/workspace, the retained exact verdict, and the positive new
+owner. Recovery accounts for the historical session without closing it. Open
+retirement observation expires after 45 seconds and preserves exact resources.
+Controlled acceptance: `native-review.test.ts` and `native-retirement.test.ts`.
+
+A closed ephemeral pool row may retain a trigger naming work already completed
+by another session. When both the row and referenced work are closed, recovery
+checks exact template/workspace and fresh original-workspace quiescence without
+requiring reciprocal current session identity. This proves terminal retirement,
+not execution of the referenced work. An open row still requires reciprocal
+identity. Explicit `manual_session=true` always refuses pool retirement, even
+with ephemeral origin. Acceptance: `native-workflow.test.ts` and
+`native-retirement.test.ts`.
+
+Interactive worker/reviewer roles use native idle sleep after 10 seconds. After
+retaining a proposal or verdict they cease task work and allow Gas City to
+observe idle; they do not wait for a pack-issued close. Active claims and native
+wait holds remain native guards. A pending observation retains exact resources.
+The noninteractive Node fixture declares `one_shot` before cooking its graph,
+matching its one-work command exit and native IndependentSteps routing; this
+does not change interactive harness lifecycle. Old cooked graph affinity is
+retained. Acceptance: focused public native city and two-result delivery cases.
+
+After retaining its exact proposal/fix/verdict and closing its own work, the
+actor invokes public `gc runtime drain-ack --json` from its unchanged native
+environment, without a target or operator flag, then ceases work. The ack is a
+native retirement request, never proof of stopped writers. Gate/recovery still
+observe terminal session or positive reassignment; external recovery does not
+replay the actor environment. Crash before ack uses native idle/dead-runtime
+recovery; lost ack response preserves retained result and exact attempt. The
+pinned legacy reconciler supplies its own token-digest/stop fences; v2 row CAS
+is not claimed. Acceptance: actor acknowledgement controls and public native
+city/delivery runs. The controlled one-work fixture returns after self-ack
+instead of waiting indefinitely for an external close.
+
+Native delivery scopes may mirror their subject delivery metadata after closure.
+Public resume selects executable delivery nodes for the exact product, excluding
+logical scope/retry controls even when they mirror candidate and cleanup facts.
+A second executable delivery remains ambiguous and refuses recovery. Acceptance:
+`native-controller.test.ts` and retained delivered native resume.
+
+Recovery treats tracker rows without metadata or an executable phase as unowned
+observations. Missing metadata on an original owner or new owner cannot prove
+historical authorization. Missing original producer attempt/proposal, an open
+writer in the original workspace, or two open review/fix writers refuses recovery
+without closing the new owner or deleting retained resources. Group/product
+filters carry their positive metadata proof into later native boundaries.
+Acceptance: `native-historical-authority.test.ts`.
+# Review recovery after approval, before qualification
+
+For both controlled native-city variants, the independent reviewer has retained
+one clean verdict and approval for candidate C in the exact implementation
+attempt. A test-only preload holds the configured qualifier before its CLI can
+claim work or perform qualification effects. The Operator stops the city through
+Gas City, which may retain the held qualifier asleep. Fresh exact native
+session/template/trigger observations and tracker assignments prove it has not
+claimed work. The Operator explicitly closes that one session through native
+`session close`, validates its exact response and closed correlation, and observes
+implementation and reviewer closed as well. Qualification remains open and
+unclaimed; the original worktree and review facts remain.
+
+The unchanged variant leaves C intact. The changed variant commits C-prime in
+that same clean owned worktree after native stopped-writer proof. The Operator
+restarts Gas City and invokes public workflow resume. Release authorizes only a
+new, publicly correlated qualifier session; the original session is never
+released. The original native CLI executes qualification.
+
+With C, the original attempt, Base and consumed review round survive through
+qualification, delivery and cleanup. With C-prime, approval for C remains
+historical evidence but cannot authorize the changed tree: qualification visibly
+refuses, no result/publication/settlement appears, and the original attempt,
+verdict, worktree and branch remain. The test never calls review.gate manually
+or writes workflow approval/result facts. There is no pending review-check at
+this cut; its process-stop proof is inapplicable. Coverage belongs to the paired
+`native-review-restart-city.test.ts` scenarios.

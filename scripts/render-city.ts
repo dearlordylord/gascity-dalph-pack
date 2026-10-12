@@ -9,7 +9,8 @@ const settings = Config.unwrap({
   RIG: Config.NonEmptyString("DALPH_RIG"),
   BRANCH: Config.NonEmptyString("DALPH_TARGET_BRANCH"),
   TARGET_REPO: Config.NonEmptyString("DALPH_TARGET_REPO"),
-  PACK_ROOT: Config.NonEmptyString("DALPH_PACK_ROOT")
+  PACK_ROOT: Config.NonEmptyString("DALPH_PACK_ROOT"),
+  WORKTREE_ROOT: Config.NonEmptyString("DALPH_WORKTREE_ROOT")
 })
 const main = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem

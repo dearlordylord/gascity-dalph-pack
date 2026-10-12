@@ -13,6 +13,24 @@ not invoke an agent CLI. `dalph.native-prepare` and `dalph.native-integrator` ar
 deterministic one-shot boundaries. The native formula routes its implementation
 to the qualified agent from the launch contract.
 
+Implementation/fix and reviewer roles use minimum-zero ephemeral pools without
+configured named sessions. Their completion commands retain the exact proposal
+or verdict, close that work, then request their own retirement through public
+`gc runtime drain-ack --json` in the original Gas City environment. They cease
+work after this request. Gas City owns runtime stop; the review gate separately
+observes a terminal session or proves positive reassignment before using the
+retained result. It observes for at most45seconds and preserves the original
+attempt/worktree on pending. Native idle sleep after10seconds supports recovery
+when an actor crashes before acknowledgement.
+
+An acknowledgement is a retirement request, not stopped-writer proof. Its
+per-session command logs remain under `evidence/actor-retirement` for inspection.
+External resume never reproduces actor tokens or sends their self-ack. The
+pinned native build uses legacy controller stop fences; this pack does not
+claim unavailable v2 row CAS. Interactive harness lifecycle stays configured by
+Gas City. The controlled one-work Node fixture alone declares `one_shot` before
+graph creation and exits after acknowledgement.
+
 Set the normal `DALPH_*` city, rig, target, branch, worktree, pack and tracker
 settings, plus `DALPH_NATIVE_CONTRACT` pointing to an absolute JSON path and
 `DALPH_NATIVE_TASK` containing the task instruction. An example contract is:

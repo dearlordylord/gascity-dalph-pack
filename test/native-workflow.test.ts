@@ -7,6 +7,25 @@ import { bindNativeAttempt, nativeGroup } from "../src/native/identity.ts"
 import { correlatedSession, nativeSession, stoppedNativeSession } from "../src/native/session.ts"
 import { BeadId } from "../src/domain/shared.ts"
 import { RESULT, BASE } from "./helpers/workflow-fixture.ts"
+import { canonical } from "../src/delivery/files.ts"
+import { reconcileNativeAttempt } from "../src/native/reconcile.ts"
+
+it.effect("replayed historical native proposals preserve their original durable payload", () =>
+  Effect.gen(function* () {
+    const f = yield* nativeFixture
+    yield* Effect.gen(function* () {
+      yield* f.workflow.prepare(yield* f.row("prepare"))
+      f.state.workHead = RESULT
+      yield* f.workflow.finish(yield* f.row("work"), BeadId.make("session"))
+      const proposal = yield* f.tracker.fact(BeadId.make("work"), "native_proposal", NativeProposal)
+      if (!proposal) throw new Error("missing proposal")
+      const legacy = canonical({ ...proposal, birth: 1 })
+      f.raw("work").metadata["dalph.native_proposal"] = legacy
+      yield* f.workflow.finish(yield* f.row("work"), BeadId.make("session"))
+      expect(f.raw("work").metadata["dalph.native_proposal"]).toBe(legacy)
+    }).pipe(Effect.provide(f.layer))
+  })
+)
 
 it.effect(
   "native-v1 prepares qualified Base, correlates a native result and delivers through existing safe integration",
@@ -150,6 +169,66 @@ it.effect("S12 native and legacy runtimes refuse reinterpretation before a task 
   })
 )
 
+it.effect(
+  "completed native producer survives positively correlated pool reassignment without closing its new owner",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* nativeFixture
+      f.nativeState.retireCompleted = false
+      yield* Effect.gen(function* () {
+        yield* f.workflow.prepare(yield* f.row("prepare"))
+        f.state.workHead = RESULT
+        yield* f.workflow.finish(yield* f.row("work"), BeadId.make("session"))
+        f.raw("work").metadata["gc.session_id"] = "session"
+        const attempt = yield* f.tracker.fact(BeadId.make("work"), "native_attempt", NativeAttempt)
+        const proposal = yield* f.tracker.fact(BeadId.make("work"), "native_proposal", NativeProposal)
+        if (!attempt || !proposal) throw new Error("missing fixture proposal")
+        f.rows.set("other", {
+          id: BeadId.make("other"),
+          status: "in_progress",
+          metadata: {
+            "gc.session_id": "session",
+            "gc.run_target": attempt.contract.agent,
+            "gc.work_dir": "/fixture/worktrees/other"
+          }
+        })
+        Object.assign(f.raw("session").metadata, {
+          "gc.trigger_bead_id": "other",
+          work_dir: "/fixture/worktrees/other"
+        })
+        f.nativeState.stopFailure = true
+        yield* stoppedNativeSession(f.config, f.commands, proposal, attempt, f.tracker)
+        yield* reconcileNativeAttempt(f.config, f.commands, attempt, proposal, f.tracker)
+        expect(f.raw("session").status).toBe("open")
+        f.raw("other").metadata["gc.session_id"] = "another-session"
+        yield* Effect.flip(stoppedNativeSession(f.config, f.commands, proposal, attempt, f.tracker))
+        f.raw("other").status = "closed"
+        f.raw("session").status = "closed"
+        yield* stoppedNativeSession(f.config, f.commands, proposal, attempt, f.tracker)
+        yield* reconcileNativeAttempt(f.config, f.commands, attempt, proposal, f.tracker)
+        expect(f.events).not.toContain("native-close:session")
+        f.raw("session").status = "open"
+        f.raw("other").status = "in_progress"
+        f.raw("other").metadata["gc.session_id"] = "session"
+        expect(f.raw("work").metadata["dalph.native_proposal"]).toBe(canonical(proposal))
+        delete f.raw("session").metadata.template
+        delete f.raw("other").metadata["gc.run_target"]
+        yield* Effect.flip(stoppedNativeSession(f.config, f.commands, proposal, attempt, f.tracker))
+        f.raw("session").metadata.template = attempt.contract.agent
+        f.raw("other").metadata["gc.run_target"] = attempt.contract.agent
+        const wrongProposal = { ...proposal, task: "foreign" }
+        f.raw("work").metadata["dalph.native_proposal"] = canonical(wrongProposal)
+        yield* Effect.flip(stoppedNativeSession(f.config, f.commands, wrongProposal, attempt, f.tracker))
+        f.raw("work").metadata["dalph.native_proposal"] = canonical(proposal)
+        f.raw("work").status = "open"
+        yield* Effect.flip(stoppedNativeSession(f.config, f.commands, proposal, attempt, f.tracker))
+        f.raw("work").status = "closed"
+        f.raw("other").metadata["gc.work_dir"] = "/foreign"
+        yield* Effect.flip(stoppedNativeSession(f.config, f.commands, proposal, attempt, f.tracker))
+      }).pipe(Effect.provide(f.layer))
+    })
+)
+
 it.effect("native session correlation and fresh stopped proof fail closed", () =>
   Effect.gen(function* () {
     const f = yield* nativeFixture
@@ -173,9 +252,11 @@ it.effect("native session correlation and fresh stopped proof fail closed", () =
         { ...proposal, attempt: Schema.decodeUnknownSync(NativeProposal.fields.attempt)("foreign") }
       ])
         yield* Effect.flip(correlatedSession(f.config, f.commands, changed, attempt))
-      f.raw("session").status = "open"
-      expect((yield* Effect.flip(stoppedNativeSession(f.config, f.commands, proposal, attempt)))._tag).toBe(
-        "NativeSessionPending"
+      f.raw("session").status = "closed"
+      f.nativeState.legacyClose = false
+      f.nativeState.stopFailure = true
+      expect((yield* Effect.flip(stoppedNativeSession(f.config, f.commands, proposal, attempt, f.tracker)))._tag).toBe(
+        "BoundaryFailure"
       )
       f.nativeState.wrongRead = true
       yield* Effect.flip(nativeSession(f.config, f.commands, proposal.session))

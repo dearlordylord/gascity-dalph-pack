@@ -1,13 +1,27 @@
 import { Schema } from "effect"
 import { AbsolutePath, Plan } from "../domain/attempt.ts"
-import { BeadId, BirthTicks, CommitSha, NonNegativeInteger } from "../domain/shared.ts"
+import { BeadId, CommitSha, NonNegativeInteger } from "../domain/shared.ts"
 
 const Text = Schema.String.check(Schema.isMinLength(1))
 const MAXIMUM_CHECK_SECONDS = 600
+/** Qualified Ralph infrastructure and finite-heartbeat behavior of the patched native build. */
+export const NativeBuild = Schema.Struct({
+  schema_version: Schema.Literal("1"),
+  ok: Schema.Literal(true),
+  version: Schema.Literal("dev-dalph-native-v3")
+})
+/** Public fresh formula cook response; the workflow root is not routed to a worker. */
+export const NativeCookResponse = Schema.Struct({
+  schema_version: Schema.Literal("1"),
+  ok: Schema.Literal(true),
+  mode: Schema.Literal("cook"),
+  root_id: BeadId
+})
 export const NativeTaskIdentity = Schema.Struct({
   "gc.root_bead_id": BeadId,
   "dalph.task": Text,
-  "dalph.runtime": Schema.Literal("native-v1")
+  "dalph.runtime": Schema.Literal("native-v1"),
+  "dalph.product_root": Schema.optionalKey(BeadId)
 })
 export const ProjectCheck = Schema.Struct({
   command: Schema.NonEmptyArray(Text),
@@ -16,6 +30,7 @@ export const ProjectCheck = Schema.Struct({
 export const NativeContract = Schema.Struct({
   version: Schema.Literal(1),
   agent: Text,
+  reviewer: Schema.optionalKey(Text),
   harness: Schema.Literals(["codex", "claude", "fixture"]),
   harnessVersion: Text,
   runtime: Schema.Literal("tmux"),
@@ -37,8 +52,7 @@ export const NativeProposal = Schema.Struct({
   attempt: Plan.fields.attempt,
   base: CommitSha,
   task: Text,
-  path: AbsolutePath,
-  birth: BirthTicks
+  path: AbsolutePath
 })
 export const NativeSession = Schema.Struct({
   id: BeadId,
@@ -53,8 +67,15 @@ export const NativeConfig = Schema.Struct({
         Dir: Schema.String,
         Provider: Schema.String,
         StartCommand: Schema.String,
+        WorkDir: Schema.optionalKey(Schema.String),
+        MaxActiveSessions: Schema.optionalKey(Schema.NullOr(NonNegativeInteger)),
+        MinActiveSessions: Schema.optionalKey(Schema.NullOr(NonNegativeInteger)),
         OptionDefaults: Schema.NullOr(Schema.Record(Schema.String, Schema.String))
       })
+    ),
+    NamedSessions: Schema.NullOr(Schema.Array(Schema.Struct({ Template: Text, Dir: Schema.String }))),
+    Rigs: Schema.optionalKey(
+      Schema.Array(Schema.Struct({ Name: Text, MaxActiveSessions: Schema.NullOr(NonNegativeInteger) }))
     ),
     Session: Schema.Struct({ Provider: Text }),
     Beads: Schema.Struct({ Provider: Text, ConditionalWrites: Text, GuardedRelease: Text }),

@@ -2,10 +2,34 @@ import { Duration, Effect, Schema } from "effect"
 import { BoundaryFailure } from "../domain/shared.ts"
 import type { RuntimeConfig } from "../delivery/config.ts"
 import type { Commands } from "../delivery/tracker.ts"
-import { NativeAgents, NativeConfig, NativeProvider, type NativeContract } from "./contract.ts"
+import { NativeAgents, NativeBuild, NativeConfig, NativeProvider, type NativeContract } from "./contract.ts"
+import { validateRetiringPools } from "./pool-policy.ts"
 
 const reject = (message: string) => Effect.fail(new BoundaryFailure({ message }))
 const READINESS_SECONDS = 30
+const REVIEWER_SESSIONS = 2
+const TOTAL_SESSIONS = 5
+type AgentRole = (typeof NativeConfig.Type.config.Agents)[number]
+const directReviewer = (role: AgentRole | undefined): role is AgentRole =>
+  !!role && !role.StartCommand && !!role.MaxActiveSessions && role.MaxActiveSessions <= REVIEWER_SESSIONS
+const boundedRig = (rig: { MaxActiveSessions: number | null }) =>
+  !!rig.MaxActiveSessions && rig.MaxActiveSessions <= TOTAL_SESSIONS
+const validateReviewCapacity = Effect.fn("Native.validateReviewCapacity")(function* (
+  config: RuntimeConfig,
+  contract: NativeContract,
+  resolved: typeof NativeConfig.Type.config,
+  agents: typeof NativeAgents.Type
+) {
+  const reviewer = contract.reviewer ?? `${config.rig}/dalph.native-reviewer`
+  if (reviewer === contract.agent || !agents.agents.some((entry) => entry.qualified_name === reviewer))
+    return yield* reject("native reviewer must be a separate configured agent")
+  const name = reviewer.slice(Math.max(reviewer.lastIndexOf("/"), reviewer.lastIndexOf(".")) + 1)
+  const role = resolved.Agents.find((entry) => entry.Name === name && entry.Dir === config.rig)
+  if (!directReviewer(role)) return yield* reject("native reviewer requires a direct provider and at most two sessions")
+  const rig = resolved.Rigs?.find((entry) => entry.Name === config.rig)
+  if (!rig || !boundedRig(rig)) return yield* reject("native review requires a rig session cap of at most five")
+  return role
+})
 const validateAgent = Effect.fn("Native.validateAgent")(function* (
   config: RuntimeConfig,
   contract: NativeContract,
@@ -51,6 +75,10 @@ export const nativePreflight = Effect.fn("Native.preflight")(function* (
   commands: Commands
 ) {
   const gc = ["gc", "--city", config.city, "--rig", config.rig]
+  yield* commands.execute(config.root, [...gc, "version", "--json"]).pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(NativeBuild))),
+    Effect.mapError(() => new BoundaryFailure({ message: "native Ralph infrastructure build is not qualified" }))
+  )
   const loaded = yield* commands
     .execute(config.root, [...gc, "config", "show", "--json"])
     .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(NativeConfig))))
@@ -59,6 +87,10 @@ export const nativePreflight = Effect.fn("Native.preflight")(function* (
     .execute(config.root, [...gc, "agent", "list", "--json"])
     .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(NativeAgents))))
   const agent = yield* validateAgent(config, contract, resolved, agents)
+  const reviewRole = yield* validateReviewCapacity(config, contract, resolved, agents)
+  yield* validateRetiringPools([agent, reviewRole], resolved.NamedSessions)
+  if ([agent, reviewRole].some((entry) => entry.WorkDir !== config.worktrees))
+    return yield* reject("native implementation and reviewer workspace bases must equal the configured worktree root")
   yield* validateSafety(contract, resolved)
   const provider = yield* commands
     .execute(config.root, [...gc, "config", "explain", "--provider", contract.harness, "--json"])

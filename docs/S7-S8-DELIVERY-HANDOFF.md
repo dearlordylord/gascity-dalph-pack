@@ -1,6 +1,6 @@
 # S7/S8 native delivery and cleanup
 
-**Status: incomplete; no accepted result.**
+**Status: composed S7/S8 acceptance and full pack qualification passed.**
 
 This slice implements serialized native delivery and exact cleanup from
 [Specification #1](https://github.com/dearlordylord/gascity-dalph-pack/issues/1)
@@ -40,8 +40,21 @@ entire same-target delivery turn: candidate construction, checks, publication,
 promotion and cleanup. The shorter target guard still protects provisioning,
 promotion and cleanup from concurrent pack target operations. Fresh native
 inventory and retained command reconciliation check every known attempt before
-integration; releasing a runtime lock or observing a dead session cannot release
-an escaped writer. Unknown process observations retain custody.
+integration. Native workers request their own drain acknowledgement; Gas City
+owns retirement. Acceptance requires fresh exact closed-session/task/workspace
+correlation or positively proved reassignment, rather than the acknowledgement
+alone. Open unfinished actors retain their occupied position. Repeating exact
+native close for an already closed retained session is recoverable; a reassigned
+new owner is not closed. Optional escaped-process-absence confirmation is not
+required. Stock listing omits closed sessions, so known
+required IDs are read individually through the native tracker. This does not
+claim a complete historical writer inventory. Project qualification and Git
+command custody remain separate; unknown command observations retain custody.
+The exact public `session close ID --json` invocation delegates termination to
+Gas City without a second private host-process census. The adapter still records
+intent, validates the close response, rereads exact correlation and repeats close
+after an ambiguous response. Shell wrappers, other session operations and extra
+close arguments do not receive this delegation.
 
 Native operational reads use their actual decoded native responses without
 private durable success receipts. Failed read diagnostics remain available;
@@ -77,6 +90,14 @@ native tracker dependency observations.
 
 ## Scenario-to-test map
 
+`test/native-cleanup-resume.test.ts` covers the controlled public-resume boundary
+after native removal applies but its response is lost. Exact cleanup intent,
+prepared attempt identity and matching publication/promotion allow resume
+without recreating the worktree, rerunning implementation or repushing. Missing
+or contradictory facts refuse resume and preserve the remaining resources.
+This controlled proof does not replace the real Git/native delivery scenarios
+or qualify the complete live native delivery workflow.
+
 | Scenario | Acceptance or focused safety evidence |
 | --- | --- |
 | S7: two accepted results, serialization, applied push response loss | `test/native-delivery.test.ts` launches two public native workflows into real temporary repositories, holds integration until both exact results exist, holds the first applied push, observes the blocked second candidate, then uses public resume. It asserts unchanged results/candidate, two ordinary pushes, both results in local/remote target and settled resources. |
@@ -87,30 +108,28 @@ native tracker dependency observations.
 
 ## Observed qualification
 
-The composed public native test has **not passed**. Earlier runs exhausted the
-startup or accepted-result observation bounds. The latest isolated snapshot run
-(`s78-native-focus5`) failed with `native delivery observation pending` after
-240.50 seconds. Fresh retained native events showed both exact worktrees prepared,
-one preparation closed, both implementation results still absent and no candidate
-constructed. Neither lost-response barrier was reached. The native supervisor
-reported slow durable storage and unreadable process environments, including
-PIDs 2178874 and 3075204. This is observed runtime evidence; it does not establish
-that those conditions are the sole cause. Those resources and custody checks were
-preserved. S7 and S8 remain unqualified.
+The composed public native S7/S8 test passed in 469.70 seconds against the
+qualified native binary. Both implementation results were accepted before the
+integration barrier released. The test observed one candidate while the first
+push was held, reconciled the applied push and cleanup through public resume,
+and verified exactly two ordinary pushes, both results in the local and remote
+target, unchanged accepted facts, and absence of all owned worktrees.
 
-Focused checks passed 48 tests across six files before the final fixture changes;
-the final refresh/classification checks passed six tests across two files in
-7.83 seconds. A separate recovery cohort passed eight tests across three files.
-The complete gate passed dependency coherence, build, TypeScript/Effect,
-Schema boundaries, circular dependency, complexity and lint stages; its coverage
-stage failed in the detached invocation (`s78-check-all3`) with
-`TimeoutError: Operation timed out after 10m` and exit code 1. The later example
-stages did not run. No complete gate or 99% coverage result is claimed.
-A diagnostic run excluding the three long native workflow files observed
-176 of 177 tests passing; its classifier failure occurred during source editing.
-The subsequent unchanged-candidate diagnostic process exited without a result,
-so it supplies no coverage measurement. The final targeted classifier rerun
-passed both tests in 5.08 seconds.
+The single-result native city test proved both actor self-acknowledgements and
+delivery, then exposed a public-resume selector defect: native scope nodes
+mirror their subject delivery metadata. Resume now selects executable nodes;
+controlled tests refuse missing or duplicate executable deliveries. Retained
+public resume of that exact delivered run passed in 14.27 seconds, preserving
+its original attempt/proposal and verifying remote target and resource absence.
+
+The completed full `pnpm check-all` passed 246 tests in 40 files, including the
+composed native delivery scenario. Coverage was 99.57% statements, 99% branches,
+99.75% functions and 99.64% lines. Build, typecheck, complexity, lint and the
+independent example checks passed. Scoped review closed the selector finding.
+Detailed failed-run diagnostics belong to the external evidence archive.
+The subsequently added paired review-restart fixture passed separately with two
+live tests in 431.74 seconds. This gate does not certify tests added after it
+completed; production qualification/custody code remained unchanged.
 
 Completed Hapsland declaration evaluations reported no findings for
 `acceptedResultMatches` (0.06), `candidateMatches` (0.05), `candidateKey` (0.03),
@@ -119,31 +138,27 @@ Completed Hapsland declaration evaluations reported no findings for
 `nativeRead` finding was fixed by making its operation map local to the callable.
 These are completed rule evaluations, not claims of exhaustive analysis.
 
-Fresh independent review round one found that revision qualification logs could
-overwrite earlier diagnostics. Revision-specific log directories now preserve
-those outputs. Fresh round two reviewed `368f610..89dbc24` and reported no
-reasonable blocking implementation findings. After tightening the remote-read
-operand check, fresh round three reviewed `368f610..3cd3ff6` and reported no
-reasonable blocking implementation findings. Both expressly left live
-qualification and the complete gate incomplete. No other parent scenario or combined live trial
-is claimed completed by this handoff.
+Revision-specific qualification directories preserve earlier diagnostics.
+Scoped reviews closed delivery correlation, remote-read operand and native
+selector findings. Other parent scenarios and the configured-provider combined
+trial remain separate acceptance boundaries.
 
 | Required boundary | Status and next evidence |
 | --- | --- |
-| S7/S8 public native workflow with two accepted results and deterministic loss | Failed observation run; requires a passing composed native test reaching both barriers. |
+| S7/S8 public native workflow with two accepted results and deterministic loss | Passed composed native test reaching both barriers. |
 | Official integration policy comparison and precise reuse/adapters | Documented above with immutable source pin; no executable official refinery adoption claimed. |
-| Same-target serialization, correlation, pinned publication recovery and finite refresh | Implemented with focused adapter evidence; public composition remains unqualified. |
-| Completion after publication, local promotion and cleanup; fresh successor eligibility | Implemented and covered by focused workflow checks; complete native continuation remains unqualified. |
-| Exact native resource identity, preservation, absence reconciliation and branch compare-delete | Implemented with focused safety checks; S8 public recovery remains unqualified. |
+| Same-target serialization, correlation, pinned publication recovery and finite refresh | Passed focused adapters and composed public native delivery. |
+| Completion after publication, local promotion and cleanup; fresh successor eligibility | Implemented and covered by focused workflow checks; composed native delivery passed. |
+| Exact native resource identity, preservation, absence reconciliation and branch compare-delete | Implemented with focused safety checks; S8 composed public recovery passed. |
 | Native custody, escaped writers and operational observations | Retained narrow process guard and classified native reads; unknown custody preserves resources. No dead-session equivalence claimed. |
-| Stable task/attempt/candidate metadata and immutable accepted implementation evidence | Implemented with changed-result/approval refusal and revision-specific qualification; composed propagation remains unqualified. |
-| TypeScript/Effect, focused checks, full 99% gate, Hapsland, separate project checks and no CI | Focused/static/Hapsland checks passed as described. Full gate failed its coverage-stage timeout. The fixture project check is separate from pack qualification. No CI added. |
+| Stable task/attempt/candidate metadata and immutable accepted implementation evidence | Implemented with changed-result/approval refusal and revision-specific qualification; composed propagation passed. |
+| TypeScript/Effect, focused checks, full 99% gate, Hapsland, separate project checks and no CI | Focused/static/Hapsland checks and full 99% gate passed as described. The fixture project check is separate from pack qualification. No CI added. |
 | Exact scenario handoff and parent preservation | This handoff records failed/missing observations; no parent completion or issue mutation claimed. |
 
 Reproduction in the provisioned native environment:
 
 ```sh
-export DALPH_TRIAL_ROOT=/workspace/dalph-dogfood/gascity-dalph
+# Prepare the qualified native dependencies according to SETUP.md first.
 source trial/env.sh
 mise exec -- pnpm test test/native-delivery.test.ts
 mise exec -- pnpm check-all
