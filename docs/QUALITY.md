@@ -1,7 +1,9 @@
 # Local quality gate
 
-The pack maintainer runs `pnpm check-all` before handoff. `pnpm check all`
-invokes the same gate. CI is intentionally absent.
+The pack maintainer uses `pnpm check:fast` during implementation and handoff.
+`pnpm check` defaults to that same fast cycle. Run `pnpm check all` (also
+`pnpm check-all` or `pnpm check:all`) at most once per calendar day. CI is
+intentionally absent.
 
 Prepare the pinned dependencies and native Gas City binary as described in
 [setup](SETUP.md), then run:
@@ -9,20 +11,31 @@ Prepare the pinned dependencies and native Gas City binary as described in
 ```sh
 . trial/env.sh
 mise exec node@24.20.0 -- pnpm install --frozen-lockfile
-mise exec node@24.20.0 -- pnpm check-all
+mise exec node@24.20.0 -- pnpm check:fast
 ```
 
-The gate runs stages in order and stops at the first failure. Each child stage
-has a ten-minute timeout and an owned process-group finalizer. The coverage
-stage has a 160-minute ceiling for the serial native suite: three review cases
-allow at most 17 minutes each; the blocking case also proves a separate finite
-human batch followed by a clean human delivery and allows 51 minutes. Clean delivery allows 10 minutes, interrupted
-two-result delivery allows 25 minutes, tracker acceptance allows 4.5 minutes,
-and the remaining controlled tests fit inside the residual allowance. Each
-fixture also retains its own tighter deadline; this changes no product budget
-and excludes no tests. Run the failing
-stage directly to diagnose it before repeating the gate. Preparation or missing
-native tools are environment failures; neither counts as successful qualification.
+Both gates run stages in order and stop at the first failure. One deadline covers
+the entire cycle: 60 seconds for fast, 600 seconds for full. Expiry interrupts
+the owned child process group; it never counts as a pass. Stage output streams
+live and each completed stage reports its elapsed time.
+
+Fast runs every static check, controlled tests with 99% coverage of every
+production source file, and example checks. Full adds the real Gas City
+acceptance suite, with at most two fixture workers. Native scenarios remain
+unchanged in `vitest.native.config.ts`; they are not part of routine fast runs.
+Retain the daily full result and diagnose its failed boundary through fast checks
+instead of rerunning the full gate that day. A timeout ceiling is not evidence
+that the full suite successfully finishes inside it. Preparation or missing
+native tools are environment failures and do not count as qualification.
+
+Full admission creates an exclusive `.quality/full-YYYY-MM-DD.started` record
+using the UTC calendar day; a second full run that day is refused. It also
+retains `.quality/full-incomplete.json` until all stages complete successfully.
+Failure or timeout leaves this fence: killing the test process does not prove
+that detached native cities stopped. Preserve fixture logs, stop the exact owned
+cities and their supervisors through public Gas City commands, and reconcile
+their retained custody before removing the fence. Keep the daily admission
+record. Fast checks remain available; no automatic full retry occurs.
 
 ## Included checks
 

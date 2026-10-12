@@ -13,7 +13,7 @@ export const nativeClaim = Effect.fn("Native.claim")(function* (
   const current = yield* commands.execute(config.root, [...tracker.gc, "hook", "current", "--id-only"]).pipe(
     Effect.map((bead_id) => ({ action: "work", bead_id })),
     Effect.catchTag("CommandRejected", () =>
-      commands.execute(config.root, [...tracker.gc, "hook", "--claim", "--json"]).pipe(
+      commands.execute(config.root, [...tracker.gc, "hook", "--claim", "--drain-ack", "--json"]).pipe(
         Effect.catchTag("CommandRejected", (error) =>
           Effect.gen(function* () {
             if (error.exit !== 1) return yield* Effect.fail(error)

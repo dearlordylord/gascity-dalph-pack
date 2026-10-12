@@ -43,6 +43,17 @@ export const acknowledgeActorRetirement = Effect.fn("Native.acknowledgeActorReti
     return yield* new BoundaryFailure({ message: "native retirement acknowledgement names another runtime" })
 })
 
+/** A deferred integration retains its seat; only an exact completed actor requests drain. */
+export const acknowledgeCompletedActor = Effect.fn("Native.acknowledgeCompletedActor")(function* (
+  config: RuntimeConfig,
+  commands: Commands,
+  tracker: ReturnType<typeof makeTracker>,
+  node: BeadId
+) {
+  if ((yield* tracker.bead(node)).status !== "closed") return
+  yield* acknowledgeActorRetirement(config, commands, tracker, node)
+})
+
 /** Only self-ack delegates lifecycle custody; external operator/target variants are excluded. */
 export function nativeActorRetirement(args: ReadonlyArray<string>): boolean {
   const operation = nativeOperationIndex(args)

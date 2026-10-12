@@ -5,12 +5,20 @@ import { makeCommandRunner, runCommand } from "../../src/quality/command.ts"
 
 it.live("captures output and awaits successful exit", () =>
   Effect.gen(function* () {
+    const streamed: Array<{ stream: string; text: string }> = []
     const result = yield* runCommand({
       executable: process.execPath,
-      args: ["-e", "process.stdout.write('out');process.stderr.write('err')"],
-      timeout: Duration.seconds(2)
+      args: ["-e", "process.stdout.write('out');process.stderr.write('err');setTimeout(()=>{},100)"],
+      timeout: Duration.seconds(2),
+      onOutput: (stream, text) => streamed.push({ stream, text })
     })
     expect(result).toEqual({ stdout: "out", stderr: "err" })
+    expect(streamed).toEqual(
+      expect.arrayContaining([
+        { stream: "stdout", text: "out" },
+        { stream: "stderr", text: "err" }
+      ])
+    )
   })
 )
 it.live("reports nonzero exit", () =>

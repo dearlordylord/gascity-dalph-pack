@@ -1,7 +1,11 @@
 import { ConfigProvider, Effect, Layer } from "effect"
 import { expect, it } from "@effect/vitest"
 import { nativeFixture } from "./helpers/native-fixture.ts"
-import { acknowledgeActorRetirement, nativeActorRetirement } from "../src/native/actor-retirement.ts"
+import {
+  acknowledgeActorRetirement,
+  acknowledgeCompletedActor,
+  nativeActorRetirement
+} from "../src/native/actor-retirement.ts"
 import { BeadId, BoundaryFailure } from "../src/domain/shared.ts"
 import { RESULT } from "./helpers/workflow-fixture.ts"
 
@@ -33,7 +37,7 @@ it.effect("completed actors request self retirement without making acknowledgeme
           )
         }
       }
-      const operation = acknowledgeActorRetirement(f.config, commands, f.tracker, BeadId.make("work")).pipe(
+      const operation = acknowledgeCompletedActor(f.config, commands, f.tracker, BeadId.make("work")).pipe(
         Effect.provide(
           Layer.merge(
             f.layer,
@@ -47,7 +51,7 @@ it.effect("completed actors request self retirement without making acknowledgeme
           )
         )
       )
-      if (fault === "none") yield* operation
+      if (fault === "none" || fault === "unfinished") yield* operation
       else yield* Effect.flip(operation)
       expect(calls).toHaveLength(["unfinished", "foreign", "token", "name"].includes(fault) ? 0 : 1)
       for (const args of calls) {
@@ -59,6 +63,26 @@ it.effect("completed actors request self retirement without making acknowledgeme
       expect(f.raw("work").metadata["dalph.result"]).toBeUndefined()
       expect(f.events).not.toContain("native-close:session")
     }
+  })
+)
+it.effect("strict retirement refuses an unfinished actor before any acknowledgement", () =>
+  Effect.gen(function* () {
+    const f = yield* nativeFixture
+    yield* acknowledgeActorRetirement(f.config, f.commands, f.tracker, BeadId.make("work")).pipe(
+      Effect.provide(
+        Layer.merge(
+          f.layer,
+          ConfigProvider.layer(
+            ConfigProvider.fromUnknown({
+              GC_SESSION_ID: "session",
+              GC_SESSION_NAME: "own-runtime",
+              GC_INSTANCE_TOKEN: "own-token"
+            })
+          )
+        )
+      ),
+      Effect.flip
+    )
   })
 )
 

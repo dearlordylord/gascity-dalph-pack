@@ -16,6 +16,7 @@ export interface Command {
   readonly args: ReadonlyArray<string>
   readonly cwd?: string
   readonly timeout: Duration.Duration
+  readonly onOutput?: (stream: "stdout" | "stderr", text: string) => void
 }
 
 // Injectable operating-system port; tests exercise failure custody without monkey-patching globals.
@@ -48,10 +49,14 @@ export const makeCommandRunner = (control: ProcessControl) =>
             let stdout = ""
             let stderr = ""
             child.stdout?.on("data", (data: Buffer) => {
-              stdout += data.toString()
+              const text = data.toString()
+              stdout += text
+              command.onOutput?.("stdout", text)
             })
             child.stderr?.on("data", (data: Buffer) => {
-              stderr += data.toString()
+              const text = data.toString()
+              stderr += text
+              command.onOutput?.("stderr", text)
             })
             child.once("error", (error) =>
               resume(Effect.fail(new CommandFailure({ command: command.executable, message: error.message })))

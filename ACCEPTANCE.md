@@ -497,3 +497,19 @@ verdict, worktree and branch remain. The test never calls review.gate manually
 or writes workflow approval/result facts. There is no pending review-check at
 this cut; its process-stop proof is inapplicable. Coverage belongs to the paired
 `native-review-restart-city.test.ts` scenarios.
+
+## Completed actor drain acknowledgement
+
+An actor holds its exact native claim and session identity. When preparation,
+review preparation, qualification or integration closes its own node, the actor
+requests public `gc runtime drain-ack --json`. The response must name that actor.
+An unfinished or deferred integration does not request retirement; missing or
+foreign session identity fails closed. An acknowledgement records a request and
+cannot establish stopped writers, publication or cleanup. A lost response remains
+a failure. Idle claim polling uses native `hook --claim --drain-ack --json` so Gas
+City can retire an empty draining seat. No pack process census is introduced.
+
+`test/native-actor-retirement.test.ts` covers completed versus deferred work,
+foreign/missing identities, foreign replies, lost replies and strict unfinished
+refusal. Native city acceptance retains the external lifecycle checks in the
+daily full stage; controlled tests do not prove its wall-clock performance.

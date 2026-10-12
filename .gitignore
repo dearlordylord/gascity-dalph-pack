@@ -9,3 +9,4 @@ coverage/
 *.tsbuildinfo
 .hapsland-local/
 .env*
+.quality/

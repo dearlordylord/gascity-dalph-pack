@@ -42,6 +42,7 @@
     "test/**/*.ts",
     "dashboard/**/*.ts",
     "vitest.config.ts",
+    "vitest.native.config.ts",
     "trial/*.ts"
   ],
   "exclude": [

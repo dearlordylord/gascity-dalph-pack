@@ -13,7 +13,7 @@ import { makeNativeWorkflow } from "../src/native/workflow.ts"
 import { makeNativeContinuation } from "../src/native/continuation.ts"
 import { makeNativeReview } from "../src/native/review.ts"
 import { NativeReviewVerdict } from "../src/native/review-contract.ts"
-import { acknowledgeActorRetirement } from "../src/native/actor-retirement.ts"
+import { acknowledgeActorRetirement, acknowledgeCompletedActor } from "../src/native/actor-retirement.ts"
 import { runtimeHeartbeat } from "../src/native/runtime-heartbeat.ts"
 import { nativePreflight } from "../src/native/preflight.ts"
 
@@ -128,6 +128,7 @@ const main = Effect.gen(function* () {
   }
   if (mode === "review-prepare") {
     yield* review.prepare(current)
+    yield* acknowledgeCompletedActor(config, commands, tracker, current.id)
     return
   }
   if (mode === "finish-fix") {
@@ -151,6 +152,7 @@ const main = Effect.gen(function* () {
     yield* workflow.check(current)
     yield* tracker.metadata(current.id, "gc.outcome", "pass")
     yield* tracker.close(current.id, "Exact independent candidate qualified")
+    yield* acknowledgeCompletedActor(config, commands, tracker, current.id)
     return
   }
   if (mode === "prepare") yield* workflow.prepare(current)
@@ -163,6 +165,8 @@ const main = Effect.gen(function* () {
     if (attempt) yield* Ref.set(commands.current, attempt.plan.attempt)
     yield* workflow.integrate(current)
   }
+  if (mode === "prepare" || mode === "integrate")
+    yield* acknowledgeCompletedActor(config, commands, tracker, current.id)
 })
 NodeRuntime.runMain(
   main.pipe(
