@@ -5,11 +5,62 @@ import { nativeFixture } from "./helpers/native-fixture.ts"
 import { NativeAttempt, NativeContract, NativeProposal } from "../src/native/contract.ts"
 import { bindNativeAttempt, nativeGroup } from "../src/native/identity.ts"
 import { correlatedSession, nativeSession, stoppedNativeSession } from "../src/native/session.ts"
-import { BeadId } from "../src/domain/shared.ts"
+import { BeadId, BoundaryFailure } from "../src/domain/shared.ts"
 import { RESULT, BASE } from "./helpers/workflow-fixture.ts"
 import { canonical } from "../src/delivery/files.ts"
 import { reconcileNativeAttempt } from "../src/native/reconcile.ts"
 import { makeNativeWorkflow } from "../src/native/workflow.ts"
+
+it.effect("native qualification and delivery reuse immutable facts from each fresh group", () =>
+  Effect.gen(function* () {
+    const f = yield* nativeFixture
+    yield* Effect.gen(function* () {
+      yield* f.workflow.prepare(yield* f.row("prepare"))
+      f.state.workHead = RESULT
+      f.branches.set("dalph/work/work", RESULT)
+      yield* f.workflow.finish(yield* f.row("work"), BeadId.make("session"))
+      const fact = f.tracker.fact
+      let proposalReads = 0
+      f.tracker.fact = (id, key, schema) => {
+        if (id === "work" && key === "native_proposal") proposalReads++
+        return id === "work" && key === "native_attempt"
+          ? Effect.fail(new BoundaryFailure({ message: "redundant immutable fact read" }))
+          : fact(id, key, schema)
+      }
+      yield* f.workflow.check(yield* f.row("work"))
+      // Completed producer history remains a fresh read at the session boundary.
+      expect(proposalReads).toBe(1)
+      yield* f.workflow.integrate(yield* f.row("delivery"))
+      expect(proposalReads).toBe(2)
+      expect(f.state.pushCalls).toBe(1)
+      expect(f.paths.size).toBe(0)
+    }).pipe(Effect.provide(f.layer))
+  })
+)
+
+it.effect("native qualification refuses missing owner facts despite copies and rereads on a new invocation", () =>
+  Effect.gen(function* () {
+    const f = yield* nativeFixture
+    yield* Effect.gen(function* () {
+      yield* f.workflow.prepare(yield* f.row("prepare"))
+      f.state.workHead = RESULT
+      f.branches.set("dalph/work/work", RESULT)
+      yield* f.workflow.finish(yield* f.row("work"), BeadId.make("session"))
+      const proposal = f.raw("work").metadata["dalph.native_proposal"] ?? ""
+      f.raw("delivery").metadata["dalph.native_proposal"] = proposal
+      for (const value of [undefined, "", "{}"]) {
+        if (value === undefined) delete f.raw("work").metadata["dalph.native_proposal"]
+        else f.raw("work").metadata["dalph.native_proposal"] = value
+        yield* Effect.flip(f.workflow.check(yield* f.row("work")))
+        expect(f.raw("work").metadata["dalph.result"]).toBeUndefined()
+        expect(f.state.pushCalls).toBe(0)
+      }
+      f.raw("work").metadata["dalph.native_proposal"] = proposal
+      yield* f.workflow.check(yield* f.row("work"))
+      expect(f.raw("work").metadata["dalph.result"]).toBeDefined()
+    }).pipe(Effect.provide(f.layer))
+  })
+)
 
 it.effect("native integration copies recover an interrupted ordinal in a fresh workflow before publication", () =>
   Effect.gen(function* () {

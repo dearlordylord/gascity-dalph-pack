@@ -21,6 +21,7 @@ import { publishSharedWorkspace } from "./shared-workspace.ts"
 import { isCandidateFactMetadata, isExecutionMetadata } from "./nodes.ts"
 import { reviewFactKey } from "./review-fact-key.ts"
 import { cleanupMayResume } from "./cleanup-resumption.ts"
+import { retainedFact } from "./retained-fact.ts"
 
 type Tracker = ReturnType<typeof makeTracker>
 export const makeNativeWorkflow = (
@@ -68,7 +69,7 @@ export const makeNativeWorkflow = (
     })
   )
   const attemptFor = Effect.fn("Native.attemptFor")(function* (work: Bead) {
-    const attempt = yield* tracker.fact(work.id, "native_attempt", NativeAttempt)
+    const attempt = yield* retainedFact(work, "native_attempt", NativeAttempt)
     if (!attempt || attempt.plan.bead !== work.id)
       return yield* new BoundaryFailure({ message: "native work has no exact immutable attempt" })
     if (canonical(attempt.contract) !== canonical(contract))
@@ -151,8 +152,8 @@ export const makeNativeWorkflow = (
       .map((row) => Number(row.metadata?.["gc.iteration"]))
       .filter(Number.isInteger)
     const round = Math.max(0, ...rounds)
-    const approved = yield* tracker.fact(
-      group.work.id,
+    const approved = yield* retainedFact(
+      group.work,
       reviewFactKey("native_approved", batch, round),
       NativeReviewVerdict
     )
@@ -177,7 +178,7 @@ export const makeNativeWorkflow = (
   const check = Effect.fn("Native.check")(function* (current: Bead) {
     const group = yield* nativeGroup(config, commands, current)
     const attempt = yield* attemptFor(group.work)
-    const proposal = yield* tracker.fact(group.work.id, "native_proposal", NativeProposal)
+    const proposal = yield* retainedFact(group.work, "native_proposal", NativeProposal)
     if (!proposal)
       return yield* new BoundaryFailure({ message: "missing native implementation proposal; no acceptance" })
     yield* stoppedNativeSession(config, commands, proposal, attempt, tracker)
@@ -197,11 +198,11 @@ export const makeNativeWorkflow = (
   const integrate = Effect.fn("Native.integrate")(function* (current: Bead) {
     const group = yield* nativeGroup(config, commands, current)
     const attempt = yield* attemptFor(group.work)
-    const proposal = yield* tracker.fact(group.work.id, "native_proposal", NativeProposal)
+    const proposal = yield* retainedFact(group.work, "native_proposal", NativeProposal)
     if (!proposal) return yield* new BoundaryFailure({ message: "native delivery has no correlated result" })
     yield* stoppedNativeSession(config, commands, proposal, attempt, tracker)
     const candidate = yield* reviewedCandidate(group, attempt, proposal, reviewBatch(current))
-    const result = yield* tracker.fact(group.work.id, "result", Result)
+    const result = yield* retainedFact(group.work, "result", Result)
     if (!result || result.commit !== candidate || result.attempt !== attempt.plan.attempt)
       return yield* new BoundaryFailure({ message: "changed native implementation requires fresh acceptance evidence" })
     const fs = yield* FileSystem.FileSystem

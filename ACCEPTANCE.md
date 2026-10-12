@@ -684,3 +684,12 @@ and retries retain the same immutable keys and contradiction guards. Controlled
 acceptance is mapped to `test/native-review-snapshot.test.ts` and the existing
 review safety, cleared-claim, changed-candidate and writer-custody tests; live
 city/review tests remain the composition proof.
+
+S3/S6 qualification and delivery obtain their own fresh native group and decode
+immutable attempt, proposal, approved verdict and accepted result from its exact
+work row. Missing or malformed required facts refuse; a fact published after the
+group read can only be adopted by a new invocation. Session and writer-stop
+observations, mutable cleanup evidence, Git and qualification remain fresh.
+Retries preserve immutable identity and never substitute another node's copy.
+Controlled acceptance maps to the native workflow snapshot tests in
+`test/native-workflow.test.ts`; native city tests retain the delivery proof.
