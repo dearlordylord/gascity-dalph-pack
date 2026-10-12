@@ -37,6 +37,14 @@ cities and their supervisors through public Gas City commands, and reconcile
 their retained custody before removing the fence. Keep the daily admission
 record. Fast checks remain available; no automatic full retry occurs.
 
+`test/quality/gate.test.ts` exercises cumulative deadlines, interruption
+finalizers, retained fences, daily admission after success or failure and
+next-day admission using controlled command ports, isolated temporary directories
+and TestClock. These tests run inside fast and launch no native cities or full
+quality subprocesses. Real command-group interruption remains covered by
+`test/quality/command.test.ts`; neither test establishes detached native writer
+shutdown or a successful full native acceptance duration.
+
 ## Included checks
 
 | Boundary | Check |
