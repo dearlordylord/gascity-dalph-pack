@@ -11,6 +11,7 @@ import { makeStages } from "../../src/delivery/stages.ts"
 import { makeWorkflow } from "../../src/delivery/workflow.ts"
 import { runCommand } from "../../src/quality/command.ts"
 import { BoundaryFailure } from "../../src/domain/shared.ts"
+import { operationalRead } from "../../src/native/operational-read.ts"
 
 export const nativeClaimBoundary =
   <E, R>(
@@ -214,6 +215,21 @@ export const nativeTrackerFixture = Effect.gen(function* () {
         }
         if (args[0] === "mise") return "controlled project qualification"
         if (args[0] === "gc") {
+          // Tracker observations are native authority, not project-writer effects.
+          // Keep mutations and Git commands on the guarded path below.
+          if (operationalRead(args)) {
+            const observed = yield* runCommand({
+              executable: "env",
+              args: [...env.slice(1), `GC_AGENT=fixture/dalph.${state.role}`, ...args],
+              ...(cwd ? { cwd } : {}),
+              timeout: timeout ?? Duration.seconds(30)
+            }).pipe(
+              Effect.mapError(
+                (error) => new BoundaryFailure({ message: `native tracker observation failed: ${String(error)}` })
+              )
+            )
+            return observed.stdout.trim()
+          }
           if (args.includes("metadata-cas")) {
             state.casCalls++
             state.casKeys.push(args.find((arg) => arg.startsWith("--key=")) ?? "")

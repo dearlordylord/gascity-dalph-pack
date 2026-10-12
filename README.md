@@ -33,7 +33,7 @@ mise exec node@24.20.0 -- node dist/native.js launch
 Retain the returned `workflow_id`. After a restart, use
 `mise exec node@24.20.0 -- node dist/native.js resume <workflow-id>`.
 Launch creates a new workflow; preflight and resume do not launch another root.
-The independent native reviewer owns at most two semantic rounds. Infrastructure
+The independent native reviewer owns at most four semantic rounds. Infrastructure
 failures retain their current round and exact recovery resources.
 
 ## Legacy four-task demo
