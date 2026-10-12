@@ -566,6 +566,17 @@ required for live provider and public session lifecycle acceptance.
 
 ### Workspace-scoped native pool discovery
 
+After a deterministic preparation, review preparation, qualification or
+integration actor loses its process while its native assignment remains,
+Gas City's default work discovery recovers assigned in-progress/ready work
+before routed fresh work. These four roles do not override `work_query` or
+`scale_check`: native assignee resolution, readiness, adoption and demand remain
+native policy. Their guarded project effects use the claimed node's immutable
+resource facts, not the actor's current directory. An uncertain effect still
+requires reconciliation before retry. The controlled configuration check proves
+delegation to native defaults; daily native restart/delivery acceptance owns
+actual recovery and must not be inferred from the configuration assertion.
+
 When an assigned in-progress candidate is blocked and an unassigned ready
 candidate exists in the same workspace, discovery returns both in native priority
 order, preserving `blocked_by`. Gas City's hook filters and selects candidates;

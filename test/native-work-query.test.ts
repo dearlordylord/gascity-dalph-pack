@@ -5,6 +5,10 @@ import { parse } from "smol-toml"
 import { runCommand } from "../src/quality/command.ts"
 
 const Query = Schema.Struct({ work_query: Schema.String })
+const NativeDefaults = Schema.Struct({
+  work_query: Schema.optionalKey(Schema.String),
+  scale_check: Schema.optionalKey(Schema.String)
+})
 const Response = Schema.Struct({ args: Schema.Array(Schema.String), output: Schema.String, fail: Schema.Boolean })
 
 it.live(
@@ -14,6 +18,12 @@ it.live(
       const fs = yield* FileSystem.FileSystem
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "dalph-query-" })
       const pack = yield* fs.realPath(".")
+      for (const role of ["native-prepare", "native-review-prepare", "native-qualifier", "native-integrator"]) {
+        const config = yield* fs.readFileString(`${pack}/agents/${role}/agent.toml`)
+        const defaults = yield* Schema.decodeUnknownEffect(NativeDefaults)(parse(config))
+        expect(defaults.work_query).toBeUndefined()
+        expect(defaults.scale_check).toBeUndefined()
+      }
       const helper = `${root}/native-ready-port.mjs`
       // Bundle the controlled command port once; every public-query subprocess stays small.
       yield* runCommand({

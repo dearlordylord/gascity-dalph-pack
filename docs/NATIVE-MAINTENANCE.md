@@ -6,6 +6,13 @@ pack does not run an additional general resource cleaner.
 
 ## Restored defaults
 
+The deterministic `native-prepare`, `native-review-prepare`, `native-qualifier`
+and `native-integrator` roles use Gas City's default work queries, including
+assigned-work crash recovery. They no longer replace that contract with an
+unassigned-only query. Native scale checks remain unchanged for every role.
+Interactive worker/reviewer queries retain only the necessary workspace
+discovery boundary described in [acceptance](../ACCEPTANCE.md).
+
 These former skips are removed: `beads-health`, `dolt-health`,
 `mol-dog-doctor`, `mol-dog-phantom-db`, `cascade-nudge-on-blocker-close`,
 `cross-rig-deps`, `gate-sweep`, `notify-on-human-gate-creation`,
