@@ -74,6 +74,7 @@ export const nativeTrackerFixture = Effect.gen(function* () {
   const env = [
     "env",
     `GC_HOME=${home}`,
+    `TMUX_TMPDIR=${join(root, "tmux")}`,
     `DOLT_ROOT_PATH=${home}`,
     "GC_BEADS=bd",
     "GC_BEADS_PROXIED_NATIVE=1",
