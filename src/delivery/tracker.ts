@@ -1,10 +1,11 @@
-import { Duration, Effect, Schedule, Schema } from "effect"
+import { Duration, Effect, Schema } from "effect"
 import * as HttpClient from "effect/http/HttpClient"
 import * as Request from "effect/http/HttpClientRequest"
 import * as Response from "effect/http/HttpClientResponse"
 import { type BeadId, BoundaryFailure } from "../domain/shared.ts"
 import type { RuntimeConfig } from "./config.ts"
 import { nativeTrackerArgs } from "../native/tracker-command.ts"
+import { acknowledgeNativeMetadata } from "../native/metadata-acknowledgement.ts"
 import { canonical } from "./files.ts"
 import { Bead, Claim, verifyCity } from "./tracker-observation.ts"
 import type { makeCommands } from "./command.ts"
@@ -13,7 +14,6 @@ export { Bead } from "./tracker-observation.ts"
 export type Commands = Effect.Success<typeof makeCommands>
 const BOUNDARY_SECONDS = 60
 const CLAIM_SECONDS = 120
-const ACK_OBSERVATIONS = 10
 const Status = Schema.Struct({ status: Schema.String })
 
 export const makeTracker = (config: RuntimeConfig, commands: Commands, nativeClient?: HttpClient.HttpClient) => {
@@ -53,36 +53,11 @@ export const makeTracker = (config: RuntimeConfig, commands: Commands, nativeCli
       return yield* new BoundaryFailure({ message: "tracker task has foreign or missing native store scope" })
     return current
   })
-  const acknowledgedBead = Effect.fn("Tracker.acknowledgedBead")(function* (id: BeadId) {
-    if (config.executionVersion !== "native-v1") return yield* bead(id)
-    const current = yield* commands
-      .execute(config.root, trackerArgs(["env", "GC_NO_API=1", ...gc, "beads", "show", id, "--format=json"]))
-      .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Bead))))
-    if (current.id !== id)
-      return yield* new BoundaryFailure({ message: "tracker acknowledgement returned another bead" })
-    return current
-  })
-  const acknowledge = Effect.fn("Tracker.acknowledge")(function* (id: BeadId, key: string, value: string) {
-    const message = `durable metadata not acknowledged: ${key}`
-    const observe = acknowledgedBead(id).pipe(
-      Effect.flatMap((current) =>
-        current.metadata?.[key] === value ? Effect.void : Effect.fail(new BoundaryFailure({ message }))
-      )
-    )
-    yield* config.executionVersion === "native-v1"
-      ? observe.pipe(
-          Effect.retry({
-            schedule: Schedule.recurs(ACK_OBSERVATIONS),
-            while: (error) => error._tag === "BoundaryFailure" && error.message === message
-          })
-        )
-      : observe
-  })
   const metadata = Effect.fn("Tracker.metadata")(function* (id: BeadId, key: string, value: string) {
     const current = (yield* bead(id)).metadata?.[key]
     if (current === value) return
     if (current !== undefined) return yield* new BoundaryFailure({ message: `contradictory durable metadata: ${key}` })
-    yield* commands.execute(
+    const response = yield* commands.execute(
       config.root,
       trackerArgs([
         ...gc,
@@ -96,7 +71,10 @@ export const makeTracker = (config: RuntimeConfig, commands: Commands, nativeCli
         "--json"
       ])
     )
-    yield* acknowledge(id, key, value)
+    if (config.executionVersion === "native-v1")
+      yield* acknowledgeNativeMetadata(response, id, `rig:${config.rig}`, key)
+    else if ((yield* bead(id)).metadata?.[key] !== value)
+      return yield* new BoundaryFailure({ message: `durable metadata not acknowledged: ${key}` })
   })
   const fact = <A>(id: BeadId, key: string, schema: Schema.ConstraintDecoder<A, never>) =>
     Effect.gen(function* () {
@@ -128,19 +106,23 @@ export const makeTracker = (config: RuntimeConfig, commands: Commands, nativeCli
         Duration.seconds(BOUNDARY_SECONDS)
       )
       .pipe(
+        Effect.tap((response) =>
+          config.executionVersion === "native-v1"
+            ? acknowledgeNativeMetadata(response, id, `rig:${config.rig}`, `dalph.${key}`)
+            : Effect.void
+        ),
         Effect.as(false),
         Effect.catch((error) =>
           Effect.gen(function* () {
+            if (error._tag !== "CommandRejected") return yield* Effect.fail(error)
             const observed = yield* bead(id)
-            if (error._tag !== "CommandRejected" || observed.metadata?.[`dalph.${key}`] !== encoded)
-              return yield* Effect.fail(error)
+            if (observed.metadata?.[`dalph.${key}`] !== encoded) return yield* Effect.fail(error)
             return true
           })
         )
       )
     if (reconciled) return
-    if (config.executionVersion === "native-v1") yield* acknowledge(id, `dalph.${key}`, encoded)
-    else if ((yield* bead(id)).metadata?.[`dalph.${key}`] !== encoded)
+    if (config.executionVersion !== "native-v1" && (yield* bead(id)).metadata?.[`dalph.${key}`] !== encoded)
       return yield* new BoundaryFailure({ message: `durable fact not acknowledged: ${key}` })
   })
   const close = Effect.fn("Tracker.close")(function* (id: BeadId, reason: string) {

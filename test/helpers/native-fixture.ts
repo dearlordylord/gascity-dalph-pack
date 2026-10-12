@@ -132,6 +132,15 @@ export const nativeFixture = Effect.gen(function* () {
           const key = args.find((arg) => arg.startsWith("--key="))?.slice(6)
           if (key && !/^[a-zA-Z_][a-zA-Z0-9_./]*$/.test(key))
             return yield* new BoundaryFailure({ message: "native metadata key is invalid" })
+          yield* fixture.commands.execute(root, args, cwd, timeout, logs)
+          return JSON.stringify({
+            schema_version: "1",
+            ok: true,
+            bead_id: args[args.indexOf("metadata-cas") + 1],
+            store_ref: `rig:${config.rig}`,
+            key,
+            outcome: fixture.state.casAcknowledged ? "swapped" : "conflict"
+          })
         }
         if (args.includes("session") && args.includes("close")) {
           const id = String(args[args.indexOf("close") + 1])

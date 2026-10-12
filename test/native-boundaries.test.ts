@@ -74,14 +74,13 @@ it.effect("an applied native conditional write cannot be acknowledged by another
     const execute = f.commands.execute
     f.commands.execute = (root, args, cwd, timeout, logs) =>
       execute(root, args, cwd, timeout, logs).pipe(
-        Effect.tap(() => {
-          if (args.includes("metadata-cas")) f.nativeState.wrongRead = true
-          return Effect.void
-        })
+        Effect.map((response) =>
+          args.includes("metadata-cas") ? JSON.stringify({ ...JSON.parse(response), bead_id: "foreign" }) : response
+        )
       )
     yield* Effect.gen(function* () {
       const failure = yield* Effect.flip(f.tracker.metadata(BeadId.make("work"), "exact_ack", "value"))
-      expect(String(failure)).toContain("acknowledgement returned another bead")
+      expect(String(failure)).toContain("acknowledgement names another bead")
       expect(f.raw("work").metadata.exact_ack).toBe("value")
       expect(f.raw("work").status).toBe("open")
       expect(f.state.pushCalls).toBe(0)

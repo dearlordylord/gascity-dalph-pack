@@ -638,3 +638,17 @@ City can retire an empty draining seat. No pack process census is introduced.
 foreign/missing identities, foreign replies, lost replies and strict unfinished
 refusal. Native city acceptance retains the external lifecycle checks in the
 full stage; controlled tests do not prove its wall-clock performance.
+
+For a native immutable fact, the pack first reads the exact bead and refuses a
+contradictory retained value. It then calls public `gc beads metadata-cas` with
+the exact bead, store, key, expected empty value and requested next value.
+Gas City's version1 receipt must name that bead/store/key and report `swapped`
+or `already_next`; this acknowledges the durable write without another show.
+The native primitive owns atomic comparison and same-store already-next readback.
+Conflict, malformed/version-mismatched or foreign receipts fail closed, even
+with exit0 and an applied value. Only a lost command response permits a fresh
+exact read to reconcile that value; an unapplied write or failed read remains
+failed. No mutation is repeated during reconciliation. Legacy acknowledgement
+and mutable lifecycle/custody reads remain unchanged. Controlled tracker tests
+map each outcome, identity refusal and ambiguous before/after-commit case;
+native city tests remain the live composition proof.
