@@ -28,10 +28,10 @@ it.effect("native qualification and delivery reuse immutable facts from each fre
           : fact(id, key, schema)
       }
       yield* f.workflow.check(yield* f.row("work"))
-      // Completed producer history remains a fresh read at the session boundary.
-      expect(proposalReads).toBe(1)
+      // Completed producer history comes from the fresh writer row at the session boundary.
+      expect(proposalReads).toBe(0)
       yield* f.workflow.integrate(yield* f.row("delivery"))
-      expect(proposalReads).toBe(2)
+      expect(proposalReads).toBe(0)
       expect(f.state.pushCalls).toBe(1)
       expect(f.paths.size).toBe(0)
     }).pipe(Effect.provide(f.layer))

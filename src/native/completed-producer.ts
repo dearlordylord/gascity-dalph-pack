@@ -7,6 +7,7 @@ import { NativeAttempt, NativeProposal, type NativeSession } from "./contract.ts
 import { completedReassignedWork } from "./completed-work.ts"
 import { proposalMatchesAttempt } from "./proposal-identity.ts"
 import { ephemeralPoolSession } from "./pool-policy.ts"
+import { retainedFact } from "./retained-fact.ts"
 
 const historyMatches = (original: Bead, session: typeof NativeSession.Type) =>
   original.status === "closed" && original.metadata?.["gc.session_id"] === session.id
@@ -42,8 +43,8 @@ export const completedReassignedProducer = Effect.fn("Native.completedReassigned
   if (!immutableProducerMatches(proposal, attempt, session))
     return yield* new BoundaryFailure({ message: "completed producer immutable identity is contradictory" })
   const original = yield* tracker.bead(attempt.plan.bead)
-  const retainedAttempt = yield* tracker.fact(original.id, "native_attempt", NativeAttempt)
-  const retainedProposal = yield* tracker.fact(original.id, "native_proposal", NativeProposal)
+  const retainedAttempt = yield* retainedFact(original, "native_attempt", NativeAttempt)
+  const retainedProposal = yield* retainedFact(original, "native_proposal", NativeProposal)
   if (!retainedHistoryMatches(original, session, retainedAttempt, retainedProposal, attempt, proposal))
     return yield* new BoundaryFailure({ message: "completed native producer history is unproven" })
   yield* completedReassignedWork(

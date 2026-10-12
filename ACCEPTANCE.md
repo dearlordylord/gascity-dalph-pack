@@ -693,3 +693,11 @@ observations, mutable cleanup evidence, Git and qualification remain fresh.
 Retries preserve immutable identity and never substitute another node's copy.
 Controlled acceptance maps to the native workflow snapshot tests in
 `test/native-workflow.test.ts`; native city tests retain the delivery proof.
+
+S3/S6 completed producer correlation reads the writer freshly, then decodes
+its immutable proposal (and, for reassignment, attempt) from that exact row.
+Closed status, reverse session binding and current claim remain required;
+missing, malformed or contradictory history refuses. The snapshot is local to
+this correlation call. Existing cleared-claim and reassigned-producer cases in
+`test/native-workflow.test.ts` cover rejection and retry; its immutable-read
+regression covers the absence of redundant fact point reads.

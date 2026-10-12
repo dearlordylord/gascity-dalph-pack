@@ -10,6 +10,7 @@ import { nativeSession } from "./session-observation.ts"
 import { completedReassignedProducer } from "./completed-producer.ts"
 import { proposalMatchesAttempt } from "./proposal-identity.ts"
 import { waitForNativeRetirement } from "./retirement.ts"
+import { retainedFact } from "./retained-fact.ts"
 export { nativeSession } from "./session-observation.ts"
 
 /** The native claim stamp is distinct from a pool's spawn trigger; empty means cleared. */
@@ -33,7 +34,7 @@ const correlateClaim = Effect.fn("Native.correlateClaim")(function* (
   if (writer.status !== "closed" && claim.current_claim_bead_id === attempt.plan.bead) return
   if (writer.status !== "closed" || contradictsClaim(claim, writer.id))
     return yield* new BoundaryFailure({ message: "native current claim does not name this attempt" })
-  const retained = yield* tracker.fact(writer.id, "native_proposal", NativeProposal)
+  const retained = yield* retainedFact(writer, "native_proposal", NativeProposal)
   if (canonical(retained) !== canonical(proposal))
     return yield* new BoundaryFailure({ message: "cleared native claim has no exact completed proposal history" })
 })
