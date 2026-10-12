@@ -30,13 +30,11 @@ Short verification CLIs compile their current TypeScript entry with esbuild
 before execution, avoiding repeated tsx module-loading overhead. Their ignored
 JavaScript bundles are build outputs; every invocation executes the verifier.
 Full adds the real Gas City
-acceptance suite, with at most six file workers and four concurrent tests per
-file. Every test owns its city, supervisor home, tracker database, tmux socket
+acceptance suite, with at most two file workers. Every test owns its city,
+supervisor home, tracker database, tmux socket
 directory, API port, target Git repository and retained evidence. The current
-suite has ten cases; the scheduling configuration bounds concurrent tests to
-24 even if more cases are added. Independent cases run concurrently, including
-the review and restart cases previously serialized inside their files. These
-limits govern qualification fixtures; application concurrency is unchanged.
+suite has ten cases; tests within each file run sequentially. This limit governs
+qualification fixtures; application concurrency is unchanged.
 Native scenarios remain
 unchanged in `vitest.native.config.ts`; they are not part of routine fast runs.
 Retain each full result and diagnose its failed boundary through focused checks

@@ -29,7 +29,9 @@ export const makeNativeCity = (fault: boolean | string = false) =>
     const fs = yield* FileSystem.FileSystem
     const commands = yield* makeCommands
     const root = yield* fs.makeTempDirectory({ prefix: "dalph-native-acceptance-" })
-    yield* Effect.log(`Native acceptance evidence retained at ${root}`)
+    yield* Effect.log(
+      `Native acceptance evidence retained at ${root} (review=${reviewFault}, deliveryFaults=${deliveryFaults})`
+    )
     const sourcePack = yield* fs.realPath(".")
     const pack = join(root, "pack")
     yield* fs.makeDirectory(pack)
