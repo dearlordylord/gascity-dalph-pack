@@ -26,7 +26,7 @@ export const observeHumanContinuation = Effect.fn("NativeTrial.humanContinuation
         ? Effect.succeed(all)
         : Effect.fail(new BoundaryFailure({ message: "human continuation pending" }))
     }),
-    Effect.retry({ schedule: Schedule.spaced("1 second").pipe(Schedule.upTo({ duration: "15 minutes" })) })
+    Effect.retry({ schedule: Schedule.spaced("5 seconds").pipe(Schedule.upTo({ duration: "15 minutes" })) })
   )
   const batch = rows.filter((row) => row.metadata?.["gc.root_bead_id"] === first.workflow_id)
   yield* assertContinuationEvidence(rows, first.workflow_id, work, attempt)

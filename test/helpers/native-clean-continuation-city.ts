@@ -43,7 +43,7 @@ export const observeCleanHumanContinuation = Effect.fn("NativeTrial.cleanHumanCo
         ? Effect.succeed(all)
         : Effect.fail(new BoundaryFailure({ message: "clean human delivery pending" }))
     ),
-    Effect.retry({ schedule: Schedule.spaced("1 second").pipe(Schedule.upTo({ duration: "15 minutes" })) })
+    Effect.retry({ schedule: Schedule.spaced("5 seconds").pipe(Schedule.upTo({ duration: "15 minutes" })) })
   )
   const retained = rows.find((row) => row.id === work)
   const attempt = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(NativeAttempt))(encodedAttempt)

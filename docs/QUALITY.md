@@ -43,7 +43,8 @@ root. Its `native-beads-trace.jsonl` records native Beads command durations and
 call sites for focused latency diagnosis. This fixture observation does not
 change pack runtime behavior, scenario assertions or production configuration.
 Clean-delivery and review-settlement tests poll their final state every five
-seconds. Each observation still reads the native authority freshly; the existing
+seconds, including exhausted and clean human continuation batches. Each
+observation still reads the native authority freshly; the existing
 deadlines and final assertions remain unchanged. This reduces fixture read load
 without changing runtime admission or claim timing.
 Retain each full result and diagnose its failed boundary through focused checks
