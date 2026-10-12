@@ -44,6 +44,7 @@ const freePort = Effect.tryPromise(
 export const nativeTrackerFixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem
   const root = yield* fs.makeTempDirectory({ prefix: "s9-native-" })
+  yield* Effect.log(`Native tracker acceptance evidence retained at ${root}`)
   const city = join(root, "city")
   const repo = join(root, "repo")
   const home = join(root, "home")

@@ -3,7 +3,7 @@ import { expect, it } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import { join } from "node:path"
 import { makeCommands } from "../src/delivery/command.ts"
-import { AttemptId, BirthTicks } from "../src/domain/shared.ts"
+import { AttemptId, BirthTicks, ProcessId } from "../src/domain/shared.ts"
 import { parseProcessStat } from "../src/delivery/process-observation.ts"
 
 const provide = <A, E, R>(effect: Effect.Effect<A, E, R | FileSystem.FileSystem>) =>
@@ -113,15 +113,28 @@ it.live(
   () =>
     provide(
       Effect.gen(function* () {
-        const { commands, fs, root } = yield* fixture
+        const { fs, root } = yield* fixture
         const attempt = AttemptId.make("escaped-attempt")
-        yield* Ref.set(commands.current, attempt)
         const stdout = join(root, "escaped.stdout")
+        // Exercise real liveness for the child this fixture spawned. Other host
+        // processes are outside this test; unreadable census cases have controlled tests.
+        const scopedFs = {
+          ...fs,
+          readDirectory: (path: string) =>
+            path === "/proc"
+              ? fs.readFileString(stdout).pipe(
+                  Effect.flatMap((pid) => Schema.decodeUnknownEffect(ProcessId)(Number(pid))),
+                  Effect.map((pid) => [String(pid)])
+                )
+              : fs.readDirectory(path)
+        }
+        const commands = yield* makeCommands.pipe(Effect.provideService(FileSystem.FileSystem, scopedFs))
+        yield* Ref.set(commands.current, attempt)
         const program =
           "const{spawn}=require('node:child_process');const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true,stdio:'ignore'});process.stdout.write(String(child.pid));setInterval(()=>{},1000)"
         yield* Effect.acquireRelease(Effect.void, () =>
           Effect.gen(function* () {
-            const pid = Number(yield* fs.readFileString(stdout))
+            const pid = yield* Schema.decodeUnknownEffect(ProcessId)(Number(yield* fs.readFileString(stdout)))
             yield* Effect.sync(() => {
               try {
                 process.kill(pid, "SIGKILL")
@@ -134,7 +147,7 @@ it.live(
         expect(
           String(
             yield* Effect.flip(
-              commands.execute(root, [process.execPath, "-e", program], root, Duration.millis(200), {
+              commands.execute(root, [process.execPath, "-e", program], root, Duration.seconds(1), {
                 stdout,
                 stderr: join(root, "escaped.stderr")
               })
@@ -142,7 +155,7 @@ it.live(
           )
         ).toContain("descendants still live")
         expect(String(yield* Effect.flip(commands.reconcile(root, attempt)))).toContain("live writers")
-        const pid = Number(yield* fs.readFileString(stdout))
+        const pid = yield* Schema.decodeUnknownEffect(ProcessId)(Number(yield* fs.readFileString(stdout)))
         yield* Effect.sync(() => process.kill(pid, "SIGKILL"))
         yield* Effect.sleep("50 millis")
         yield* commands.reconcile(root, attempt)
