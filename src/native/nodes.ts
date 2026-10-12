@@ -8,6 +8,13 @@ export function isImplementationMetadata(metadata: Readonly<Record<string, strin
   return metadata["dalph.phase"] === "work" && isExecutionMetadata(metadata)
 }
 
+/** Exact candidate copies belong to executable preparation, implementation and delivery leaves. */
+export function isCandidateFactMetadata(metadata: Readonly<Record<string, string>>): boolean {
+  return (
+    ["prepare", "work", "qualify", "deliver"].includes(metadata["dalph.phase"] ?? "") && isExecutionMetadata(metadata)
+  )
+}
+
 /** The logical native review budget owner retains identity when subject phase is mirrored. */
 export function isReviewControlMetadata(metadata: Readonly<Record<string, string>>): boolean {
   return (

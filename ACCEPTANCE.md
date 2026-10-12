@@ -659,3 +659,15 @@ and mutable lifecycle/custody reads remain unchanged. Controlled tracker tests
 map each outcome, replay, empty/missing/conflicting keys, identity refusal and
 ambiguous before/after-commit case;
 native city tests remain the live composition proof.
+
+Qualification records exact native candidate copies only on executable
+prepare/work/qualify/deliver leaves. Observing an integration generation records
+its ordinal fact on the same leaves; native controls and review/fix leaves receive
+no new copies. Original result, candidate plan, publication and cleanup proofs
+remain authoritative. A partial copy followed by retry retains identical payloads;
+a conflicting selected-leaf copy refuses without overwrite. Historical copies on
+excluded nodes remain untouched. Remote advance and restart still produce the
+second integration ordinal and one successful publication, as covered by
+`test/candidate-refresh.test.ts`. `test/native-workflow.test.ts` covers selected
+leaves, excluded controls, partial replay and retained old copies. This reduces
+write fan-out; controlled tests do not establish live timing or full acceptance.

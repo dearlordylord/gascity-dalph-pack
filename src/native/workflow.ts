@@ -18,7 +18,7 @@ import { NativeReviewVerdict } from "./review-contract.ts"
 import { reviewBatch } from "./review-correlation.ts"
 import { reviewWritersStopped } from "./review-writers.ts"
 import { publishSharedWorkspace } from "./shared-workspace.ts"
-import { isExecutionMetadata } from "./nodes.ts"
+import { isCandidateFactMetadata, isExecutionMetadata } from "./nodes.ts"
 import { reviewFactKey } from "./review-fact-key.ts"
 import { cleanupMayResume } from "./cleanup-resumption.ts"
 
@@ -52,7 +52,7 @@ export const makeNativeWorkflow = (
       const attempt = yield* attemptFor(group.work)
       const plan = yield* tracker.fact(current.id, "candidate_plan", Plan)
       if (!plan) return yield* new BoundaryFailure({ message: "native candidate lost resource correlation" })
-      for (const node of group.rows)
+      for (const node of group.rows.filter((row) => isCandidateFactMetadata(row.metadata)))
         yield* tracker.record(node.id, `native_integration_${ordinal}`, {
           task: attempt.task,
           root: attempt.root,
@@ -186,7 +186,7 @@ export const makeNativeWorkflow = (
     const candidate = yield* reviewedCandidate(group, attempt, proposal, reviewBatch(current))
     yield* stages.qualifiedTree(attempt.plan, candidate)
     yield* delivery.accept(group.work, attempt.plan, false)
-    for (const node of group.rows)
+    for (const node of group.rows.filter((row) => isCandidateFactMetadata(row.metadata)))
       yield* tracker.record(node.id, "native_candidate", {
         commit: candidate,
         attempt: proposal.attempt,

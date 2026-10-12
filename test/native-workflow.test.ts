@@ -9,6 +9,41 @@ import { BeadId } from "../src/domain/shared.ts"
 import { RESULT, BASE } from "./helpers/workflow-fixture.ts"
 import { canonical } from "../src/delivery/files.ts"
 import { reconcileNativeAttempt } from "../src/native/reconcile.ts"
+import { makeNativeWorkflow } from "../src/native/workflow.ts"
+
+it.effect("native integration copies recover an interrupted ordinal in a fresh workflow before publication", () =>
+  Effect.gen(function* () {
+    const f = yield* nativeFixture
+    yield* Effect.gen(function* () {
+      yield* f.workflow.prepare(yield* f.row("prepare"))
+      f.state.workHead = RESULT
+      f.branches.set("dalph/work/work", RESULT)
+      yield* f.workflow.finish(yield* f.row("work"), BeadId.make("session"))
+      yield* f.workflow.check(yield* f.row("work"))
+      const record = f.tracker.record
+      let copies = 0
+      f.tracker.record = (id, key, value) => {
+        if (key === "native_integration_1" && ++copies === 2)
+          return Effect.fail(new CommandRejected({ message: "ordinal copy interrupted", receipt: "/fixture/ordinal" }))
+        return record(id, key, value)
+      }
+      yield* Effect.flip(f.workflow.integrate(yield* f.row("delivery")))
+      const retained = [...f.rows.values()].flatMap((row) => {
+        const value = row.metadata["dalph.native_integration_1"]
+        return value === undefined ? [] : [value]
+      })
+      expect(retained).toHaveLength(1)
+      expect(f.state.pushCalls).toBe(0)
+      expect(f.paths.size).toBeGreaterThan(0)
+      const recovered = makeNativeWorkflow(f.config, f.contract, f.commands, f.tracker, f.git)
+      yield* recovered.integrate(yield* f.row("delivery"))
+      for (const id of ["prepare", "work", "delivery"])
+        expect(f.raw(id).metadata["dalph.native_integration_1"]).toBe(retained[0])
+      expect(f.state.pushCalls).toBe(1)
+      expect(f.paths.size).toBe(0)
+    }).pipe(Effect.provide(f.layer))
+  })
+)
 
 it.effect("native preparation retains executable attempt facts without copying them onto controls", () =>
   Effect.gen(function* () {
@@ -66,6 +101,95 @@ it.effect("native recovery refuses multiple occupied observations across a task 
       expect(f.paths.has(attempt.plan.path)).toBe(true)
       expect(f.events).not.toContain("native-close:session")
       expect(f.events).not.toContain("native-close:duplicate")
+    }).pipe(Effect.provide(f.layer))
+  })
+)
+
+it.effect(
+  "native candidate copies recover partial publication on selected leaves and preserve old control copies",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* nativeFixture
+      f.rows.set("qualification", {
+        ...f.raw("prepare"),
+        id: BeadId.make("qualification"),
+        metadata: { ...f.raw("prepare").metadata, "dalph.phase": "qualify" }
+      })
+      for (const [id, phase, kind] of [
+        ["scope-check", "deliver", "scope-check"],
+        ["review-copy", "review", "retry"],
+        ["fix-copy", "fix", "retry"]
+      ]) {
+        f.rows.set(String(id), {
+          ...f.raw("prepare"),
+          id: BeadId.make(String(id)),
+          metadata: {
+            ...f.raw("prepare").metadata,
+            "dalph.phase": String(phase),
+            "gc.kind": String(kind),
+            "dalph.native_candidate": "retained historical copy",
+            "dalph.native_integration_1": "retained historical integration"
+          }
+        })
+      }
+      for (const phase of ["review", "fix"]) {
+        f.rows.set(`fresh-${phase}`, {
+          ...f.raw("prepare"),
+          id: BeadId.make(`fresh-${phase}`),
+          metadata: { ...f.raw("prepare").metadata, "dalph.phase": phase, "gc.kind": "run" }
+        })
+      }
+      yield* Effect.gen(function* () {
+        yield* f.workflow.prepare(yield* f.row("prepare"))
+        f.state.workHead = RESULT
+        f.branches.set("dalph/work/work", RESULT)
+        yield* f.workflow.finish(yield* f.row("work"), BeadId.make("session"))
+        const record = f.tracker.record
+        let interrupted = false
+        f.tracker.record = (id, key, value) => {
+          if (id === "qualification" && key === "native_candidate" && !interrupted) {
+            interrupted = true
+            return Effect.fail(new CommandRejected({ message: "copy interrupted", receipt: "/fixture/copy" }))
+          }
+          return record(id, key, value)
+        }
+        yield* Effect.flip(f.workflow.check(yield* f.row("work")))
+        const retained = f.raw("work").metadata["dalph.native_candidate"]
+        expect(retained).toBeDefined()
+        expect(f.raw("qualification").metadata["dalph.native_candidate"]).toBeUndefined()
+        yield* f.workflow.check(yield* f.row("work"))
+        yield* f.workflow.integrate(yield* f.row("delivery"))
+        for (const id of ["prepare", "work", "qualification", "delivery"]) {
+          expect(f.raw(id).metadata["dalph.native_candidate"]).toBe(retained)
+          expect(f.raw(id).metadata["dalph.native_integration_1"]).toBeDefined()
+        }
+        for (const id of ["scope-check", "review-copy", "fix-copy"]) {
+          expect(f.raw(id).metadata["dalph.native_candidate"]).toBe("retained historical copy")
+          expect(f.raw(id).metadata["dalph.native_integration_1"]).toBe("retained historical integration")
+        }
+        expect(f.raw("control").metadata["dalph.native_candidate"]).toBeUndefined()
+        expect(f.raw("control").metadata["dalph.native_integration_1"]).toBeUndefined()
+        for (const id of ["fresh-review", "fresh-fix"]) {
+          expect(f.raw(id).metadata["dalph.native_candidate"]).toBeUndefined()
+          expect(f.raw(id).metadata["dalph.native_integration_1"]).toBeUndefined()
+        }
+        expect(f.state.pushCalls).toBe(1)
+        expect(f.paths.size).toBe(0)
+      }).pipe(Effect.provide(f.layer))
+    })
+)
+
+it.effect("native qualification refuses a conflicting selected-leaf candidate without overwriting it", () =>
+  Effect.gen(function* () {
+    const f = yield* nativeFixture
+    yield* Effect.gen(function* () {
+      yield* f.workflow.prepare(yield* f.row("prepare"))
+      f.state.workHead = RESULT
+      yield* f.workflow.finish(yield* f.row("work"), BeadId.make("session"))
+      f.raw("delivery").metadata["dalph.native_candidate"] = "conflicting selected copy"
+      yield* Effect.flip(f.workflow.check(yield* f.row("work")))
+      expect(f.raw("delivery").metadata["dalph.native_candidate"]).toBe("conflicting selected copy")
+      expect(f.state.pushCalls).toBe(0)
     }).pipe(Effect.provide(f.layer))
   })
 )

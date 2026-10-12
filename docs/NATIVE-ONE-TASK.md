@@ -82,6 +82,10 @@ before provisioning; retained attempts keep their original Base and contract.
 The product identity is the pair `(workflow root, task slot)`, with one immutable
 attempt, Base, owned worktree and proposed/qualified commit. Native implementation,
 check and delivery nodes carry `dalph.native_attempt` and `dalph.native_candidate`.
+Candidate and integration-generation copies remain on executable preparation,
+implementation, qualification and delivery leaves. Controls and review/fix leaves
+receive no new copies; retained historical copies are preserved. Original result,
+candidate-plan, publication and cleanup facts remain the recovery authority.
 The implementation proposal records its actual native session. Candidate checks
 require exact session/task/worktree correlation plus fresh stopped-session and
 process observations before recording an accepted result.
