@@ -28,7 +28,9 @@ for (const fault of ["converge", "blocking", "transport", "malformed"]) {
           if (fault === "converge" ? !settled : control?.status !== "closed" || scope?.status !== "closed")
             return yield* new BoundaryFailure({ message: `${fault} native review pending` })
           return { rows, work, control }
-        }).pipe(Effect.retry({ schedule: Schedule.spaced("1 second").pipe(Schedule.upTo({ duration: "15 minutes" })) }))
+        }).pipe(
+          Effect.retry({ schedule: Schedule.spaced("5 seconds").pipe(Schedule.upTo({ duration: "15 minutes" })) })
+        )
         const reviews = observed.rows.filter(
           (row) => row.metadata?.["dalph.phase"] === "review" && isExecutionMetadata(row.metadata)
         )

@@ -38,7 +38,7 @@ it.live(
         )
           return yield* new BoundaryFailure({ message: "native delivery pending" })
         return { rows, delivery, scope }
-      }).pipe(Effect.retry({ schedule: Schedule.spaced("1 second").pipe(Schedule.upTo({ duration: "540 seconds" })) }))
+      }).pipe(Effect.retry({ schedule: Schedule.spaced("5 seconds").pipe(Schedule.upTo({ duration: "540 seconds" })) }))
       const work = delivered.rows.find((row) => row.metadata?.["dalph.native_settled"])
       expect(delivered.scope?.metadata?.["gc.outcome"]).toBe("pass")
       expect(delivered.delivery.metadata?.["gc.outcome"]).toBe("pass")
