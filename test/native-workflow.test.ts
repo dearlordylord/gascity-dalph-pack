@@ -27,6 +27,57 @@ it.effect("replayed historical native proposals preserve their original durable 
   })
 )
 
+it.effect("native pool spawn trigger never replaces the actual claim or completed proposal history", () =>
+  Effect.gen(function* () {
+    for (const fault of [
+      "none",
+      "missing",
+      "foreign",
+      "owner",
+      "workspace",
+      "closed-missing",
+      "closed-foreign"
+    ] as const) {
+      const f = yield* nativeFixture
+      yield* Effect.gen(function* () {
+        yield* f.workflow.prepare(yield* f.row("prepare"))
+        f.state.workHead = RESULT
+        f.raw("session").metadata["gc.trigger_bead_id"] = "unrelated-spawn"
+        if (fault === "missing") delete f.raw("session").metadata.current_claim_bead_id
+        if (fault === "foreign") f.raw("session").metadata.current_claim_bead_id = "other-work"
+        if (fault === "owner") f.raw("work").metadata["gc.session_id"] = "foreign-session"
+        if (fault === "workspace") f.raw("session").metadata.work_dir = "/foreign"
+        if (fault === "closed-missing" || fault === "closed-foreign") f.raw("work").status = "closed"
+        if (fault === "closed-foreign") f.raw("session").metadata.current_claim_bead_id = "other-work"
+        const finish = () => f.row("work").pipe(Effect.flatMap((row) => f.workflow.finish(row, BeadId.make("session"))))
+        if (fault !== "none") {
+          yield* Effect.flip(finish())
+          expect(f.raw("work").metadata["dalph.native_proposal"]).toBeUndefined()
+          expect(f.raw("work").status).toBe(fault.startsWith("closed-") ? "closed" : "open")
+          return
+        }
+        yield* finish()
+        const retained = f.raw("work").metadata["dalph.native_proposal"]
+        const proposal = yield* f.tracker.fact(BeadId.make("work"), "native_proposal", NativeProposal)
+        const attempt = yield* f.tracker.fact(BeadId.make("work"), "native_attempt", NativeAttempt)
+        if (!proposal || !attempt) throw new Error("missing completed attempt")
+        delete f.raw("session").metadata.current_claim_bead_id
+        yield* finish()
+        f.raw("session").metadata.current_claim_bead_id = ""
+        yield* finish()
+        expect(f.raw("work").metadata["dalph.native_proposal"]).toBe(retained)
+        expect(f.raw("session").metadata["gc.trigger_bead_id"]).toBe("unrelated-spawn")
+        expect(f.state.modelCalls).toBe(0)
+        f.raw("session").metadata.current_claim_bead_id = "work"
+        const contradictory = canonical({ ...proposal, commit: BASE })
+        f.raw("work").metadata["dalph.native_proposal"] = contradictory
+        yield* Effect.flip(correlatedSession(f.config, f.commands, proposal, attempt, f.tracker))
+        expect(f.raw("work").metadata["dalph.native_proposal"]).toBe(contradictory)
+      }).pipe(Effect.provide(f.layer))
+    }
+  })
+)
+
 it.effect(
   "native-v1 prepares qualified Base, correlates a native result and delivers through existing safe integration",
   () =>
@@ -239,10 +290,10 @@ it.effect("native session correlation and fresh stopped proof fail closed", () =
       const attempt = yield* f.tracker.fact(BeadId.make("work"), "native_attempt", NativeAttempt)
       const proposal = yield* f.tracker.fact(BeadId.make("work"), "native_proposal", NativeProposal)
       if (!attempt || !proposal) throw new Error("missing fixture attempt")
-      for (const key of ["template", "work_dir", "gc.trigger_bead_id"] as const) {
+      for (const key of ["template", "work_dir", "current_claim_bead_id"] as const) {
         const original = f.raw("session").metadata[key] ?? ""
         f.raw("session").metadata[key] = "foreign"
-        yield* Effect.flip(correlatedSession(f.config, f.commands, proposal, attempt))
+        yield* Effect.flip(correlatedSession(f.config, f.commands, proposal, attempt, f.tracker))
         f.raw("session").metadata[key] = original
       }
       for (const changed of [
@@ -251,7 +302,7 @@ it.effect("native session correlation and fresh stopped proof fail closed", () =
         { ...proposal, base: Schema.decodeUnknownSync(NativeProposal.fields.base)("c".repeat(40)) },
         { ...proposal, attempt: Schema.decodeUnknownSync(NativeProposal.fields.attempt)("foreign") }
       ])
-        yield* Effect.flip(correlatedSession(f.config, f.commands, changed, attempt))
+        yield* Effect.flip(correlatedSession(f.config, f.commands, changed, attempt, f.tracker))
       f.raw("session").status = "closed"
       f.nativeState.legacyClose = false
       f.nativeState.stopFailure = true

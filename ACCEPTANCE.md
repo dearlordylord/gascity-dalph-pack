@@ -500,6 +500,25 @@ this cut; its process-stop proof is inapplicable. Coverage belongs to the paired
 
 ## Completed actor drain acknowledgement
 
+### Pool claim at proposal publication
+
+Gas City starts a pool seat with spawn trigger A; its public hook claims B and
+records session `current_claim_bead_id=B` and B's `gc.session_id`. B has its
+immutable attempt and exact workspace. When that actor finishes B, fresh public
+session/task reads must confirm the actual claim, template and workspace before
+publishing B's proposal. A is not closed or changed. Missing/foreign claim stamps,
+a foreign task-to-session link or wrong workspace refuse proposal and closure.
+After B closes with a retained proposal, retry with a cleared claim stamp may
+reuse that exact proposal and original session binding, without a new commit or
+model invocation. A closed task with a matching stamp still requires its exact
+retained proposal; missing or contradictory history refuses without publication.
+A contradictory nonempty current claim still refuses.
+
+`test/native-workflow.test.ts` maps these facts to controlled proposal tests.
+Native retirement, reassignment and review correlation must separately migrate
+from spawn-trigger assumptions; this proposal slice alone does not qualify those
+remaining boundaries or a new live run.
+
 The actor's exact self-hook current/claim commands delegate session and claim
 custody to Gas City. Failed native calls retain output without creating a
 project-writer stopped receipt. Operator targets, extra operands, copied session

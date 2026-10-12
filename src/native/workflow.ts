@@ -121,7 +121,7 @@ export const makeNativeWorkflow = (
       return yield* new BoundaryFailure({
         message: "retained native proposal differs from the current writer or commit"
       })
-    yield* correlatedSession(config, commands, proposal, attempt)
+    yield* correlatedSession(config, commands, proposal, attempt, tracker)
     if (!retained) yield* tracker.record(current.id, "native_proposal", proposal)
     yield* tracker.close(
       current.id,

@@ -58,7 +58,8 @@ export const nativeFixture = Effect.gen(function* () {
       session_origin: "ephemeral",
       template: contract.agent,
       work_dir: "/fixture/worktrees/work-work",
-      "gc.trigger_bead_id": "work"
+      "gc.trigger_bead_id": "work",
+      current_claim_bead_id: "work"
     }
   })
   const settings = {
