@@ -16,7 +16,7 @@
     "dashboard:test": "vitest run test/dashboard.test.ts",
     "dashboard:serve": "tsx scripts/serve-dashboard.ts",
     "dashboard:test:browser": "tsx dashboard/browser.test.ts",
-    "build": "esbuild src/quality/lint-plugin.ts --platform=node --format=esm --outfile=dist/quality/lint-plugin.js && esbuild scripts/delivery.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/delivery.js && esbuild scripts/native.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/native.js && pnpm dashboard:build",
+    "build": "esbuild src/quality/lint-plugin.ts --platform=node --format=esm --outfile=dist/quality/lint-plugin.js && esbuild scripts/delivery.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/delivery.js && esbuild scripts/native.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/native.js && esbuild scripts/verify-schema-boundaries.ts trial/verify-product.ts --bundle --platform=node --format=esm --outdir=dist --entry-names=[name] && pnpm dashboard:build",
     "typecheck": "pnpm typecheck:tsc && pnpm typecheck:effect",
     "typecheck:tsc": "node node_modules/@typescript/native/bin/tsc -p tsconfig.json --noEmit",
     "typecheck:effect": "effect-tsgo diagnostics --project tsconfig.json --strict --severity error,warning",
@@ -32,14 +32,14 @@
     "test:coverage": "vitest run --coverage",
     "test:native": "vitest run --config vitest.native.config.ts",
     "test:unit": "vitest run",
-    "verify:effect-cohort": "tsx scripts/verify-effect-cohort.ts",
-    "verify:schema-boundaries": "tsx scripts/verify-schema-boundaries.ts",
+    "verify:effect-cohort": "esbuild scripts/verify-effect-cohort.ts --bundle --platform=node --format=esm --outfile=dist/verify-effect-cohort.js && node dist/verify-effect-cohort.js",
+    "verify:schema-boundaries": "esbuild scripts/verify-schema-boundaries.ts --bundle --platform=node --format=esm --outfile=dist/verify-schema-boundaries.js && node dist/verify-schema-boundaries.js",
     "prepare": "husky",
     "trial:render-city": "tsx scripts/render-city.ts",
     "check": "tsx scripts/check.ts",
     "example:typecheck": "node node_modules/@typescript/native/bin/tsc -p examples/expenses/tsconfig.json",
     "example:test": "pnpm --dir examples/expenses test",
-    "example:oracle": "tsx trial/verify-product.ts \"$PWD/examples/expenses\""
+    "example:oracle": "esbuild trial/verify-product.ts --bundle --platform=node --format=esm --outfile=dist/verify-product.js && node dist/verify-product.js \"$PWD/examples/expenses\""
   },
   "pnpm": {
     "onlyBuiltDependencies": [

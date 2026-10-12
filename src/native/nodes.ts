@@ -1,6 +1,6 @@
 /** Native controls mirror subject metadata but are not executable project-task leaves. */
 export function isExecutionMetadata(metadata: Readonly<Record<string, string>>): boolean {
-  return !["ralph", "spec", "retry", "check", "scope"].includes(metadata["gc.kind"] ?? "")
+  return !["ralph", "spec", "retry", "check", "scope", "scope-check"].includes(metadata["gc.kind"] ?? "")
 }
 
 /** Product implementation nodes exclude native check and specification controls. */

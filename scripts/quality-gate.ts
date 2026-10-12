@@ -6,6 +6,9 @@ const MILLISECONDS_PER_SECOND = 1000
 const FAST_SECONDS = 60
 const FULL_SECONDS = 600
 const DISPLAY_DECIMALS = 2
+const STATIC_CONCURRENCY = 2
+const STATIC_START = 2
+const STATIC_END = 7
 const stages = [
   "verify:effect-cohort",
   "build",
@@ -37,8 +40,6 @@ export const makeQualityGate =
               "Previous full run has unproven native custody; reconcile its exact cities before removing .quality/full-incomplete.json"
           })
         const started = new Date(yield* Clock.currentTimeMillis).toISOString()
-        const day = started.split("T")[0]
-        yield* fs.writeFileString(`${directory}/full-${day}.started`, started, { flag: "wx" })
         yield* fs.writeFileString(
           fence,
           JSON.stringify({
@@ -48,14 +49,22 @@ export const makeQualityGate =
           }),
           { flag: "wx" }
         )
+        yield* fs.writeFileString(`${directory}/full-starts.jsonl`, JSON.stringify({ started }) + "\n", { flag: "a" })
       }
-      for (const stage of selected) {
+      const runStage = Effect.fn("Quality.runStage")(function* (stage: string) {
         const started = yield* Clock.currentTimeMillis
         yield* Console.log(`Checking ${stage}`)
         yield* execute({ executable: "pnpm", args: [stage], timeout: budget, onOutput })
         const elapsed = (yield* Clock.currentTimeMillis) - started
         yield* Console.log(`Passed ${stage} in ${(elapsed / MILLISECONDS_PER_SECOND).toFixed(DISPLAY_DECIMALS)}s`)
-      }
+      })
+      for (const stage of selected.slice(0, STATIC_START)) yield* runStage(stage)
+      // Build owns generated bundles; subsequent static checks only observe the candidate.
+      yield* Effect.forEach(selected.slice(STATIC_START, STATIC_END), runStage, {
+        concurrency: STATIC_CONCURRENCY,
+        discard: true
+      })
+      for (const stage of selected.slice(STATIC_END)) yield* runStage(stage)
       if (mode === "all") yield* fs.remove(fence)
     }).pipe(Effect.timeout(budget))
   }

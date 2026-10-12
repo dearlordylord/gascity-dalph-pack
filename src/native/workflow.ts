@@ -80,7 +80,15 @@ export const makeNativeWorkflow = (
     const group = yield* nativeGroup(config, commands, current)
     const attempt = yield* bindNativeAttempt(config, contract, commands, tracker, git, group.work)
     yield* Ref.set(commands.current, attempt.plan.attempt)
-    yield* Effect.forEach(group.rows, (node) => tracker.record(node.id, "native_attempt", attempt), { concurrency: 2 })
+    yield* Effect.forEach(
+      group.rows.filter(
+        (row) =>
+          ["prepare", "qualify", "deliver"].includes(row.metadata["dalph.phase"] ?? "") &&
+          isExecutionMetadata(row.metadata)
+      ),
+      (node) => tracker.record(node.id, "native_attempt", attempt),
+      { concurrency: 2 }
+    )
     yield* Effect.forEach(
       group.rows.filter(
         (row) => ["review", "fix"].includes(row.metadata["dalph.phase"] ?? "") && isExecutionMetadata(row.metadata)

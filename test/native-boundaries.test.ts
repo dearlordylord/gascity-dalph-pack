@@ -41,6 +41,7 @@ it.effect("native boundaries require immutable attempt and exact implementation 
       expect(isImplementationMetadata({})).toBe(false)
       expect(isImplementationMetadata({ "dalph.phase": "work", "gc.kind": "spec" })).toBe(false)
       expect(isImplementationMetadata({ "dalph.phase": "work", "gc.kind": "ralph" })).toBe(false)
+      expect(isImplementationMetadata({ "dalph.phase": "work", "gc.kind": "scope-check" })).toBe(false)
       yield* f.workflow.claim()
       const execute = f.commands.execute
       f.commands.execute = (root, args, cwd, timeout, logs) =>

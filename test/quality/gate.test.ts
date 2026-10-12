@@ -13,6 +13,33 @@ const fixture = Effect.gen(function* () {
   return { fs, directory: `${root}/quality` }
 })
 
+it.effect("a failed static check interrupts its concurrent sibling before coverage starts", () =>
+  Effect.gen(function* () {
+    const { directory } = yield* fixture
+    const started = yield* Deferred.make<void>()
+    const stopped = yield* Ref.make(false)
+    const calls: string[] = []
+    const gate = makeQualityGate((command) => {
+      const stage = command.args[0] ?? ""
+      calls.push(stage)
+      if (stage === "typecheck")
+        return Deferred.succeed(started, undefined).pipe(
+          Effect.andThen(Effect.never),
+          Effect.ensuring(Ref.set(stopped, true))
+        )
+      if (stage === "verify:schema-boundaries")
+        return Deferred.await(started).pipe(
+          Effect.andThen(Effect.fail(new CommandFailure({ command: stage, message: "controlled rejection" })))
+        )
+      return accepted
+    }, directory)
+    expect((yield* Effect.flip(gate("fast", output)))._tag).toBe("CommandFailure")
+    expect(yield* Ref.get(stopped)).toBe(true)
+    expect(calls.slice(0, 2)).toEqual(["verify:effect-cohort", "build"])
+    expect(calls).not.toContain("test:coverage")
+  }).pipe(Effect.provide(NodeServices.layer), Effect.scoped)
+)
+
 it.effect("fast deadline covers cumulative stages and finalizes the interrupted child", () =>
   Effect.gen(function* () {
     const { directory, fs } = yield* fixture
@@ -70,26 +97,26 @@ it.effect("full timeout retains custody and prevents another full while fast rem
   }).pipe(Effect.provide(NodeServices.layer), Effect.scoped)
 )
 
-it.effect("failed and successful full simulations both consume daily admission", () =>
+it.effect("a reconciled failed full and a successful full allow another admission on the same day", () =>
   Effect.gen(function* () {
     for (const fails of [true, false]) {
       const { directory, fs } = yield* fixture
       let calls = 0
       const gate = makeQualityGate(() => {
         calls++
-        return fails ? Effect.fail(new CommandFailure({ command: "controlled", message: "rejected" })) : accepted
+        return fails && calls === 1
+          ? Effect.fail(new CommandFailure({ command: "controlled", message: "rejected" }))
+          : accepted
       }, directory)
       if (fails) {
         expect((yield* Effect.flip(gate("all", output)))._tag).toBe("CommandFailure")
         yield* fs.remove(`${directory}/full-incomplete.json`)
       } else yield* gate("all", output)
       const consumed = calls
-      yield* Effect.flip(gate("all", output))
-      expect(calls).toBe(consumed)
+      yield* gate("all", output)
+      expect(calls).toBeGreaterThan(consumed)
       expect(yield* fs.exists(`${directory}/full-incomplete.json`)).toBe(false)
-      yield* TestClock.adjust("1 day")
-      yield* makeQualityGate(() => accepted, directory)("all", output)
-      expect(yield* fs.exists(`${directory}/full-incomplete.json`)).toBe(false)
+      expect((yield* fs.readFileString(`${directory}/full-starts.jsonl`)).trim().split("\n")).toHaveLength(2)
     }
   }).pipe(Effect.provide(NodeServices.layer), Effect.scoped)
 )

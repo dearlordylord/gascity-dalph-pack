@@ -13,11 +13,11 @@ ports. Put property tests in `*.property.test.ts`.
 
 During implementation and handoff use `pnpm check:fast`: the entire cycle has a
 60-second deadline, including static checks and 99% coverage of all production
-source. Run the full `pnpm check all` at most once per calendar day; its entire
-cycle, including native city acceptance, has a ten-minute deadline. Retain that
-day's result and diagnose failures with fast checks; do not repeat the full run.
+source. The full `pnpm check all`, including native city acceptance, has a
+ten-minute deadline. There is no calendar-day admission limit. Retain each
+result and diagnose a failure with a focused check before another full run.
 Treat limits as design constraints rather than suppressing diagnostics. Preserve
-native acceptance scenarios in the daily stage. See [quality](docs/QUALITY.md).
+native acceptance scenarios in the full stage. See [quality](docs/QUALITY.md).
 
 Hapsland reviews selected TypeScript source through the installed agent hooks.
 Use `hapsland doctor codex` to diagnose local readiness and `hapsland rules check`

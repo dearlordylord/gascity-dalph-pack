@@ -107,7 +107,7 @@ unfinished tracker/Git recovery records are preserved.
 ## Check or investigate
 
 - **Quality:** [quality harness](docs/QUALITY.md) documents `pnpm check:fast`
-  (60 seconds) and daily `pnpm check all` (10 minutes),
+  (60 seconds) and full `pnpm check all` (10 minutes),
   the 99% coverage floor, Effect diagnostics, source rules, and Hapsland.
 - **Checks:** [setup](docs/SETUP.md#checks) names the focused pack, application,
   and browser commands, including prerequisites and skipped-check limits.

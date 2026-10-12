@@ -2,7 +2,7 @@
 
 The pack maintainer uses `pnpm check:fast` during implementation and handoff.
 `pnpm check` defaults to that same fast cycle. Run `pnpm check all` (also
-`pnpm check-all` or `pnpm check:all`) at most once per calendar day. CI is
+`pnpm check-all` or `pnpm check:all`) for full acceptance. CI is
 intentionally absent.
 
 Prepare the pinned dependencies and native Gas City binary as described in
@@ -14,7 +14,9 @@ mise exec node@24.20.0 -- pnpm install --frozen-lockfile
 mise exec node@24.20.0 -- pnpm check:fast
 ```
 
-Both gates run stages in order and stop at the first failure. One deadline covers
+Both gates qualify dependencies and build first, then run independent static
+checks with concurrency two. Coverage, example checks and native acceptance
+follow in order. A failure interrupts sibling checks. One deadline covers
 the entire cycle: 60 seconds for fast, 600 seconds for full. Expiry interrupts
 the owned child process group; it never counts as a pass. Stage output streams
 live and each completed stage reports its elapsed time.
@@ -22,11 +24,16 @@ live and each completed stage reports its elapsed time.
 Fast runs every static check, controlled tests with 99% coverage of every
 production source file, and example checks. Controlled tests use at most four
 Vitest workers; this changes only test scheduling, not Dalph runtime behavior.
+Vitest persists source-keyed module transformations between runs. Every test
+and coverage measurement still executes; test outcomes are never reused.
+Short verification CLIs compile their current TypeScript entry with esbuild
+before execution, avoiding repeated tsx module-loading overhead. Their ignored
+JavaScript bundles are build outputs; every invocation executes the verifier.
 Full adds the real Gas City
 acceptance suite, with at most two fixture workers. Native scenarios remain
 unchanged in `vitest.native.config.ts`; they are not part of routine fast runs.
-Retain the daily full result and diagnose its failed boundary through fast checks
-instead of rerunning the full gate that day. A timeout ceiling is not evidence
+Retain each full result and diagnose its failed boundary through focused checks
+before another full run. A timeout ceiling is not evidence
 that the full suite successfully finishes inside it. Preparation or missing
 native tools are environment failures and do not count as qualification.
 
@@ -35,18 +42,18 @@ including review exhaustion and continuation. These local ceilings do not add
 time to the full gate: its one shared deadline still covers all fixtures and
 stages. A fixture timeout fails acceptance; no scenario or assertion is skipped.
 
-Full admission creates an exclusive `.quality/full-YYYY-MM-DD.started` record
-using the UTC calendar day; a second full run that day is refused. It also
-retains `.quality/full-incomplete.json` until all stages complete successfully.
+Full admission retains `.quality/full-incomplete.json` until all stages complete
+successfully and appends its start to `.quality/full-starts.jsonl`. There is no
+calendar-day admission limit; historical daily records do not block a new run.
 Failure or timeout leaves this fence: killing the test process does not prove
 that detached native cities stopped. Preserve fixture logs, stop the exact owned
 cities and their supervisors through public Gas City commands, and reconcile
-their retained custody before removing the fence. Keep the daily admission
-record. Fast checks remain available; no automatic full retry occurs.
+their retained custody before removing the fence. Preserve the start history.
+Fast checks remain available; no blind full retry occurs.
 
 `test/quality/gate.test.ts` exercises cumulative deadlines, interruption
-finalizers, retained fences, daily admission after success or failure and
-next-day admission using controlled command ports, isolated temporary directories
+finalizers, retained fences and same-day admission after success or reconciled
+failure using controlled command ports, isolated temporary directories
 and TestClock. These tests run inside fast and launch no native cities or full
 quality subprocesses. Real command-group interruption remains covered by
 `test/quality/command.test.ts`; neither test establishes detached native writer

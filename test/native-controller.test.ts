@@ -87,7 +87,7 @@ it.effect("S1/S6 public native launch and resume deliver one exact configured ta
       f.rows.set("delivery-scope", {
         id: BeadId.make("delivery-scope"),
         status: "closed",
-        metadata: { ...f.raw("delivery").metadata, "gc.kind": "scope" }
+        metadata: { ...f.raw("delivery").metadata, "gc.kind": "scope-check" }
       })
       delete f.raw("work").metadata["dalph.native_settled"]
       yield* controller.resume(BeadId.make("root"))

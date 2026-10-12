@@ -10,6 +10,36 @@ import { RESULT, BASE } from "./helpers/workflow-fixture.ts"
 import { canonical } from "../src/delivery/files.ts"
 import { reconcileNativeAttempt } from "../src/native/reconcile.ts"
 
+it.effect("native preparation retains executable attempt facts without copying them onto controls", () =>
+  Effect.gen(function* () {
+    const f = yield* nativeFixture
+    f.rows.set("qualification", {
+      ...f.raw("prepare"),
+      id: BeadId.make("qualification"),
+      metadata: { ...f.raw("prepare").metadata, "dalph.phase": "qualify" }
+    })
+    for (const kind of ["spec", "retry", "ralph", "check", "scope", "scope-check"]) {
+      f.rows.set(kind, {
+        ...f.raw("prepare"),
+        id: BeadId.make(kind),
+        metadata: { ...f.raw("prepare").metadata, "gc.kind": kind }
+      })
+    }
+    yield* Effect.gen(function* () {
+      yield* f.workflow.prepare(yield* f.row("prepare"))
+      const retained = f.raw("work").metadata["dalph.native_attempt"]
+      expect(retained).toBeDefined()
+      expect(f.raw("prepare").metadata["dalph.native_attempt"]).toBe(retained)
+      expect(f.raw("delivery").metadata["dalph.native_attempt"]).toBe(retained)
+      expect(f.raw("qualification").metadata["dalph.native_attempt"]).toBe(retained)
+      for (const kind of ["spec", "retry", "ralph", "check", "scope", "scope-check"])
+        expect(f.raw(kind).metadata["dalph.native_attempt"]).toBeUndefined()
+      yield* f.workflow.prepare(yield* f.row("prepare"))
+      expect(f.raw("work").metadata["dalph.native_attempt"]).toBe(retained)
+    }).pipe(Effect.provide(f.layer))
+  })
+)
+
 it.effect("native recovery refuses multiple occupied observations across a task ownership change", () =>
   Effect.gen(function* () {
     const f = yield* nativeFixture

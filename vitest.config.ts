@@ -1,7 +1,7 @@
 import { defineConfig } from "vitest/config"
 
 const MINIMUM_COVERAGE = 99
-/** Real city compatibility runs belong to the daily native acceptance stage. */
+/** Real city compatibility runs belong to the full native acceptance stage. */
 export const nativeAcceptanceFiles = [
   "test/native-city.test.ts",
   "test/native-*-city.test.ts",
@@ -13,6 +13,7 @@ export default defineConfig({
     include: ["test/**/*.test.ts"],
     exclude: nativeAcceptanceFiles,
     maxWorkers: 4,
+    fsModuleCache: true,
     reporters: ["verbose"],
     coverage: {
       provider: "v8",

@@ -543,7 +543,7 @@ separate fresh reads are not an atomic ownership snapshot.
 `test/native-session-stop.test.ts`, `test/native-retirement.test.ts`,
 `test/native-workflow.test.ts` and `test/native-historical-authority.test.ts`
 cover these producer stop/recovery boundaries. Controlled checks do not substitute
-for the daily live native acceptance. Review claim migration remains separate.
+for the full live native acceptance. Review claim migration remains separate.
 
 ### Review and fix pool claim identity
 
@@ -561,10 +561,20 @@ immutable attempt; a matching stamp cannot recreate missing history.
 
 `test/native-review.test.ts`, `test/native-review-safety.test.ts`,
 `test/native-resume-products.test.ts` and `test/native-shared-workspace.test.ts`
-exercise review, fix, stop and recovery boundaries. The native daily cases remain
+exercise review, fix, stop and recovery boundaries. The native full cases remain
 required for live provider and public session lifecycle acceptance.
 
 ### Workspace-scoped native pool discovery
+
+Preparation records the immutable attempt on its executable prepare,
+qualification and delivery leaves. The implementation retains its original
+binding; review/fix workspace publication retains their exact attempt facts.
+Native spec, retry, Ralph, check, scope and scope-check controls do not receive
+new copies of project attempt facts. Existing retained facts are not erased.
+Replay preserves leaf facts and still refuses changed attempts. Mirrored
+scope-check metadata never makes a control an executable implementation or
+delivery. Controlled prepare/recovery tests cover these facts; successful live
+duration remains a separate full acceptance requirement.
 
 After a deterministic preparation, review preparation, qualification or
 integration actor loses its process while its native assignment remains,
@@ -574,7 +584,7 @@ before routed fresh work. These four roles do not override `work_query` or
 native policy. Their guarded project effects use the claimed node's immutable
 resource facts, not the actor's current directory. An uncertain effect still
 requires reconciliation before retry. The controlled configuration check proves
-delegation to native defaults; daily native restart/delivery acceptance owns
+delegation to native defaults; full native restart/delivery acceptance owns
 actual recovery and must not be inferred from the configuration assertion.
 
 When an assigned in-progress candidate is blocked and an unassigned ready
@@ -604,7 +614,7 @@ controlled public-query command port: independent workspaces, controller demand,
 assigned recovery, assigned ready and failure propagation. These checks establish
 the query composition, not live native filtering or hook adoption. The existing
 two-result native delivery case remains the live cross-workspace proof in the
-daily full acceptance.
+full acceptance.
 
 The actor's exact self-hook current/claim commands delegate session and claim
 custody to Gas City. Failed native calls retain output without creating a
@@ -613,7 +623,7 @@ environments and shell wrappers do not qualify. Project commands, Git mutations
 and worktree cleanup retain their own guards. `test/native-hook-command.test.ts`
 covers accepted/rejected calls and a failed native boundary with retained output
 and no fabricated stopped-writer observation. Native city acceptance remains
-the external lifecycle proof in the daily full stage.
+the external lifecycle proof in the full stage.
 
 An actor holds its exact native claim and session identity. When preparation,
 review preparation, qualification or integration closes its own node, the actor
@@ -627,4 +637,4 @@ City can retire an empty draining seat. No pack process census is introduced.
 `test/native-actor-retirement.test.ts` covers completed versus deferred work,
 foreign/missing identities, foreign replies, lost replies and strict unfinished
 refusal. Native city acceptance retains the external lifecycle checks in the
-daily full stage; controlled tests do not prove its wall-clock performance.
+full stage; controlled tests do not prove its wall-clock performance.
