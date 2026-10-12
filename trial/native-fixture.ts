@@ -12,6 +12,7 @@ import { acknowledgeActorRetirement } from "../src/native/actor-retirement.ts"
 import { nativeGroup } from "../src/native/identity.ts"
 import { AbsolutePath } from "../src/domain/attempt.ts"
 import { BeadId, BoundaryFailure } from "../src/domain/shared.ts"
+import { commitFixtureChanges } from "./commit-fixture-changes.ts"
 
 // A controlled native provider, launched directly by Gas City. It never launches an agent CLI.
 const main = Effect.gen(function* () {
@@ -83,25 +84,7 @@ const main = Effect.gen(function* () {
     const facts = yield* review.context(work)
     yield* fs.writeFileString(`${attempt.plan.path}/native-review-fixed.ts`, `export const repaired = ${facts.round}\n`)
     yield* git.git(["add", "native-review-fixed.ts"], attempt.plan.path)
-    const changed = yield* git.git(["diff", "--cached", "--quiet"], attempt.plan.path).pipe(
-      Effect.as(false),
-      Effect.catchTag("CommandRejected", (error) => (error.exit === 1 ? Effect.succeed(true) : Effect.fail(error)))
-    )
-    if (changed)
-      yield* git.git(
-        [
-          "-c",
-          "user.name=Native Fixture",
-          "-c",
-          "user.email=native@local",
-          "-c",
-          "commit.gpgsign=false",
-          "commit",
-          "-m",
-          "native review fixes"
-        ],
-        attempt.plan.path
-      )
+    yield* commitFixtureChanges(git, attempt.plan.path, "native review fixes")
     yield* review.finishFix(work, session)
     yield* acknowledgeActorRetirement(config, commands, tracker, work.id)
     return
@@ -112,20 +95,7 @@ const main = Effect.gen(function* () {
   const filename = distinct ? `native-proof-${work.id}.ts` : "native-proof.ts"
   yield* fs.writeFileString(`${attempt.plan.path}/${filename}`, 'export const delivered = "native"\n')
   yield* git.git(["add", filename], attempt.plan.path)
-  yield* git.git(
-    [
-      "-c",
-      "user.name=Native Fixture",
-      "-c",
-      "user.email=native@local",
-      "-c",
-      "commit.gpgsign=false",
-      "commit",
-      "-m",
-      "native fixture implementation"
-    ],
-    attempt.plan.path
-  )
+  yield* commitFixtureChanges(git, attempt.plan.path, "native fixture implementation")
   yield* workflow.finish(work, session)
   yield* acknowledgeActorRetirement(config, commands, tracker, work.id)
 })
