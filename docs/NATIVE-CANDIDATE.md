@@ -61,7 +61,8 @@ export GC_BEADS_PROXIED_IDLE_TIMEOUT=0
 ```
 
 The renderer writes both choices into workspace.env. Continue normal setup
-with these exports present; changing an existing scope's shell environment
+with these exports present and the documented `--beads-transport proxied` init
+selection; changing an existing scope's shell environment
 does not replace its persisted proxy initialization policy.
 
 The qualified checks cover native/Bd frontier equality for persistent and

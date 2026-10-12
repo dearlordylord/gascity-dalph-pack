@@ -99,7 +99,7 @@ jq -n --arg agent "$DALPH_RIG/dalph.native-worker" \
     check:{command:["mise","exec","node@24.20.0","--","pnpm","test"],timeoutSeconds:300}}' \
   > "$DALPH_NATIVE_CONTRACT"
 mise exec node@24.20.0 -- pnpm exec tsx scripts/render-city.ts > "$DALPH_TRIAL_ROOT/city.generated.toml"
-gc init "$DALPH_CITY_ROOT" --file "$DALPH_TRIAL_ROOT/city.generated.toml" --beads-target local --beads-transport direct --no-start --skip-provider-readiness
+gc init "$DALPH_CITY_ROOT" --file "$DALPH_TRIAL_ROOT/city.generated.toml" --beads-target local --beads-transport proxied --no-start --skip-provider-readiness
 gc --city "$DALPH_CITY_ROOT" start
 ```
 
@@ -107,6 +107,11 @@ The sourced `DOLT_ROOT_PATH` confines Dolt identity to this trial. `GC_HOME`
 isolates the supervisor registry; `TMUX_TMPDIR` isolates native session state.
 Codex uses your existing authenticated environment. The template contains
 machine-path placeholders: pass the rendered file, not the template, to init.
+
+This setup selects Gas City's default provider-owned proxied transport. The
+native candidate's readiness reader requires this transport. Direct transport
+remains a Gas City escape hatch; it is not qualified by this pack's proxied
+native acceptance evidence.
 
 Inspect `gc --city "$DALPH_CITY_ROOT" rig list --json`. If the target rig is
 absent, register it:
@@ -169,8 +174,11 @@ Run from the pack with the prepared environment:
 mise exec node@24.20.0 -- pnpm check:fast
 ```
 
-Use the full `pnpm check all` at most once a day. The entire fast cycle is bounded
-by 60 seconds and full by ten minutes; a timeout is a failure, not qualification.
+Use `pnpm check:fast` during implementation. Run the full `pnpm check all` for
+acceptance; there is no calendar-day admission limit. Retain failures and
+diagnose the failed boundary with a focused check before another full run.
+The entire fast cycle is bounded by 60 seconds and full by ten minutes; a
+timeout is a failure, not qualification.
 
 Pack tests cover protocol, actual child custody, the Effect HTTP boundary, and
 native worktree refusal/idempotence. Native worktree checks require `gc`; an absent binary fails the check. Application checks run in the
