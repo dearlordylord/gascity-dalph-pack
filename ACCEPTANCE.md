@@ -1,5 +1,16 @@
 # Dalph pack on Gas City: accepted trial contract
 
+Native review/recovery validates unique session identities through at most four
+concurrent public boundary calls. Each session keeps its exact task reverse-link,
+template/workspace, terminal-status and fresh close-result checks. The whole
+gate waits for all children and their finalizers; it refuses missing, foreign,
+open or contradictory writers without cleanup or admission. An interrupted
+close retains its prior intent and reconciles through the same idempotent public
+close. Duplicate identical inventory rows collapse by ID; contradictory rows
+refuse before writer actions. This maps to native-session-parallel.test.ts and
+the existing native-review-safety/session-stop/workflow tests. The original
+live review/recovery scenarios remain mandatory.
+
 Native acceptance scheduling admits at most two isolated cases per worker
 and two workers, for at most four cities. Every existing scenario body and
 assertion executes; the gate retains its single 600-second deadline and
