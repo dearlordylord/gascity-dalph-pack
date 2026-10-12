@@ -228,6 +228,6 @@ for (const changed of [false, true]) {
           expect(work?.metadata?.["dalph.native_settled"]).toBeUndefined()
         } else expect(work?.metadata?.["dalph.result"]).toBeDefined()
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
-    1200000
+    600000
   )
 }

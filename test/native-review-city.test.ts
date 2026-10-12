@@ -74,6 +74,6 @@ for (const fault of ["converge", "blocking", "transport", "malformed"]) {
         }
         yield* Effect.log(`Observed native review ${fault}: ${rounds.join(",")} (${reviews.length} reviewer attempts)`)
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
-    fault === "blocking" ? 3060000 : 1020000
+    600000
   )
 }

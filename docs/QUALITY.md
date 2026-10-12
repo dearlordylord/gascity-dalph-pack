@@ -30,6 +30,11 @@ instead of rerunning the full gate that day. A timeout ceiling is not evidence
 that the full suite successfully finishes inside it. Preparation or missing
 native tools are environment failures and do not count as qualification.
 
+Individual native acceptance tests also have a ceiling of ten minutes or less,
+including review exhaustion and continuation. These local ceilings do not add
+time to the full gate: its one shared deadline still covers all fixtures and
+stages. A fixture timeout fails acceptance; no scenario or assertion is skipped.
+
 Full admission creates an exclusive `.quality/full-YYYY-MM-DD.started` record
 using the UTC calendar day; a second full run that day is refused. It also
 retains `.quality/full-incomplete.json` until all stages complete successfully.

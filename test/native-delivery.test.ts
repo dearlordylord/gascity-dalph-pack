@@ -112,5 +112,5 @@ it.live(
           original.metadata?.["dalph.result"]
         )
     }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
-  1500000
+  600000
 )
