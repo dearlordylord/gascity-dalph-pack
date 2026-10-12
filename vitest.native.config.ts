@@ -5,6 +5,8 @@ export default defineConfig({
   test: {
     include: nativeAcceptanceFiles,
     maxWorkers: 2,
+    maxConcurrency: 2,
+    sequence: { concurrent: true },
     reporters: ["verbose"]
   }
 })

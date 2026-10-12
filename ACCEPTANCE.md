@@ -1,5 +1,10 @@
 # Dalph pack on Gas City: accepted trial contract
 
+Native acceptance scheduling admits at most two isolated cases per worker
+and two workers, for at most four cities. Every existing scenario body and
+assertion executes; the gate retains its single 600-second deadline and
+incomplete custody fence. Only fixture scheduling changes.
+
 Native CLI packaging includes its pinned dependencies in the Node ESM artifact.
 An operator invokes the artifact from a directory without node_modules; an
 invalid operation still refuses before tracker or task writers, and the scoped

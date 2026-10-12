@@ -32,8 +32,9 @@ JavaScript bundles are build outputs; every invocation executes the verifier.
 Full adds the real Gas City
 acceptance suite, with at most two file workers. Every test owns its city,
 supervisor home, tracker database, tmux socket
-directory, API port, target Git repository and retained evidence. The current
-suite has ten cases; tests within each file run sequentially. This limit governs
+directory, API port, target Git repository and retained evidence. Each worker admits at most two concurrent cases, so at most four isolated
+cities run across the two workers. This replaces serial scheduling within a
+file; the scenario bodies and assertions are unchanged. This limit governs
 qualification fixtures; application concurrency is unchanged.
 Native scenarios remain
 unchanged in `vitest.native.config.ts`; they are not part of routine fast runs.
