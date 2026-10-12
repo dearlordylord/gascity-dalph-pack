@@ -69,6 +69,7 @@ export const nativeFixture = Effect.gen(function* () {
           Dir: "fixture",
           Provider: "fixture",
           StartCommand: "",
+          Lifecycle: "",
           WorkDir: "/fixture/worktrees",
           MaxActiveSessions: 2,
           MinActiveSessions: 0,
@@ -79,11 +80,23 @@ export const nativeFixture = Effect.gen(function* () {
           Dir: "fixture",
           Provider: "fixture",
           StartCommand: "",
+          Lifecycle: "",
           WorkDir: "/fixture/worktrees",
           MaxActiveSessions: 2,
           MinActiveSessions: 0,
           OptionDefaults: Schema.decodeUnknownSync(Schema.NullOr(Schema.Record(Schema.String, Schema.String)))(null)
-        }
+        },
+        ...["native-prepare", "native-review-prepare", "native-qualifier", "native-integrator"].map((Name) => ({
+          Name,
+          Dir: "fixture",
+          Provider: "",
+          StartCommand: `node native.js ${Name}`,
+          Lifecycle: "one_shot",
+          WorkDir: "/fixture",
+          MaxActiveSessions: 1,
+          MinActiveSessions: 0,
+          OptionDefaults: Schema.decodeUnknownSync(Schema.NullOr(Schema.Record(Schema.String, Schema.String)))(null)
+        }))
       ],
       Rigs: [{ Name: "fixture", MaxActiveSessions: 5 }],
       NamedSessions: [] as Array<{ Template: string; Dir: string }>,
@@ -94,6 +107,7 @@ export const nativeFixture = Effect.gen(function* () {
   }
   const state = {
     configured: true,
+    suspendedRole: "",
     wrongRead: false,
     readiness: true,
     runtime: "tmux 3.3a",
@@ -169,8 +183,20 @@ export const nativeFixture = Effect.gen(function* () {
           return JSON.stringify({
             agents: state.configured
               ? [
-                  { qualified_name: contract.agent, provider: contract.harness },
-                  { qualified_name: "fixture/dalph.native-reviewer", provider: "fixture" }
+                  {
+                    qualified_name: contract.agent,
+                    provider: contract.harness,
+                    suspended: state.suspendedRole === "native-worker"
+                  },
+                  {
+                    qualified_name: "fixture/dalph.native-reviewer",
+                    provider: "fixture",
+                    suspended: state.suspendedRole === "native-reviewer"
+                  },
+                  ...settings.config.Agents.filter((role) => role.StartCommand).map((role) => ({
+                    qualified_name: `${role.Dir}/dalph.${role.Name}`,
+                    suspended: state.suspendedRole === role.Name
+                  }))
                 ]
               : []
           })

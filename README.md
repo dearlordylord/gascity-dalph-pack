@@ -1,8 +1,9 @@
 # Gas City Dalph pack
 
 Gas City schedules a dependency graph with bounded native worker sessions.
-This pack delivers each task through an exact Git worktree, Codex,
-qualification, integration, ordinary push, and recoverable cleanup. A separate
+This pack delivers each task through an exact Git worktree, the configured
+native harness, independent bounded review/fix, qualification, integration,
+ordinary push and recoverable cleanup. A separate
 read-only dashboard shows the DAG, frontier, and current work.
 
 Gas City owns readiness, claims, and sessions. The pack supplies formulas and
@@ -13,9 +14,33 @@ starts after integration and cleanup, rather than after a model response.
 This is a pinned Linux prototype. Completed live trials include operator
 recovery from Beads timeouts; autonomous cold replay and low-latency dashboard
 updates are not established. Read [setup](docs/SETUP.md) before starting a fresh
-city, and [recovery](docs/RECOVERY.md) when a step stalls or an outcome is unknown.
+city. New native runs use the launch/resume instructions there and the
+[native maintenance boundaries](docs/NATIVE-MAINTENANCE.md). Use
+[legacy recovery](docs/RECOVERY.md) for an older workflow.
 
-## Start a four-task demo
+## Start a native task
+
+Prepare the pinned city and native contract through [setup](docs/SETUP.md).
+Then run from this repository:
+
+```sh
+. trial/env.sh
+mise exec node@24.20.0 -- node dist/native.js preflight
+export DALPH_NATIVE_TASK='Describe a concrete change and its acceptance checks'
+mise exec node@24.20.0 -- node dist/native.js launch
+```
+
+Retain the returned `workflow_id`. After a restart, use
+`mise exec node@24.20.0 -- node dist/native.js resume <workflow-id>`.
+Launch creates a new workflow; preflight and resume do not launch another root.
+The independent native reviewer owns at most two semantic rounds. Infrastructure
+failures retain their current round and exact recovery resources.
+
+## Legacy four-task demo
+
+This formula uses the retained `legacy-v1` adapter. The redesigned native
+multi-task trial and its dashboard acceptance are tracked separately; do not
+use this demo as evidence that the new native composition supports a diamond.
 
 1. Clone this repository and prepare the exact dependencies and isolated city
    using [setup](docs/SETUP.md). Use `examples/expenses` as the demo's starting
@@ -59,22 +84,25 @@ The formula adds the export features to that fixture.
 
 ## Use your own project
 
-Configure your model and reasoning settings in Codex before launching workers.
-The pack passes no model or reasoning overrides to `codex exec`; it uses the
-operator's Codex configuration.
+Configure your native provider, model and reasoning settings in Gas City and
+the selected harness before launching workers. The pack supplies no model or
+reasoning override. Use a matching qualified harness/version/readiness contract;
+missing capabilities fail visibly.
 
 Set `DALPH_TRIAL_ROOT`, `DALPH_TARGET_REPO`, `DALPH_RIG`, `DALPH_CITY_NAME`,
 `DALPH_CITY_ROOT`, `DALPH_TARGET_BRANCH`, and `DALPH_PROJECT_CONTRACT_PATH`
-before sourcing `trial/env.sh`. Follow the same setup with your clean target
-and normal remote. Author a formula with work/delivery pairs using
+before sourcing `trial/env.sh`. Follow the native setup with your clean target,
+normal remote and exact project check command. For a retained legacy workflow,
+author a formula with work/delivery pairs using
 `gc.run_target` (`dalph.worker` / `dalph.integrator`) and `dalph.phase`
 (`work` / `deliver`); each pair shares a `dalph.task` identity. Successor work
 steps depend on delivery steps. The project contract describes its build/test
 and product requirements; this prototype currently qualifies with `pnpm test`.
 
-Use an isolated city and worktree root per target project. This sample disables
-maintenance orders in its city template; review that choice before adapting
-it to a shared operational city.
+Use an isolated city and worktree root per target project. The city template
+keeps native health and lifecycle defaults and documents narrow destructive
+maintenance exceptions. Diagnostic event archives expire after 30 days;
+unfinished tracker/Git recovery records are preserved.
 
 ## Check or investigate
 

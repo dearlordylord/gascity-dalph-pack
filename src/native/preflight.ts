@@ -4,6 +4,7 @@ import type { RuntimeConfig } from "../delivery/config.ts"
 import type { Commands } from "../delivery/tracker.ts"
 import { NativeAgents, NativeBuild, NativeConfig, NativeProvider, type NativeContract } from "./contract.ts"
 import { validateRetiringPools } from "./pool-policy.ts"
+import { validateInstalledRoles } from "./installation.ts"
 
 const reject = (message: string) => Effect.fail(new BoundaryFailure({ message }))
 const READINESS_SECONDS = 30
@@ -21,7 +22,10 @@ const validateReviewCapacity = Effect.fn("Native.validateReviewCapacity")(functi
   agents: typeof NativeAgents.Type
 ) {
   const reviewer = contract.reviewer ?? `${config.rig}/dalph.native-reviewer`
-  if (reviewer === contract.agent || !agents.agents.some((entry) => entry.qualified_name === reviewer))
+  if (
+    reviewer === contract.agent ||
+    !agents.agents.some((entry) => entry.qualified_name === reviewer && !entry.suspended)
+  )
     return yield* reject("native reviewer must be a separate configured agent")
   const name = reviewer.slice(Math.max(reviewer.lastIndexOf("/"), reviewer.lastIndexOf(".")) + 1)
   const role = resolved.Agents.find((entry) => entry.Name === name && entry.Dir === config.rig)
@@ -39,7 +43,9 @@ const validateAgent = Effect.fn("Native.validateAgent")(function* (
   if (
     !agents.agents.some(
       (entry) =>
-        entry.qualified_name === contract.agent && (entry.provider ?? resolved.Workspace.Provider) === contract.harness
+        entry.qualified_name === contract.agent &&
+        !entry.suspended &&
+        (entry.provider ?? resolved.Workspace.Provider) === contract.harness
     )
   )
     return yield* reject("native agent identity is not configured")
@@ -69,6 +75,22 @@ const validatePermission = Effect.fn("Native.validatePermission")(function* (
   if (permission && !provider.resolved.permission_modes?.[permission])
     return yield* reject("unsupported native permission option; no launch authorized")
 })
+const validateInteractiveRoles = Effect.fn("Native.validateInteractiveRoles")(function* (
+  config: RuntimeConfig,
+  contract: NativeContract,
+  resolved: typeof NativeConfig.Type.config,
+  agent: AgentRole,
+  reviewer: AgentRole
+) {
+  if (!agent.MaxActiveSessions || agent.MaxActiveSessions > REVIEWER_SESSIONS)
+    return yield* reject("native implementation requires at most two sessions")
+  const reviewerProvider = reviewer.Provider || resolved.Workspace.Provider
+  if (reviewerProvider !== contract.harness)
+    return yield* reject("native reviewer harness lacks the selected qualification contract")
+  yield* validateRetiringPools([agent, reviewer], resolved.NamedSessions)
+  if ([agent, reviewer].some((entry) => entry.WorkDir !== config.worktrees))
+    return yield* reject("native implementation and reviewer workspace bases must equal the configured worktree root")
+})
 export const nativePreflight = Effect.fn("Native.preflight")(function* (
   config: RuntimeConfig,
   contract: NativeContract,
@@ -88,14 +110,14 @@ export const nativePreflight = Effect.fn("Native.preflight")(function* (
     .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(NativeAgents))))
   const agent = yield* validateAgent(config, contract, resolved, agents)
   const reviewRole = yield* validateReviewCapacity(config, contract, resolved, agents)
-  yield* validateRetiringPools([agent, reviewRole], resolved.NamedSessions)
-  if ([agent, reviewRole].some((entry) => entry.WorkDir !== config.worktrees))
-    return yield* reject("native implementation and reviewer workspace bases must equal the configured worktree root")
+  yield* validateInstalledRoles(config, resolved, agents)
+  yield* validateInteractiveRoles(config, contract, resolved, agent, reviewRole)
   yield* validateSafety(contract, resolved)
   const provider = yield* commands
     .execute(config.root, [...gc, "config", "explain", "--provider", contract.harness, "--json"])
     .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(NativeProvider))))
   yield* validatePermission(agent, provider)
+  yield* validatePermission(reviewRole, provider)
   const runtime = yield* commands.execute(config.root, ["tmux", "-V"])
   if (runtime !== contract.runtimeVersion) return yield* reject("native runtime version differs from qualification")
   const version = yield* commands.execute(config.root, [

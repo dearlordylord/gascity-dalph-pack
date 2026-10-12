@@ -136,6 +136,7 @@ it.effect("explicit agent provider and native permission configuration pass pref
     f.nativeState.permissionModes = { plan: "--permission-mode plan" }
     f.settings.config.Agents.forEach((agent) => {
       agent.OptionDefaults = { permission_mode: "plan" }
+      agent.Provider = ""
     })
     yield* nativePreflight(f.config, f.contract, f.commands).pipe(Effect.provide(f.layer))
   })
@@ -149,7 +150,10 @@ it.effect("native admission reads inherited provider and ignores metadata-less u
       if (args.includes("agent") && args.includes("list"))
         return Effect.succeed(
           JSON.stringify({
-            agents: [{ qualified_name: f.contract.agent }, { qualified_name: "fixture/dalph.native-reviewer" }]
+            agents: f.settings.config.Agents.map((role) => ({
+              qualified_name: `${role.Dir}/dalph.${role.Name}`,
+              suspended: false
+            }))
           })
         )
       if (args.includes("beads") && args.includes("list"))
@@ -165,13 +169,20 @@ it.effect("selected alternate native harness uses its own qualified version", ()
     const f = yield* nativeFixture
     const execute = f.commands.execute
     f.settings.config.Workspace.Provider = "claude"
+    f.settings.config.Agents.forEach((role) => {
+      role.Provider = "claude"
+    })
     f.commands.execute = (root, args, cwd, timeout, logs) => {
       if (args.includes("agent") && args.includes("list"))
         return Effect.succeed(
           JSON.stringify({
             agents: [
-              { qualified_name: f.contract.agent, provider: "claude" },
-              { qualified_name: "fixture/dalph.native-reviewer" }
+              { qualified_name: f.contract.agent, provider: "claude", suspended: false },
+              { qualified_name: "fixture/dalph.native-reviewer", suspended: false },
+              ...f.settings.config.Agents.filter((role) => role.StartCommand).map((role) => ({
+                qualified_name: `${role.Dir}/dalph.${role.Name}`,
+                suspended: false
+              }))
             ]
           })
         )

@@ -15,6 +15,7 @@ import { makeNativeReview } from "../src/native/review.ts"
 import { NativeReviewVerdict } from "../src/native/review-contract.ts"
 import { acknowledgeActorRetirement } from "../src/native/actor-retirement.ts"
 import { runtimeHeartbeat } from "../src/native/runtime-heartbeat.ts"
+import { nativePreflight } from "../src/native/preflight.ts"
 
 const INFRASTRUCTURE_EXIT = 75
 
@@ -22,6 +23,7 @@ const main = Effect.gen(function* () {
   const mode = yield* Schema.decodeUnknownEffect(
     Schema.Literals([
       "launch",
+      "preflight",
       "continue",
       "resume",
       "prepare",
@@ -50,6 +52,22 @@ const main = Effect.gen(function* () {
     projectCheck: contract.check
   }
   const commands = yield* makeNativeCommands
+  if (mode === "preflight") {
+    yield* nativePreflight(config, contract, commands)
+    const retainedWorktrees = yield* commands.execute(config.root, [
+      "git",
+      "--no-optional-locks",
+      "-C",
+      config.repo,
+      "worktree",
+      "list",
+      "--porcelain"
+    ])
+    yield* Console.log(
+      JSON.stringify({ ok: true, mode: "preflight", city: config.cityName, rig: config.rig, retainedWorktrees })
+    )
+    return
+  }
   const tracker = makeTracker(config, commands, yield* HttpClient.HttpClient)
   const git = makeGit(config, commands)
   const workflow = makeNativeWorkflow(config, contract, commands, tracker, git)

@@ -67,6 +67,7 @@ export const NativeConfig = Schema.Struct({
         Dir: Schema.String,
         Provider: Schema.String,
         StartCommand: Schema.String,
+        Lifecycle: Schema.optionalKey(Schema.String),
         WorkDir: Schema.optionalKey(Schema.String),
         MaxActiveSessions: Schema.optionalKey(Schema.NullOr(NonNegativeInteger)),
         MinActiveSessions: Schema.optionalKey(Schema.NullOr(NonNegativeInteger)),
@@ -83,7 +84,9 @@ export const NativeConfig = Schema.Struct({
   })
 })
 export const NativeAgents = Schema.Struct({
-  agents: Schema.Array(Schema.Struct({ qualified_name: Text, provider: Schema.optionalKey(Text) }))
+  agents: Schema.Array(
+    Schema.Struct({ qualified_name: Text, provider: Schema.optionalKey(Text), suspended: Schema.Boolean })
+  )
 })
 export const NativeProvider = Schema.Struct({
   resolved: Schema.Struct({

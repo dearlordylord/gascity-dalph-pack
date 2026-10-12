@@ -143,7 +143,26 @@ export const makeNativeCity = (fault: boolean | string = false) =>
     const baseline = yield* Schema.decodeUnknownEffect(
       Schema.Struct({ orders: Schema.Struct({ skip: Schema.Array(Schema.String) }) })
     )(parse(yield* fs.readFileString(join(pack, "trial/city.toml"))))
-    const source = `[workspace]\nname = "native-acceptance"\nprovider = "fixture"\n[session]\nprovider = "tmux"\n[beads]\nprovider = "bd"\nconditional_writes = "require"\nguarded_release = "require"\n[providers.fixture]\ncommand = ${string(process.execPath)}\nargs = [${string(`${pack}/dist/native-fixture.js`)}]\nprompt_mode = "none"\nprocess_names = ["node"]\nready_delay_ms = 0\n[daemon]\npatrol_interval = "1s"\nmax_restarts = 0\n[api]\nallow_mutations = true\n[[rigs]]\nmax_active_sessions = 5\nname = "fixture"\npath = ${string(repo)}\ndefault_branch = "master"\n[rigs.imports.dalph]\nsource = ${string(pack)}\n[[patches.agent]]\nname = "bd.dog"\nsuspended = true\n[[patches.agent]]\nname = "native-worker"\nrig = "fixture"\nlifecycle = "one_shot"\nwork_dir = ${string(env.DALPH_WORKTREE_ROOT)}\n[[patches.agent]]\nname = "native-reviewer"\nrig = "fixture"\nlifecycle = "one_shot"\nwork_dir = ${string(env.DALPH_WORKTREE_ROOT)}\n[orders]\nskip = ${JSON.stringify(baseline.orders.skip)}\n[workspace.env]\n${Object.entries(
+    const skippedOrders = [...baseline.orders.skip]
+    // Controlled workflow fixtures exclude unrelated patrols; production keeps these native defaults.
+    if (reviewFault !== "installation")
+      skippedOrders.push(
+        "beads-health",
+        "cascade-nudge-on-blocker-close",
+        "cross-rig-deps",
+        "dolt-health",
+        "gate-sweep",
+        "mol-dog-doctor",
+        "mol-dog-phantom-db",
+        "notify-on-human-gate-creation",
+        "nudge-mail-sweep",
+        "nudge-on-route",
+        "order-tracking-sweep",
+        "orphan-sweep",
+        "renudge-stale-human-gates",
+        "spawn-storm-detect"
+      )
+    const source = `[workspace]\nname = "native-acceptance"\nprovider = "fixture"\n[session]\nprovider = "tmux"\n[beads]\nprovider = "bd"\nconditional_writes = "require"\nguarded_release = "require"\n[providers.fixture]\ncommand = ${string(process.execPath)}\nargs = [${string(`${pack}/dist/native-fixture.js`)}]\nprompt_mode = "none"\nprocess_names = ["node"]\nready_delay_ms = 0\n[daemon]\npatrol_interval = "1s"\nmax_restarts = 0\n[api]\nallow_mutations = true\n[[rigs]]\nmax_active_sessions = 5\nname = "fixture"\npath = ${string(repo)}\ndefault_branch = "master"\n[rigs.imports.dalph]\nsource = ${string(pack)}\n[[patches.agent]]\nname = "bd.dog"\nsuspended = true\n[[patches.agent]]\nname = "native-worker"\nrig = "fixture"\nlifecycle = "one_shot"\nwork_dir = ${string(env.DALPH_WORKTREE_ROOT)}\n[[patches.agent]]\nname = "native-reviewer"\nrig = "fixture"\nlifecycle = "one_shot"\nwork_dir = ${string(env.DALPH_WORKTREE_ROOT)}\n[orders]\nskip = ${JSON.stringify(skippedOrders)}\n[workspace.env]\n${Object.entries(
       env
     )
       .map(([key, value]) => `${key} = ${string(value)}`)
@@ -152,7 +171,12 @@ export const makeNativeCity = (fault: boolean | string = false) =>
       ? `\n[[patches.agent]]\nname = "fixture/dalph.native-prepare"\nmax_active_sessions = 2\n[[patches.agent]]\nname = "fixture/dalph.native-integrator"\nstart_command = ${string(`${process.execPath} ${pack}/dist/native-delivery-fixture.js`)}\n`
       : ""
     const template = join(root, "template.toml")
-    yield* fs.writeFileString(template, source + deliveryPatch)
+    const installedSource =
+      reviewFault === "installation"
+        ? source.replace('[[patches.agent]]\nname = "bd.dog"\nsuspended = true\n', "") +
+          '\n[events.rotation]\nenabled = true\nmax_size_bytes = 268435456\narchive_retain_age = "720h"\n'
+        : source
+    yield* fs.writeFileString(template, installedSource + deliveryPatch)
     yield* fs.writeFileString(
       env.DALPH_NATIVE_CONTRACT,
       JSON.stringify({

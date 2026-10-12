@@ -438,6 +438,38 @@ writer in the original workspace, or two open review/fix writers refuses recover
 without closing the new owner or deleting retained resources. Group/product
 filters carry their positive metadata proof into later native boundaries.
 Acceptance: `native-historical-authority.test.ts`.
+# Complete native-role admission (S11)
+
+The Operator imports the full pack into an isolated city before launching a new
+workflow. Public native config and agent inventory must identify implementation,
+independent review/fix, preparation, review preparation, qualification and
+serialized integration roles in the configured rig. Interactive roles select
+the qualified harness and permission options. Deterministic roles declare a
+nonempty native start command, one-shot lifecycle and minimum zero. Integration
+has maximum one session; preparation and qualification may have up to two,
+preserving bounded concurrent preparation already accepted by S7/S8;
+all roles use unnamed pools. Missing, duplicate, unbounded or incompatible roles
+cause a visible admission failure before cook, model calls or worktree creation.
+Repairing configuration permits a fresh admission without rewriting retained
+attempts. The standalone preflight reports Git's registered worktree inventory
+without treating listed resources as owned or authorizing cleanup.
+Config reads are read-only, so an interrupted preflight has no uncertain
+mutation to reconcile. Controlled tests: `native-installation.test.ts`.
+
+# Native maintenance configuration (S11/S12)
+
+The Operator renders a fresh city without starting a product workflow. Native
+health, orphan claim reconciliation, order tracking and storm detection retain
+their supported defaults. Event diagnostics rotate at 256 MiB and archives expire
+after 720 hours; tracker/Git recovery records are separate authority. The template
+does not enable age-only graph/session collection and retains narrow destructive
+order exceptions because a failed closed workflow may still await continuation.
+No generic sweeper deletes legacy, foreign, borrowed or uncertain resources.
+Repeating rendering reads the same inputs and creates no sessions, tracker rows
+or Git mutations. Configuration tests pin these boundaries; fresh-city tests
+must separately observe native resolved configuration and retained recovery data.
+Event replay beyond the diagnostic retention window is not guaranteed.
+
 # Review recovery after approval, before qualification
 
 For both controlled native-city variants, the independent reviewer has retained

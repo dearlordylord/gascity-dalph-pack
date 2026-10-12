@@ -1,7 +1,9 @@
 # Prepare an isolated city
 
-Use Bash on Linux. The prototype uses `/proc`, process groups, cooperative Git
-locks, tmux, a direct local Beads/Dolt store, and a loopback supervisor. Other
+Use Bash on Linux. Gas City owns native session observation and retirement.
+Pack-owned project commands use Linux custody guards, process groups and
+cooperative Git locks. The setup uses tmux, a local Beads/Dolt store and a
+loopback supervisor. Other
 platforms and newer dependency revisions need their own qualification.
 
 ## Dependencies
@@ -23,9 +25,8 @@ Codex CLI. These are the versions used by the completed trials:
 `pnpm-lock.yaml` owns the exact TypeScript tooling and runtime dependency graph. Beads release
 1.3.1 lacks the four conditional `--if-revision` verbs required here; use the
 pinned source build. The sample keeps conditional writes and guarded release
-at `require`. Its `native_transport="off"` selects the supported CLI transport:
-the trial's native preflight could not confirm project ID in this direct-Dolt
-setup. Stock release binaries have not been qualified for this prototype.
+at `require`. Native transport uses Gas City's supported `auto` default.
+Stock release binaries have not been qualified for this workflow.
 
 Set the workspace outside the cloned pack; each city gets its own registry,
 tracker data, evidence, and worktree root:
@@ -68,9 +69,9 @@ crediting a reproduction of the original trial.
 
 ## Target and city
 
-For the four-task export demo, copy the completed example into a new target
-repository. For the original seven-task implementation, use `trial/seed/`
-instead. The examples are starting snapshots; each fresh run gets a new target.
+For a small TypeScript target, copy the example into a new repository. Existing
+projects need their own exact check command and project contract. The example
+is a starting snapshot; each fresh run gets a new target.
 
 ```sh
 mkdir -p "$DALPH_TARGET_REPO"
@@ -87,6 +88,12 @@ mise exec node@24.20.0 -- pnpm install --frozen-lockfile
 mise exec node@24.20.0 -- pnpm build
 dolt config --global --add user.name 'Dalph Trial'
 dolt config --global --add user.email 'dalph-trial@local'
+jq -n --arg agent "$DALPH_RIG/dalph.native-worker" \
+  --arg harnessVersion "$(codex --version)" --arg runtimeVersion "$(tmux -V)" \
+  '{version:1,agent:$agent,harness:"codex",harnessVersion:$harnessVersion,
+    runtime:"tmux",runtimeVersion:$runtimeVersion,readiness:["codex","login","status"],
+    check:{command:["mise","exec","node@24.20.0","--","pnpm","test"],timeoutSeconds:300}}' \
+  > "$DALPH_NATIVE_CONTRACT"
 mise exec node@24.20.0 -- pnpm exec tsx scripts/render-city.ts > "$DALPH_TRIAL_ROOT/city.generated.toml"
 gc init "$DALPH_CITY_ROOT" --file "$DALPH_TRIAL_ROOT/city.generated.toml" --beads-target local --beads-transport direct --no-start --skip-provider-readiness
 gc --city "$DALPH_CITY_ROOT" start
@@ -110,7 +117,40 @@ run `gc lint "$DALPH_PACK_ROOT"`, and confirm the supervisor is reachable at
 `DALPH_TRACKER_ENDPOINT`. The city name must match `DALPH_CITY_NAME` because
 tracker writes address that exact native city. Done: registered city and rig,
 clean target, matching local/remote target heads, and reachable supervisor.
-Return to [README](../README.md#start-a-four-task-demo) to launch the workflow.
+Run complete native-role preflight before launch:
+
+```sh
+mise exec node@24.20.0 -- node dist/native.js preflight
+```
+
+Preflight checks the selected harness, permissions, tmux, native build, tracker
+claims, check executable and all six native roles. It does not cook a workflow.
+Its `retainedWorktrees` field reports Git's registered trees, including legacy
+and borrowed trees; listing a tree does not authorize its cleanup.
+Repeated preflight or rendering does not launch another run. The contract above
+uses Codex's configured model and reasoning defaults. To use Claude, configure
+the city's provider and a matching `harness`, version and readiness command;
+an incompatible reviewer provider fails instead of selecting a fallback.
+
+Launch one task through the public workflow seam and retain its returned ID:
+
+```sh
+export DALPH_NATIVE_TASK='Describe one concrete change and its acceptance checks'
+mise exec node@24.20.0 -- node dist/native.js launch
+```
+
+After restart, resume that ID rather than launching again:
+
+```sh
+mise exec node@24.20.0 -- node dist/native.js resume <workflow-id>
+```
+
+Keep the original native contract and exact worktree. Native resume validates
+the retained launch contract and ownership before mutation. A legacy root
+without `native-v1` launch evidence fails visibly; use its compatible legacy
+runtime for recovery. Installation does not migrate retained resources or
+reinterpret old review rounds. See [maintenance boundaries](NATIVE-MAINTENANCE.md)
+for restored defaults, narrow cleanup exceptions and 30-day event diagnostics.
 
 For a retained older store, use `bd migrate schema --help` to inspect its exact
 owned database before migration. The pinned fresh trial used schema 69;

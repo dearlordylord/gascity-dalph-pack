@@ -12,7 +12,6 @@ provider = "tmux"
 
 [beads]
 provider = "bd"
-native_transport = "off"
 conditional_writes = "require"
 guarded_release = "require"
 
@@ -24,15 +23,12 @@ shutdown_timeout = "15s"
 
 [[rigs]]
 name = "@@RIG@@"
+max_active_sessions = 5
 default_branch = "@@BRANCH@@"
 path = "@@TARGET_REPO@@"
 
 [rigs.imports.dalph]
 source = "@@PACK_ROOT@@"
-
-[[patches.agent]]
-name = "bd.dog"
-suspended = true
 
 [[patches.agent]]
 name = "native-worker"
@@ -45,7 +41,13 @@ rig = "@@RIG@@"
 work_dir = "@@WORKTREE_ROOT@@"
 
 [orders]
-skip = ["beads-health", "cascade-nudge-on-blocker-close", "cross-rig-deps", "dolt-health", "dolt-remotes-patrol", "gate-sweep", "jsonl-export", "mol-dog-backup", "mol-dog-compactor", "mol-dog-doctor", "mol-dog-phantom-db", "mol-dog-stale-db", "notify-on-human-gate-creation", "nudge-mail-sweep", "nudge-on-route", "order-tracking-sweep", "orphan-sweep", "prune-branches", "reaper", "renudge-stale-human-gates", "spawn-storm-detect", "wisp-compact"]
+skip = ["dolt-remotes-patrol", "jsonl-export", "mol-dog-backup", "mol-dog-compactor", "mol-dog-stale-db", "prune-branches", "reaper", "wisp-compact"]
+
+# Diagnostics only: tracker/Git facts remain the recovery authorities.
+[events.rotation]
+enabled = true
+max_size_bytes = 268435456
+archive_retain_age = "720h"
 
 [workspace.env]
-DALPH_PROJECT_CONTRACT_PATH = "$DALPH_PACK_ROOT/trial/project-contract.md"
+# scripts/render-city.ts supplies exact runtime paths and contracts below.
