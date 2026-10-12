@@ -20,6 +20,16 @@ it.effect("native launch refuses an unqualified Ralph infrastructure build befor
   })
 )
 
+it.effect("the exact matched dependency candidate passes preflight before native cook", () =>
+  Effect.gen(function* () {
+    const f = yield* nativeFixture
+    f.nativeState.gasCityVersion = "dev-dalph-native-v4-candidate"
+    const controller = makeNativeController(f.config, f.contract, f.commands, f.tracker, process.execPath)
+    yield* controller.launch("Task").pipe(Effect.provide(f.layer))
+    expect(f.events).toContain("native-cook")
+  })
+)
+
 it.effect("public resume preserves an aborted scope's skipped delivery without claiming publication or cleanup", () =>
   Effect.gen(function* () {
     const f = yield* nativeFixture

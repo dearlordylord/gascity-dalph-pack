@@ -28,6 +28,10 @@ pinned source build. The sample keeps conditional writes and guarded release
 at `require`. Native transport uses Gas City's supported `auto` default.
 Stock release binaries have not been qualified for this workflow.
 
+[Matched candidate qualification](NATIVE-CANDIDATE.md) provides a reproducible
+profile whose linked Beads library and CLI share one source revision. Its
+manifest and patch remain separate while the full native suite is qualified.
+
 Set the workspace outside the cloned pack; each city gets its own registry,
 tracker data, evidence, and worktree root:
 

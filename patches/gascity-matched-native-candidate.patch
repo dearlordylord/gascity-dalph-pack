@@ -1,0 +1,1255 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index d50f5fb3..63f3d61c 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -35,6 +35,9 @@ next to that code; read the matching file before changing it.
+ | Anything under `docs/` | `.claude/skills/gascity-docs/SKILL.md` |
+ | New SDK surface or a new primitive | `engdocs/contributors/primitive-test.md` |
+ | A controller or session reconciler incident | `engdocs/contributors/reconciler-debugging.md` (use `gc trace`) |
++| Runtime heartbeat or execution backstop | `cmd/gc/cmd_runtime_heartbeat.go` and `cmd/gc/execution_backstop.go`; an active finite `held_until` prevents execution-stall observation and drain. Re-read the exact session before draining; expiry restores the bounded backstop, and controller restart never extends the hold. Keep `schemas/runtime/heartbeat/result.schema.json` embedded and verify the public root CLI JSON guard. |
++| Control readiness reads | `cmd/gc/dispatch_control_ready.go`; a scan opens a short-lived scoped reader through the existing store factory, reads each graph leg once, and closes only its owned handles. Preserve operator rollout/fallback policy, ephemeral/dependency semantics, and shared binding ownership. Control mutations retain their separate guarded BdStore path; do not infer that enabling the readiness reader also qualifies native control mutations. |
++| Ralph outcome classification | `docs/reference/specs/formula-spec-v2.md` section 3.1; verify the compiled `KindRalph` and legacy `KindCheck` paths. Explicit hard subject failure terminates; launched infrastructure-blind checks retry within their separate bounded budget. Preserve the documented removed-work-directory start-failure rule. |
+ | Worktree isolation or worker cleanup | `engdocs/archive/backlogs/worktree-roadmap.md` (lifecycle analysis and cleanup-bug lessons) |
+ | A `release-gates/*.md` deploy gate | `engdocs/contributors/release-gate-criteria-conventions.md` |
+ | Bazel builds | `engdocs/bazel-quickstart.md` |
+diff --git a/BUILD.bazel b/BUILD.bazel
+index 7be17911..513e4873 100644
+--- a/BUILD.bazel
++++ b/BUILD.bazel
+@@ -210,6 +210,7 @@ go_library(
+         "schemas/runtime/drain-ack/result.schema.json",
+         "schemas/runtime/drain-check/result.schema.json",
+         "schemas/runtime/drain/result.schema.json",
++        "schemas/runtime/heartbeat/result.schema.json",
+         "schemas/runtime/undrain/result.schema.json",
+         "schemas/service/doctor/result.schema.json",
+         "schemas/service/list/result.schema.json",
+diff --git a/cmd/gc/BUILD.bazel b/cmd/gc/BUILD.bazel
+index afaf5765..7815783f 100644
+--- a/cmd/gc/BUILD.bazel
++++ b/cmd/gc/BUILD.bazel
+@@ -1219,6 +1219,7 @@ go_test(
+         "dispatch_control_ready_freshness_test.go",
+         "dispatch_control_ready_hold_label_test.go",
+         "dispatch_control_ready_leak_test.go",
++        "dispatch_control_ready_proxied_integration_test.go",
+         "dispatch_control_ready_test.go",
+         "dispatch_control_ready_wal_test.go",
+         "dispatch_ep8_recovery_hold_label_test.go",
+diff --git a/cmd/gc/cmd_runtime_heartbeat.go b/cmd/gc/cmd_runtime_heartbeat.go
+index fb0b289d..0615c3ed 100644
+--- a/cmd/gc/cmd_runtime_heartbeat.go
++++ b/cmd/gc/cmd_runtime_heartbeat.go
+@@ -21,7 +21,7 @@ const (
+ 	minimumHeartbeatDuration = 1 * time.Minute
+ 
+ 	// maximumHeartbeatDuration bounds how long a single heartbeat may suppress
+-	// the idle-timeout and max-session-age timers. A heartbeat is meant to be
++	// the idle-timeout, max-session-age, and execution-stall timers. A heartbeat is meant to be
+ 	// refreshed by re-calling this command during a long operation, so no single
+ 	// call needs an unbounded hold; the ceiling comfortably exceeds any realistic
+ 	// silent operation while stopping an oversized --duration (e.g. 8760h) from
+@@ -45,8 +45,8 @@ func validateHeartbeatDuration(d time.Duration) error {
+ 
+ // newRuntimeHeartbeatCmd creates the "gc runtime heartbeat" command.
+ //
+-// Called by agents at the start of long operations to suppress idle-timeout
+-// and max-session-age timers for the specified duration. The existing
++// Called by agents at the start of long operations to suppress idle-timeout,
++// max-session-age, and execution-stall timers for the specified duration. The existing
+ // held_until mechanism in the bead reconciler provides the timer-blocker
+ // semantics; this command is the agent-facing API for setting it without
+ // triggering a full user-hold suspend.
+@@ -58,10 +58,10 @@ func newRuntimeHeartbeatCmd(stdout, stderr io.Writer) *cobra.Command {
+ 	cmd := &cobra.Command{
+ 		Use:   "heartbeat",
+ 		Short: "Extend idle-timeout window during a long operation",
+-		Long: `Extend the idle-timeout and max-session-age windows during a long operation.
++		Long: `Extend the idle-timeout, max-session-age, and execution-stall windows during a long operation.
+ 
+-Sets held_until on the current session's bead, suppressing the idle-timeout
+-and max-session-age timers until the hold expires. Call this at the start of
++Sets held_until on the current session's bead, suppressing the idle-timeout,
++max-session-age, and execution-stall timers until the hold expires. Call this at the start of
+ slow operations that produce no terminal output and would otherwise trigger
+ a false-alarm watchdog kill.
+ 
+diff --git a/cmd/gc/cmd_runtime_heartbeat_test.go b/cmd/gc/cmd_runtime_heartbeat_test.go
+index 8b6f4d82..7ba1506f 100644
+--- a/cmd/gc/cmd_runtime_heartbeat_test.go
++++ b/cmd/gc/cmd_runtime_heartbeat_test.go
+@@ -22,6 +22,44 @@ func makeSessionBead(id, sessionName string) beads.Bead {
+ 	}
+ }
+ 
++func TestRuntimeHeartbeatPublicJSONContract(t *testing.T) {
++	clearGCEnv(t)
++	t.Setenv("GC_BEADS", "file")
++	cityPath := t.TempDir()
++	writeManagementJSONTestCity(t, cityPath, "[workspace]\nname = \"heartbeat-city\"\n")
++	store, err := openCityStoreAt(cityPath)
++	if err != nil {
++		t.Fatal(err)
++	}
++	const sessionName = "heartbeat-runtime"
++	created, err := store.Create(makeSessionBead("", sessionName))
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Setenv("GC_CITY_PATH", cityPath)
++	t.Setenv("GC_SESSION_ID", created.ID)
++	t.Setenv("GC_SESSION_NAME", sessionName)
++	var stdout, stderr bytes.Buffer
++	code := run([]string{"runtime", "heartbeat", "--duration=1m", "--json"}, &stdout, &stderr)
++	if code != 0 {
++		t.Fatalf("public heartbeat exit %d: stdout=%s stderr=%s", code, stdout.String(), stderr.String())
++	}
++	var result runtimeHeartbeatJSON
++	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
++		t.Fatal(err)
++	}
++	if !result.OK || result.Command != "runtime heartbeat" || result.HeldUntil == "" {
++		t.Fatalf("unexpected public heartbeat result: %+v", result)
++	}
++	current, err := store.Get(created.ID)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if current.Metadata["held_until"] != result.HeldUntil {
++		t.Fatalf("hold not durably acknowledged: %+v", current.Metadata)
++	}
++}
++
+ func TestDoRuntimeHeartbeatSetsHeldUntil(t *testing.T) {
+ 	const sessionName = "testpack__worker"
+ 	const beadID = "bead-123"
+diff --git a/cmd/gc/dispatch_control_ready.go b/cmd/gc/dispatch_control_ready.go
+index ed4f94cf..318d542f 100644
+--- a/cmd/gc/dispatch_control_ready.go
++++ b/cmd/gc/dispatch_control_ready.go
+@@ -476,7 +476,7 @@ func controlReadyLegsReady(dir, cityPath string, cfg *config.City) (ready []bead
+ // by closeCLIStorageRoutes at process exit; CloseStore is a one-way latch, so
+ // closing a binding leg here would poison every later graph-class read and write
+ // in the process with ErrStoreClosed. Only the scoped leg
+-// (openControlStoreAtForCity) is freshly constructed per call, so only it is
++// (openControlReadStoreAtForCity) is freshly constructed per call, so only it is
+ // returned as owned.
+ //
+ // An error return must not hand back opened stores. controlReadyLegsReady
+@@ -492,7 +492,9 @@ func controlReadyLegSources(dir, cityPath string, cfg *config.City) (sources, ow
+ 	if binding, relocated := controlGraphBinding(cityPath, dir); relocated {
+ 		return []beads.Store{binding}, nil, nil
+ 	}
+-	scoped, err := openControlStoreAtForCity(dir, cityPath, cfg)
++	// This leg only reads readiness, so it may use the existing admitted native
++	// reader. Mutating dispatch keeps its control BdStore and conditional writer.
++	scoped, err := openControlReadStoreAtForCity(dir, cityPath, cfg)
+ 	if err != nil {
+ 		return nil, nil, err
+ 	}
+diff --git a/cmd/gc/execution_backstop.go b/cmd/gc/execution_backstop.go
+index 82186245..a9757377 100644
+--- a/cmd/gc/execution_backstop.go
++++ b/cmd/gc/execution_backstop.go
+@@ -66,6 +66,7 @@ import (
+ 	"github.com/gastownhall/gascity/internal/config"
+ 	"github.com/gastownhall/gascity/internal/events"
+ 	"github.com/gastownhall/gascity/internal/runtime"
++	"github.com/gastownhall/gascity/internal/session"
+ )
+ 
+ // Session-bead metadata keys for the execution backstop. Persisted for the same
+@@ -96,8 +97,9 @@ const (
+ // Execution-backstop hold reasons recorded in executionClaimHoldKey, alongside
+ // the engine-level backstopHold* reasons.
+ const (
+-	executionHoldMultiClaim = "multi_claim"
+-	executionHoldNotQuiet   = "not_quiet"
++	executionHoldMultiClaim   = "multi_claim"
++	executionHoldNotQuiet     = "not_quiet"
++	executionHoldRuntimeTimer = "runtime_timer"
+ )
+ 
+ // executionStalledLatchRetryAfter bounds how long a latch silences
+@@ -257,6 +259,10 @@ func (p poolExecutionBackstop) resolve(s beads.Bead, _ map[string]beads.Bead, se
+ 		p.observeHold(p.store, &s, executionHoldMultiClaim, p.stdout)
+ 		return backstopTarget{}, backstopResolutionHold
+ 	}
++	if runtimeTimerHolds(s, p.now) {
++		p.observeHold(p.store, &s, executionHoldRuntimeTimer, p.stdout)
++		return backstopTarget{}, backstopResolutionHold
++	}
+ 	if !p.sessionIsQuiet(sessName) {
+ 		p.observeHold(p.store, &s, executionHoldNotQuiet, p.stdout)
+ 		return backstopTarget{}, backstopResolutionHold
+@@ -380,6 +386,22 @@ func (p poolExecutionBackstop) stalledLatchHolds(s *beads.Bead) bool {
+ // or one old enough that its drain must have been lost, escalates again; the
+ // re-written latch restarts both bounds.
+ func (p poolExecutionBackstop) exhausted(store beads.Store, s *beads.Bead, stdout io.Writer) {
++	// A heartbeat may have been accepted after the assigned-work snapshot.
++	// Re-read its durable timer before recording escalation or requesting drain.
++	live := beads.HandlesFor(store).Live
++	if live == nil {
++		p.observeHold(store, s, backstopHoldRevalidate, stdout)
++		return
++	}
++	current, err := live.Get(s.ID)
++	if err != nil || current.ID != s.ID {
++		p.observeHold(store, s, backstopHoldRevalidate, stdout)
++		return
++	}
++	if runtimeTimerHolds(current, p.now) {
++		p.observeHold(store, s, executionHoldRuntimeTimer, stdout)
++		return
++	}
+ 	if p.stalledLatchHolds(s) {
+ 		return
+ 	}
+@@ -420,6 +442,12 @@ func (p poolExecutionBackstop) exhausted(store beads.Store, s *beads.Bead, stdou
+ 	}
+ }
+ 
++// Future or unreadable durable timers retain custody; expiry restores the backstop.
++func runtimeTimerHolds(s beads.Bead, now time.Time) bool {
++	holds := session.Holds(s.Metadata, now)
++	return (holds.In|holds.Unknown)&session.HoldTimer != 0
++}
++
+ func (p poolExecutionBackstop) emitStepStalled(s *beads.Bead, beadID string, attempts int) {
+ 	if p.rec == nil {
+ 		return
+diff --git a/cmd/gc/execution_backstop_test.go b/cmd/gc/execution_backstop_test.go
+index b5d445f8..019ea0e8 100644
+--- a/cmd/gc/execution_backstop_test.go
++++ b/cmd/gc/execution_backstop_test.go
+@@ -142,6 +142,53 @@ func (f *executionBackstopFixture) nudgeCount() int {
+ 	return strings.Count(f.stdout.String(), "execution-claim-nudge: nudged")
+ }
+ 
++func TestExecutionBackstopRespectsFiniteRuntimeHeartbeat(t *testing.T) {
++	f := newExecutionBackstopFixture(t)
++	f.cfg.Agents[0].Nudge = ""
++	f.idleFor(t, 10*time.Minute)
++	until := f.now.Add(10 * time.Minute)
++	if err := f.store.SetMetadata(f.session.ID, "held_until", until.Format(time.RFC3339)); err != nil {
++		t.Fatal(err)
++	}
++	f.tick(t)
++	if got := f.sessionMeta(t, executionClaimNudgeWorkKey); got != "" {
++		t.Fatalf("heartbeat spent the observation budget: %q", got)
++	}
++	// Each tick reconstructs the controller predicate from durable rows.
++	f.now = f.now.Add(5 * time.Minute)
++	f.tick(t)
++	if len(f.drained) != 0 || f.nudgeCount() != 0 {
++		t.Fatal("active heartbeat did not survive controller reconstruction")
++	}
++	f.now = until.Add(time.Second)
++	f.tick(t)
++	f.now = f.now.Add(idleClaimNudgeGrace + time.Second)
++	f.tick(t)
++	if len(f.drained) != 1 {
++		t.Fatalf("expired heartbeat did not restore bounded drain: %v", f.drained)
++	}
++}
++
++func TestExecutionBackstopRechecksHeartbeatBeforeDrain(t *testing.T) {
++	f := newExecutionBackstopFixture(t)
++	f.cfg.Agents[0].Nudge = ""
++	f.idleFor(t, 10*time.Minute)
++	f.tick(t)
++	f.now = f.now.Add(idleClaimNudgeGrace + time.Second)
++	stale, err := loadSessionBeads(f.store)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if err := f.store.SetMetadata(f.session.ID, "held_until", f.now.Add(time.Minute).Format(time.RFC3339)); err != nil {
++		t.Fatal(err)
++	}
++	nudgeStalledPoolExecution(f.sp, f.cfg, f.store, stale, []beads.Bead{f.work}, []beads.Store{f.store}, []string{""}, false, f.now, f.rec,
++		func(beads.Bead) error { f.drained = append(f.drained, "drained"); return nil }, &f.stdout)
++	if len(f.drained) != 0 || f.sessionMeta(t, executionClaimNudgeStalledKey) != "" {
++		t.Fatal("stale snapshot drained a freshly heartbeating session")
++	}
++}
++
+ // TestExecutionBackstopNudgesAnIdleClaimHolderExactlyOnce is the core row: the
+ // slot holds an in-progress claim, the provider reports no activity past the
+ // grace, and the configured claim nudge is re-delivered once with the attempt
+diff --git a/cmd/gc/store_rollout.go b/cmd/gc/store_rollout.go
+index de87c373..9e307dd4 100644
+--- a/cmd/gc/store_rollout.go
++++ b/cmd/gc/store_rollout.go
+@@ -92,12 +92,20 @@ func conditionalWritesStoreID(scopeRoot, cityPath string) string {
+ // TestOpenStoreAtForCityNilPreflightCheckerFallsBackToBd); the store comes
+ // back raw, matching the control path's deliberately unwrapped handles.
+ func openControlBdStoreThroughFactory(scopeRoot, cityPath, provider string, cfg *config.City, openBd func() (beads.Store, error)) (beads.Store, error) {
++	result, err := beads.OpenStoreAtForCity(context.Background(), controlBdStoreFactoryOptions(scopeRoot, cityPath, provider, cfg, openBd))
++	if err != nil {
++		return nil, err
++	}
++	return result.Store, nil
++}
++
++func controlBdStoreFactoryOptions(scopeRoot, cityPath, provider string, cfg *config.City, openBd func() (beads.Store, error)) beads.StoreOpenOptions {
+ 	flags, resolved := resolvedConditionalWritesFlags(cfg)
+ 	mode := gate.ModeUnset
+ 	if resolved {
+ 		mode = flags.BeadsConditionalWrites()
+ 	}
+-	result, err := beads.OpenStoreAtForCity(context.Background(), beads.StoreOpenOptions{
++	return beads.StoreOpenOptions{
+ 		ScopeRoot:         scopeRoot,
+ 		CityPath:          cityPath,
+ 		Provider:          provider,
+@@ -105,7 +113,34 @@ func openControlBdStoreThroughFactory(scopeRoot, cityPath, provider string, cfg
+ 		OnConditionalWritesDegraded: lazyConditionalWritesDegradeEmitter(
+ 			cityPath, conditionalWritesStoreID(scopeRoot, cityPath), flags, resolved),
+ 		OpenBdStore: openBd,
+-	})
++	}
++}
++
++// Readiness offers only the existing proxied read adapter. All other backends
++// keep the raw control store; no ordinary native write backend is supplied.
++func openControlReadStoreAtForCity(storePath, cityPath string, cfg *config.City) (beads.Store, error) {
++	scopeRoot := resolveStoreScopeRoot(cityPath, storePath)
++	provider := rawBeadsProviderForScope(scopeRoot, cityPath)
++	if provider == "file" || strings.HasPrefix(provider, "exec:") {
++		return openControlStoreAtForCity(storePath, cityPath, cfg)
++	}
++	if cfg == nil {
++		loaded, err := loadCityConfigForStoreOpen(cityPath, provider, nil)
++		if err != nil {
++			return nil, err
++		}
++		cfg = loaded
++	}
++	openBd := func() (beads.Store, error) {
++		if samePath(scopeRoot, cityPath) {
++			return controlBdStoreForCity(scopeRoot, cityPath, cfg), nil
++		}
++		return controlBdStoreForRig(scopeRoot, cityPath, cfg), nil
++	}
++	opts := controlBdStoreFactoryOptions(scopeRoot, cityPath, provider, cfg, openBd)
++	opts.NativeTransport = resolvedNativeTransportMode(cfg)
++	opts.OpenProxiedStore = proxiedNativeStoreOpenerForScope(cityPath, scopeRoot, cfg, openBd)
++	result, err := openStoreFactoryForCity(context.Background(), opts)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+diff --git a/cmd/gc/store_rollout_test.go b/cmd/gc/store_rollout_test.go
+index 2e0f8d08..eac29baa 100644
+--- a/cmd/gc/store_rollout_test.go
++++ b/cmd/gc/store_rollout_test.go
+@@ -618,6 +618,51 @@ func TestOpenControlBdStoreThroughFactoryStamps(t *testing.T) {
+ 	}
+ }
+ 
++// A readiness scan owns a short-lived read handle. Control mutations continue
++// to use their existing raw BdStore, rather than inheriting this read adapter.
++func TestControlReadySourcesOfferProxiedReaderAndCloseIt(t *testing.T) {
++	t.Setenv("GC_HOME", t.TempDir())
++	t.Setenv("GC_BEADS", "bd")
++	bin := t.TempDir()
++	stub := "#!/bin/sh\ncase \"$1\" in\nready) printf '%s\\n' '[{\"id\":\"fixture-ready\",\"status\":\"open\",\"issue_type\":\"task\"}]';;\n*) printf '%s\\n' 'Usage: bd [flags]' '  --if-revision int';;\nesac\n"
++	if err := os.WriteFile(filepath.Join(bin, "bd"), []byte(stub), 0o755); err != nil {
++		t.Fatal(err)
++	}
++	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
++	city := t.TempDir()
++	cfg, err := config.Parse([]byte("[workspace]\nname = \"readiness\"\n[beads]\nprovider = \"bd\"\nnative_transport = \"off\"\nconditional_writes = \"require\"\n"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	if err := os.WriteFile(filepath.Join(city, "city.toml"), []byte("[workspace]\nname = \"readiness\"\n[beads]\nprovider = \"bd\"\n"), 0o644); err != nil {
++		t.Fatal(err)
++	}
++	reader := newCloseCountingStore(t, true)
++	var captured beads.StoreOpenOptions
++	previous := openStoreFactoryForCity
++	openStoreFactoryForCity = func(_ context.Context, opts beads.StoreOpenOptions) (beads.StoreOpenResult, error) {
++		captured = opts
++		return beads.StoreOpenResult{Store: reader}, nil
++	}
++	t.Cleanup(func() { openStoreFactoryForCity = previous })
++	ready, opened, err := controlReadyLegsReady(city, city, cfg)
++	if err != nil || !opened || len(ready) != 1 {
++		t.Fatalf("readiness = %v, %t, %v; want one ready bead", ready, opened, err)
++	}
++	if captured.OpenProxiedStore == nil || captured.OpenBdStore == nil || captured.LongLived {
++		t.Fatal("readiness must offer the existing short-lived proxied reader and Bd fallback")
++	}
++	if captured.OpenNativeStore != nil || captured.PreflightChecker.BDContext != nil {
++		t.Fatal("readiness must not enable the ordinary direct-native backend")
++	}
++	if captured.NativeTransport != beads.NativeTransportOff || captured.ConditionalWrites != gate.Require {
++		t.Fatalf("readiness lost operator policy: native=%q conditional=%q", captured.NativeTransport, captured.ConditionalWrites)
++	}
++	if reader.closes() != 1 {
++		t.Fatalf("readiness reader closed %d times, want once", reader.closes())
++	}
++}
++
+ func TestConditionalWritesDegradedRecorder(t *testing.T) {
+ 	t.Run("nil recorder yields nil callback", func(t *testing.T) {
+ 		if cb := conditionalWritesDegradedRecorder(nil, rollout.Flags{}, "rig/r1"); cb != nil {
+diff --git a/go.mod b/go.mod
+index 645d0821..d5a0fe49 100644
+--- a/go.mod
++++ b/go.mod
+@@ -10,13 +10,13 @@ require (
+ 	github.com/fsnotify/fsnotify v1.10.1
+ 	github.com/gastownhall/gascity-packs v0.3.1-0.20260617013242-33d3a430a67d
+ 	github.com/go-jose/go-jose/v4 v4.1.4
+-	github.com/go-sql-driver/mysql v1.10.0
++	github.com/go-sql-driver/mysql v1.10.1
+ 	github.com/golang-jwt/jwt/v5 v5.3.0
+ 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
+ 	github.com/google/uuid v1.6.0
+ 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
+ 	github.com/invopop/jsonschema v0.14.0
+-	github.com/oapi-codegen/runtime v1.4.0
++	github.com/oapi-codegen/runtime v1.6.0
+ 	github.com/pb33f/libopenapi v0.36.1
+ 	github.com/pb33f/libopenapi-validator v0.13.4
+ 	github.com/rogpeppe/go-internal v1.14.1
+@@ -24,16 +24,16 @@ require (
+ 	github.com/shirou/gopsutil/v4 v4.26.5
+ 	github.com/spf13/cobra v1.10.2
+ 	github.com/spf13/pflag v1.0.10
+-	github.com/steveyegge/beads v1.3.1
+-	github.com/stretchr/testify v1.11.1
+-	go.opentelemetry.io/otel v1.45.0
++	github.com/steveyegge/beads v1.3.1-0.20261010163319-1b7bf9b1910d
++	github.com/stretchr/testify v1.12.1
++	go.opentelemetry.io/otel v1.46.0
+ 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.21.0
+-	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.45.0
++	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.46.0
+ 	go.opentelemetry.io/otel/log v0.21.0
+-	go.opentelemetry.io/otel/metric v1.45.0
+-	go.opentelemetry.io/otel/sdk v1.45.0
++	go.opentelemetry.io/otel/metric v1.46.0
++	go.opentelemetry.io/otel/sdk v1.46.0
+ 	go.opentelemetry.io/otel/sdk/log v0.21.0
+-	go.opentelemetry.io/otel/sdk/metric v1.45.0
++	go.opentelemetry.io/otel/sdk/metric v1.46.0
+ 	golang.org/x/mod v0.41.0
+ 	golang.org/x/sync v0.23.0
+ 	golang.org/x/sys v0.48.0
+@@ -124,17 +124,28 @@ require (
+ 	github.com/envoyproxy/protoc-gen-validate v1.3.3 // indirect
+ 	github.com/esote/minmaxheap v1.0.0 // indirect
+ 	github.com/fatih/color v1.18.0 // indirect
+-	github.com/felixge/httpsnoop v1.0.4 // indirect
++	github.com/felixge/httpsnoop v1.1.0 // indirect
+ 	github.com/flynn-archive/go-shlex v0.0.0-20150515145356-3f9db97f8568 // indirect
+ 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
+ 	github.com/go-logr/logr v1.4.4 // indirect
+ 	github.com/go-logr/stdr v1.2.2 // indirect
+ 	github.com/go-ole/go-ole v1.2.6 // indirect
+-	github.com/go-openapi/jsonpointer v0.22.5 // indirect
+-	github.com/go-openapi/jsonreference v0.20.2 // indirect
+-	github.com/go-openapi/swag v0.23.0 // indirect
++	github.com/go-openapi/jsonpointer v1.0.0 // indirect
++	github.com/go-openapi/jsonreference v1.0.0 // indirect
++	github.com/go-openapi/swag v0.28.0 // indirect
++	github.com/go-openapi/swag/cmdutils v0.28.0 // indirect
++	github.com/go-openapi/swag/conv v0.28.0 // indirect
++	github.com/go-openapi/swag/fileutils v0.28.0 // indirect
+ 	github.com/go-openapi/swag/jsonname v0.25.5 // indirect
+-	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
++	github.com/go-openapi/swag/jsonutils v0.28.0 // indirect
++	github.com/go-openapi/swag/loading v0.28.0 // indirect
++	github.com/go-openapi/swag/mangling v0.28.0 // indirect
++	github.com/go-openapi/swag/netutils v0.28.0 // indirect
++	github.com/go-openapi/swag/pools v0.28.0 // indirect
++	github.com/go-openapi/swag/stringutils v0.28.0 // indirect
++	github.com/go-openapi/swag/typeutils v0.28.0 // indirect
++	github.com/go-openapi/swag/yamlutils v0.28.0 // indirect
++	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
+ 	github.com/goccy/go-json v0.10.5 // indirect
+ 	github.com/gocraft/dbr/v2 v2.7.6 // indirect
+ 	github.com/gofrs/flock v0.8.1 // indirect
+@@ -146,7 +157,8 @@ require (
+ 	github.com/google/s2a-go v0.1.9 // indirect
+ 	github.com/googleapis/enterprise-certificate-proxy v0.3.11 // indirect
+ 	github.com/googleapis/gax-go/v2 v2.17.0 // indirect
+-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
++	github.com/gowebpki/jcs v1.0.1 // indirect
++	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 // indirect
+ 	github.com/hashicorp/golang-lru v1.0.2 // indirect
+ 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
+ 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+@@ -163,7 +175,7 @@ require (
+ 	github.com/mailru/easyjson v0.7.7 // indirect
+ 	github.com/mattn/go-colorable v0.1.14 // indirect
+ 	github.com/mattn/go-isatty v0.0.22 // indirect
+-	github.com/mattn/go-runewidth v0.0.23 // indirect
++	github.com/mattn/go-runewidth v0.0.24 // indirect
+ 	github.com/moby/spdystream v0.5.1 // indirect
+ 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
+ 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
+@@ -213,17 +225,17 @@ require (
+ 	github.com/zeebo/xxh3 v1.0.2 // indirect
+ 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
+ 	go.opentelemetry.io/contrib/detectors/gcp v1.44.0 // indirect
+-	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.61.0 // indirect
+-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0 // indirect
+-	go.opentelemetry.io/otel/trace v1.45.0 // indirect
++	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.70.0 // indirect
++	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0 // indirect
++	go.opentelemetry.io/otel/trace v1.46.0 // indirect
+ 	go.opentelemetry.io/proto/otlp v1.11.0 // indirect
+ 	go.uber.org/multierr v1.11.0 // indirect
+ 	go.uber.org/zap v1.27.0 // indirect
+ 	go.yaml.in/yaml/v2 v2.4.3 // indirect
+-	go.yaml.in/yaml/v3 v3.0.4 // indirect
++	go.yaml.in/yaml/v3 v3.0.5 // indirect
+ 	go.yaml.in/yaml/v4 v4.0.0-rc.4 // indirect
+ 	golang.org/x/crypto v0.57.0 // indirect
+-	golang.org/x/exp v0.0.0-20240205201215-2c58cdc269a3 // indirect
++	golang.org/x/exp v0.0.0-20240404231335-c0f41cb1a7a0 // indirect
+ 	golang.org/x/net v0.60.0 // indirect
+ 	golang.org/x/oauth2 v0.36.0 // indirect
+ 	golang.org/x/telemetry v0.0.0-20260811182544-a038080d80e5 // indirect
+@@ -233,10 +245,10 @@ require (
+ 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
+ 	google.golang.org/api v0.264.0 // indirect
+ 	google.golang.org/genproto v0.0.0-20260128011058-8636f8732409 // indirect
+-	google.golang.org/genproto/googleapis/api v0.0.0-20260803160001-6ac0973c030d // indirect
+-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260803160001-6ac0973c030d // indirect
++	google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688 // indirect
++	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
+ 	google.golang.org/grpc v1.83.2 // indirect
+-	google.golang.org/protobuf v1.36.11 // indirect
++	google.golang.org/protobuf v1.36.12 // indirect
+ 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
+ 	gopkg.in/go-jose/go-jose.v2 v2.6.3 // indirect
+ 	gopkg.in/inf.v0 v0.9.1 // indirect
+diff --git a/go.sum b/go.sum
+index 8559f967..9cbdbd57 100644
+--- a/go.sum
++++ b/go.sum
+@@ -610,6 +610,8 @@ github.com/fatih/color v1.18.0/go.mod h1:4FelSpRwEGDpQ12mAdzqdOukCy4u8WUtOY6lkT/
+ github.com/fatih/structs v1.1.0/go.mod h1:9NiDSp5zOcgEDl+j00MP/WkGVPOlPRLejGD8Ga6PJ7M=
+ github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2Wg=
+ github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
++github.com/felixge/httpsnoop v1.1.0 h1:3YtUj32ZZkqZtt3sZZsClsymw/QDuVfpNhoA31zeORc=
++github.com/felixge/httpsnoop v1.1.0/go.mod h1:Zqxgdd+1Rkcz8euOqdr7lqgCRJztwr5hp9vDSi5UZCE=
+ github.com/flosch/pongo2/v4 v4.0.2/go.mod h1:B5ObFANs/36VwxxlgKpdchIJHMvHB562PW+BWPhwZD8=
+ github.com/flynn-archive/go-shlex v0.0.0-20150515145356-3f9db97f8568 h1:BMXYYRWTLOJKlh+lOBt6nUQgXAfB7oVIQt5cNreqSLI=
+ github.com/flynn-archive/go-shlex v0.0.0-20150515145356-3f9db97f8568/go.mod h1:rZfgFAXFS/z/lEd6LJmf9HVZ1LkgYiHx5pHhV5DR16M=
+@@ -662,13 +664,41 @@ github.com/go-ole/go-ole v1.2.6/go.mod h1:pprOEPIfldk/42T2oK7lQ4v4JSDwmV0As9GaiU
+ github.com/go-openapi/jsonpointer v0.19.6/go.mod h1:osyAmYz/mB/C3I+WsTTSgw1ONzaLJoLCyoi6/zppojs=
+ github.com/go-openapi/jsonpointer v0.22.5 h1:8on/0Yp4uTb9f4XvTrM2+1CPrV05QPZXu+rvu2o9jcA=
+ github.com/go-openapi/jsonpointer v0.22.5/go.mod h1:gyUR3sCvGSWchA2sUBJGluYMbe1zazrYWIkWPjjMUY0=
++github.com/go-openapi/jsonpointer v1.0.0 h1:kR9tHqY0CtZaOPVFm622dPVNhrvYpwr4uCxgL3h1H8s=
++github.com/go-openapi/jsonpointer v1.0.0/go.mod h1:Z3rw7dWu1p9IgitXCFamSlA5lmDiklEB6vkaxcNZW5Y=
+ github.com/go-openapi/jsonreference v0.20.2 h1:3sVjiK66+uXK/6oQ8xgcRKcFgQ5KXa2KvnJRumpMGbE=
+ github.com/go-openapi/jsonreference v0.20.2/go.mod h1:Bl1zwGIM8/wsvqjsOQLJ/SH+En5Ap4rVB5KVcIDZG2k=
++github.com/go-openapi/jsonreference v1.0.0 h1:jlmTr6torcd1YgDQvSfNmRtKzYDO4FGBkrAdlAVWnpY=
++github.com/go-openapi/jsonreference v1.0.0/go.mod h1:jtwdyGbJk0Xhe5Y+rwtglQP6Sb1WZST4rT32LWB+sv0=
+ github.com/go-openapi/swag v0.22.3/go.mod h1:UzaqsxGiab7freDnrUUra0MwWfN/q7tE4j+VcZ0yl14=
+ github.com/go-openapi/swag v0.23.0 h1:vsEVJDUo2hPJ2tu0/Xc+4noaxyEffXNIs3cOULZ+GrE=
+ github.com/go-openapi/swag v0.23.0/go.mod h1:esZ8ITTYEsH1V2trKHjAN8Ai7xHb8RV+YSZ577vPjgQ=
++github.com/go-openapi/swag v0.28.0 h1:xkgbOSKj6DZziNpyqRRAOt3GJGtgjgsd2RoyT30VWuw=
++github.com/go-openapi/swag v0.28.0/go.mod h1:4qYnT3Cqr1p1VknOdPo70evN4rgQnAg6jwApHyxSGIg=
++github.com/go-openapi/swag/cmdutils v0.28.0 h1:7TOeNtkYru1SG8Y34tDh9WBbLsMqGnptuxWiHREPZ4Q=
++github.com/go-openapi/swag/cmdutils v0.28.0/go.mod h1:Sm1MVFMkF6guJJ+pQqHnQA3N0j9qALV3NxzDSv6bETM=
++github.com/go-openapi/swag/conv v0.28.0 h1:GtqqbyFe7vR5Y7ehxG9W6/OvrSFdf1OLeTGp40TqxH8=
++github.com/go-openapi/swag/conv v0.28.0/go.mod h1:mbUE+mzctnhxi864m0Q07SpN8OowD9JhxmxuYvZZD/k=
++github.com/go-openapi/swag/fileutils v0.28.0 h1:Z04XWQD7R8Eq+7GnOrjovBxPPmZzsS4gt2H2GPGIViU=
++github.com/go-openapi/swag/fileutils v0.28.0/go.mod h1:VvJFZLTZS0AI854gEQz5tk7dBESdLjiNUMSZ/th2ry8=
+ github.com/go-openapi/swag/jsonname v0.25.5 h1:8p150i44rv/Drip4vWI3kGi9+4W9TdI3US3uUYSFhSo=
+ github.com/go-openapi/swag/jsonname v0.25.5/go.mod h1:jNqqikyiAK56uS7n8sLkdaNY/uq6+D2m2LANat09pKU=
++github.com/go-openapi/swag/jsonutils v0.28.0 h1:YIch6FwO7RXzeAnbO8Tu7dWBZeUEH+4nA0HXltVTnv4=
++github.com/go-openapi/swag/jsonutils v0.28.0/go.mod h1:CYM3WlTUcagR2ZoHdz54di/cbBqt82tuxuXgAjxw+mg=
++github.com/go-openapi/swag/loading v0.28.0 h1:td8QZdZC9MIYGGSnSPKShKiK22I2tU5UQvuUhIBPRLU=
++github.com/go-openapi/swag/loading v0.28.0/go.mod h1:rXB0QiQX5mMveXEA7ouM4KiiM9jVJe4K6BVbwhD1M4k=
++github.com/go-openapi/swag/mangling v0.28.0 h1:pH8eyeNO9SLYsTMWJrurnNfKmDa28XrlA+HePVD53VM=
++github.com/go-openapi/swag/mangling v0.28.0/go.mod h1:jtBE2+V+3pILxOR7Vgce+Cwp6A2PgZbvVqfNntbVs0w=
++github.com/go-openapi/swag/netutils v0.28.0 h1:YXN6TALEi2pzts8/8GNm6T61HTAZsieukGZidap989k=
++github.com/go-openapi/swag/netutils v0.28.0/go.mod h1:J+WYyFMLtvtCGqa6jLv+YNUmIKI3ZRQRrvfNDMoQoEQ=
++github.com/go-openapi/swag/pools v0.28.0 h1:HPMZWSAfce3rdVTFcjFiCIBtDg9h4x2QlRrHipwhxeU=
++github.com/go-openapi/swag/pools v0.28.0/go.mod h1:kVQefhSK5RWuRe7BXsL8htgBPAMpN7HDGpGEknqugeE=
++github.com/go-openapi/swag/stringutils v0.28.0 h1:ixsc9iYgDPubHL/8nSkbnryEHpD2VRlBMLKpQyPXcDU=
++github.com/go-openapi/swag/stringutils v0.28.0/go.mod h1:lzRN95CxXmA03XcDWHLOb6nOMcxCqR5rGY0lOgsfRoM=
++github.com/go-openapi/swag/typeutils v0.28.0 h1:nRBKSBXjDgf01VDPB3fWeD9nQuhCOVeIYAkUx2tbkyY=
++github.com/go-openapi/swag/typeutils v0.28.0/go.mod h1:Srm0xFNRZ1Y+vCxJclo5qzx8aj+1pAKda/YfFPrG0dQ=
++github.com/go-openapi/swag/yamlutils v0.28.0 h1:TV3JXH6DS46KUroDtMLAYHGkdWf5VDq3wVWFirmzROY=
++github.com/go-openapi/swag/yamlutils v0.28.0/go.mod h1:x0q/yndZHEgk9Rx3DyDqzFUmHy55KTvIZldvF2dTJXs=
+ github.com/go-openapi/testify/v2 v2.4.0 h1:8nsPrHVCWkQ4p8h1EsRVymA2XABB4OT40gcvAu+voFM=
+ github.com/go-openapi/testify/v2 v2.4.0/go.mod h1:HCPmvFFnheKK2BuwSA0TbbdxJ3I16pjwMkYkP4Ywn54=
+ github.com/go-pdf/fpdf v0.6.0 h1:MlgtGIfsdMEEQJr2le6b/HNr1ZlQwxyWr77r2aj2U/8=
+@@ -685,11 +715,15 @@ github.com/go-sql-driver/mysql v1.5.0/go.mod h1:DCzpHaOWr8IXmIStZouvnhqoel9Qv2LB
+ github.com/go-sql-driver/mysql v1.6.0/go.mod h1:DCzpHaOWr8IXmIStZouvnhqoel9Qv2LBy8hT2VhHyBg=
+ github.com/go-sql-driver/mysql v1.10.0 h1:Q+1LV8DkHJvSYAdR83XzuhDaTykuDx0l6fkXxoWCWfw=
+ github.com/go-sql-driver/mysql v1.10.0/go.mod h1:M+cqaI7+xxXGG9swrdeUIoPG3Y3KCkF0pZej+SK+nWk=
++github.com/go-sql-driver/mysql v1.10.1 h1:arlSnNLq6a5yxGxV7qg9lF4j0C+KwD6NbQyKr9QL6ME=
++github.com/go-sql-driver/mysql v1.10.1/go.mod h1:M+cqaI7+xxXGG9swrdeUIoPG3Y3KCkF0pZej+SK+nWk=
+ github.com/go-stack/stack v1.8.0/go.mod h1:v0f6uXyyMGvRgIKkXu+yp6POWl0qKG85gN/melR3HDY=
+ github.com/go-task/slim-sprig/v3 v3.0.0 h1:sUs3vkvUymDpBKi3qH1YSqBQk9+9D/8M2mN1vB6EwHI=
+ github.com/go-task/slim-sprig/v3 v3.0.0/go.mod h1:W848ghGpv3Qj3dhTPRyJypKRiqCdHZiAzKg9hl15HA8=
+ github.com/go-viper/mapstructure/v2 v2.4.0 h1:EBsztssimR/CONLSZZ04E8qAkxNYq4Qp9LvH92wZUgs=
+ github.com/go-viper/mapstructure/v2 v2.4.0/go.mod h1:oJDH3BJKyqBA2TXFhDsKDGDTlndYOZ6rGS0BRZIxGhM=
++github.com/go-viper/mapstructure/v2 v2.5.0 h1:vM5IJoUAy3d7zRSVtIwQgBj7BiWtMPfmPEgAXnvj1Ro=
++github.com/go-viper/mapstructure/v2 v2.5.0/go.mod h1:oJDH3BJKyqBA2TXFhDsKDGDTlndYOZ6rGS0BRZIxGhM=
+ github.com/gobwas/httphead v0.0.0-20180130184737-2c6c146eadee/go.mod h1:L0fX3K22YWvt/FAX9NnzrNzcI4wNYi9Yku4O0LKYflo=
+ github.com/gobwas/pool v0.2.0/go.mod h1:q8bcK0KcYlCgd9e7WYLm9LpyS+YeLd8JVDW6WezmKEw=
+ github.com/gobwas/ws v1.0.2/go.mod h1:szmBTxLgaFppYjEmNtny/v3w89xOydFnnZMcgRRu/EM=
+@@ -845,10 +879,14 @@ github.com/gorilla/mux v1.8.1/go.mod h1:AKf9I4AEqPTmMytcMc0KkNouC66V3BtZ4qD5fmWS
+ github.com/gorilla/websocket v1.4.1/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
+ github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 h1:JeSE6pjso5THxAzdVpqr6/geYxZytqFMBCOtn/ujyeo=
+ github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674/go.mod h1:r4w70xmWCQKmi1ONH4KIaBptdivuRPyosB9RmPlGEwA=
++github.com/gowebpki/jcs v1.0.1 h1:Qjzg8EOkrOTuWP7DqQ1FbYtcpEbeTzUoTN9bptp8FOU=
++github.com/gowebpki/jcs v1.0.1/go.mod h1:CID1cNZ+sHp1CCpAR8mPf6QRtagFBgPJE0FCUQ6+BrI=
+ github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79/go.mod h1:FecbI9+v66THATjSRHfNgh1IVFe/9kFxbXtjV0ctIMA=
+ github.com/grpc-ecosystem/grpc-gateway v1.16.0/go.mod h1:BDjrQk3hbvj6Nolgz8mAMFbcEtjT1g+wF4CSlocrBnw=
+ github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 h1:5VipnvEpbqr2gA2VbM+nYVbkIF28c5ZQfqCBQ5g2xfk=
+ github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0/go.mod h1:Hyl3n6Twe1hvtd9XUXDec4pTvgMSEixRuQKPTMH2bNs=
++github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 h1:/Tnpcb2E0Pz/tN9s3bfEY2Q8ePCEX9iuS+cneUwncnw=
++github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0/go.mod h1:zOBXOsUaBSjKgmH4OGzV1esUpR3oUSCPYVd2cUBjKYY=
+ github.com/hanwen/go-fuse v1.0.0/go.mod h1:unqXarDXqzAk0rt98O2tVndEPIpUgLD9+rwFisZH3Ok=
+ github.com/hanwen/go-fuse/v2 v2.1.0/go.mod h1:oRyA5eK+pvJyv5otpO/DgccS8y/RvYMaO00GgRLGryc=
+ github.com/hashicorp/go-uuid v0.0.0-20180228145832-27454136f036/go.mod h1:6SBZvOh/SIDV7/2o3Jml5SYk/TvGqwFJ/bN7x4byOro=
+@@ -1005,8 +1043,11 @@ github.com/mattn/go-isatty v0.0.22 h1:j8l17JJ9i6VGPUFUYoTUKPSgKe/83EYU2zBC7YNKMw
+ github.com/mattn/go-isatty v0.0.22/go.mod h1:ZXfXG4SQHsB/w3ZeOYbR0PrPwLy+n6xiMrJlRFqopa4=
+ github.com/mattn/go-runewidth v0.0.23 h1:7ykA0T0jkPpzSvMS5i9uoNn2Xy3R383f9HDx3RybWcw=
+ github.com/mattn/go-runewidth v0.0.23/go.mod h1:XBkDxAl56ILZc9knddidhrOlY5R/pDhgLpndooCuJAs=
++github.com/mattn/go-runewidth v0.0.24 h1:cpokDiIn0MGnhdHwuWnJBITySJ20QyNGnY2kR/ay2DU=
++github.com/mattn/go-runewidth v0.0.24/go.mod h1:XBkDxAl56ILZc9knddidhrOlY5R/pDhgLpndooCuJAs=
+ github.com/mattn/go-sqlite3 v1.14.49 h1:B8jBHC3xhxZgxztrgruTuLucebnULQnx4W7cF7SAE9w=
+ github.com/mattn/go-sqlite3 v1.14.49/go.mod h1:6JTjA44L93a0QCyJef5YvlPoKXntQPjzWv5gtm9sB6w=
++github.com/mattn/go-sqlite3 v1.14.52 h1:wVbm2Qnf4OXkqhBTSPuCRZDRnxfbVrrmiCEroVdog8U=
+ github.com/microcosm-cc/bluemonday v1.0.27/go.mod h1:jFi9vgW+H7c3V0lb6nR74Ib/DIB5OBs92Dimizgw2cA=
+ github.com/minio/md5-simd v1.1.2/go.mod h1:MzdKDxYpY2BT9XQFocsiZf/NKVtR7nkE4RoEpN+20RM=
+ github.com/minio/minio-go/v7 v7.0.34/go.mod h1:nCrRzjoSUQh8hgKKtu3Y708OLvRLtuASMg2/nvmbarw=
+@@ -1059,6 +1100,8 @@ github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e/go.mod h1:zD1mROLA
+ github.com/oapi-codegen/oapi-codegen/v2 v2.7.1/go.mod h1:qzFy6iuobJw/hD1aRILee4G87/ShmhR0xYCwcUtZMCw=
+ github.com/oapi-codegen/runtime v1.4.0 h1:KLOSFOp7UzkbS7Cs1ms6NBEKYr0WmH2wZG0KKbd2er4=
+ github.com/oapi-codegen/runtime v1.4.0/go.mod h1:5sw5fxCDmnOzKNYmkVNF8d34kyUeejJEY8HNT2WaPec=
++github.com/oapi-codegen/runtime v1.6.0 h1:7Xx+GlueD6nRuyKoCPzL434Jfi3BetbiJOrzCHp/VPU=
++github.com/oapi-codegen/runtime v1.6.0/go.mod h1:GwV7hC2hviaMzj+ITfHVRESK5J2W/GefVwIND/bMGvU=
+ github.com/oasdiff/yaml v0.1.1/go.mod h1:EYJNoyktvWMJ0Hmhx+6qTaqMOsalUaRGT8Sj1hNcegU=
+ github.com/oasdiff/yaml3 v0.0.14/go.mod h1:csto2xfDjYccdUn/yw/bPjj/cYTdp6HtFA0J4TWG+gg=
+ github.com/olebedev/when v1.1.0 h1:dlpoRa7huImhNtEx4yl0WYfTHVEWmJmIWd7fEkTHayc=
+@@ -1181,6 +1224,8 @@ github.com/spkg/bom v0.0.0-20160624110644-59b7046e48ad/go.mod h1:qLr4V1qq6nMqFKk
+ github.com/standard-webhooks/standard-webhooks/libraries v0.0.1/go.mod h1:L1MQhA6x4dn9r007T033lsaZMv9EmBAdXyU/+EF40fo=
+ github.com/steveyegge/beads v1.3.0 h1:QPvdw+hRA6EDx31eTzBe2pl/B5Z7yXczq7bC8KHPY0Q=
+ github.com/steveyegge/beads v1.3.0/go.mod h1:bw++9IlggPhjAeyNOv6cmfOlfyV+ERA5BiRgsqDvyTc=
++github.com/steveyegge/beads v1.3.1-0.20261010163319-1b7bf9b1910d h1:kOJptrP3/VelJlqzmmMpzLtcD2nHhe6ABagkaYpg7s0=
++github.com/steveyegge/beads v1.3.1-0.20261010163319-1b7bf9b1910d/go.mod h1:WEvhjBJHYn4QKlUikYriqcx1fSevIIkdtEO2mJYVrx0=
+ github.com/steveyegge/beads v1.3.1-rc.2 h1:zW5nPr/5aEnsj1R9txIVB/S5kZm4b33xlOw2E1yLG7U=
+ github.com/steveyegge/beads v1.3.1-rc.2/go.mod h1:z7FHqG/z403/Sjr6j36QaeWdFWFpEDwQVhWZt9C3Mug=
+ github.com/steveyegge/beads v1.3.1 h1:Ec9DhMDHo/prSd8PDYts+4VF5TY9hI0PrZ46bYnxj1Y=
+@@ -1205,6 +1250,7 @@ github.com/stretchr/testify v1.8.1/go.mod h1:w2LPCIKwWwSfY2zedu0+kehJoqGctiVI29o
+ github.com/stretchr/testify v1.8.4/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXlSw2iwfAo=
+ github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
+ github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
++github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
+ github.com/subosito/gotenv v1.6.0 h1:9NlTDc1FTs4qu0DDq7AEtTPNw6SVm7uBMsUCUjABIf8=
+ github.com/subosito/gotenv v1.6.0/go.mod h1:Dk4QP5c2W3ibzajGcXpNraDfq2IrhjMIvMSWPKKo0FU=
+ github.com/tdewolff/minify/v2 v2.12.9/go.mod h1:qOqdlDfL+7v0/fyymB+OP497nIxJYSvX4MQWA8OoiXU=
+@@ -1292,10 +1338,16 @@ go.opentelemetry.io/contrib/detectors/gcp v1.44.0 h1:NmLfL734pJhM0JKaYd2Y28+nY9d
+ go.opentelemetry.io/contrib/detectors/gcp v1.44.0/go.mod h1:tNAsgd8avTGke1+MndXlU5Cru4PQ9Ai/cCNWQv/ZJ/s=
+ go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.61.0 h1:q4XOmH/0opmeuJtPsbFNivyl7bCt7yRBbeEm2sC/XtQ=
+ go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.61.0/go.mod h1:snMWehoOh2wsEwnvvwtDyFCxVeDAODenXHtn5vzrKjo=
++go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.70.0 h1:oECp5f+hN7nkwjU/8BxQ/q23bGPb8FIrD839owX222E=
++go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.70.0/go.mod h1:DqEFwLumhzMBDQv9PcWbyoDxHI/4lAk6CM4nJBH39sc=
+ go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0 h1:F7Jx+6hwnZ41NSFTO5q4LYDtJRXBf2PD0rNBkeB/lus=
+ go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0/go.mod h1:UHB22Z8QsdRDrnAtX4PntOl36ajSxcdUMt1sF7Y6E7Q=
++go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0 h1:LMuyCAyfalSjDyjdC65nK6N0zoTT63+E/u95X0JovZI=
++go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0/go.mod h1:085m8qbm4hgc8rZWGDEa4vmyyo2c3nPxUslYUKUIU04=
+ go.opentelemetry.io/otel v1.45.0 h1:pdrWmLHofpubmArBv1LgFSv1Z0Ie/ppdZzu+kUN5EeU=
+ go.opentelemetry.io/otel v1.45.0/go.mod h1:XZxIqPapzEYnhNSScF5DIqXhm/rYi0FzCe2XddAwZfQ=
++go.opentelemetry.io/otel v1.46.0 h1:FHt5/CDyVxi/8IM1CH7VE/rRgq3kLHa2mSTVMO8AWyc=
++go.opentelemetry.io/otel v1.46.0/go.mod h1:Gj3SEScelsNC45tp4nSxRYlS+f5iez7W8XPMCt905kE=
+ go.opentelemetry.io/otel/exporters/jaeger v1.17.0/go.mod h1:nPCqOnEH9rNLKqH/+rrUjiMzHJdV1BlpKcTwRTyKkKI=
+ go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.19.0 h1:HIBTQ3VO5aupLKjC90JgMqpezVXwFuq6Ryjn0/izoag=
+ go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.19.0/go.mod h1:ji9vId85hMxqfvICA0Jt8JqEdrXaAkcpkI9HPXya0ro=
+@@ -1303,20 +1355,28 @@ go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.21.0 h1:fvNHGyo3C
+ go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.21.0/go.mod h1:zyGrjRKL2B/6+Jc/m4/otPoZqV2MY9ZjC/aBraRO7zc=
+ go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.45.0 h1:pnxy6c/kvNBWdNNFzqpjuJLm9Hjhgk/Q0nY221rwuk0=
+ go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.45.0/go.mod h1:qw6YsFapotRwoDhXRZvljzaOvCQB7UfnafEJagpN2TA=
++go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.46.0 h1:AP23h/mFgb/lc7tdck1Kfn9qxsM8TAeNPCU5C3pzaps=
++go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.46.0/go.mod h1:K4EqCe1b4kGk5WR690ntg9LaBfsPoV32FwthbyoptuA=
+ go.opentelemetry.io/otel/exporters/stdout/stdoutmetric v1.45.0 h1:dm9iyzn6tioYZtwqaiBSU0TSI8Yu/8dTIbfG0+B49DY=
+ go.opentelemetry.io/otel/exporters/stdout/stdoutmetric v1.45.0/go.mod h1:xAvxYjYK28qvt+yu4BYZ/zMmAjwMXINXD6JiMyeB8iI=
++go.opentelemetry.io/otel/exporters/stdout/stdoutmetric v1.46.0 h1:PR9eAf7o0dQs3hshZNZpE9aW2dXWX/KdDf6pJilVD3U=
+ go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.45.0 h1:lsA/S1bxgdbyFGkTj+3meEdJ6ADVU7QoFstV6MXgE68=
+ go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.45.0/go.mod h1:L7u+MirGoB1bjeLH66+xDykF4RC8C3RN7lIFpBiewUo=
++go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.46.0 h1:KdRxPiAoMptR3vfWzvjjvutTsSiwbC2uG0496rzZNfo=
+ go.opentelemetry.io/otel/log v0.19.0 h1:KUZs/GOsw79TBBMfDWsXS+KZ4g2Ckzksd1ymzsIEbo4=
+ go.opentelemetry.io/otel/log v0.19.0/go.mod h1:5DQYeGmxVIr4n0/BcJvF4upsraHjg6vudJJpnkL6Ipk=
+ go.opentelemetry.io/otel/log v0.21.0 h1:SLsVDGmtyBrdw8/a2Z0bOIxou/+bN4z56GebH7T0LvA=
+ go.opentelemetry.io/otel/log v0.21.0/go.mod h1:iReetQrZL9Wyg84cCkOoCmqDHS5RCFfyxC7J+r8fn8g=
+ go.opentelemetry.io/otel/metric v1.45.0 h1:7Eg1uH7CJ5cXv9is6tnBe1FI6rj1nwUdbFypRm3br/M=
+ go.opentelemetry.io/otel/metric v1.45.0/go.mod h1:HAPbm1nd3p1PmFH7v2dR+6BjXxw+Lq4a2+pndMAm08s=
++go.opentelemetry.io/otel/metric v1.46.0 h1:yBnkXvgV7AXFILZc5K6IZe/CBFF3OS7BJ8ov6/lj0K8=
++go.opentelemetry.io/otel/metric v1.46.0/go.mod h1:iPmdWqifKUdzziPkvvzIJXITl56fQx2mGM/DHLB3/2o=
+ go.opentelemetry.io/otel/metric/x v0.67.0 h1:PcicCNZFkZ4bXfSooXdo3WN7RBOVOtjVdo1wD358Uns=
+ go.opentelemetry.io/otel/metric/x v0.67.0/go.mod h1:FBjCWZe6wgcqxcMtjdGiClDKXb2YxxXii0CXftE4QtI=
+ go.opentelemetry.io/otel/sdk v1.45.0 h1:4VVSMgQ83dUgW2aoX5f6JgLvHwIvzcuLnF9lUdCSpCw=
+ go.opentelemetry.io/otel/sdk v1.45.0/go.mod h1:Sr40LgXV7DsKMMJMKOhUWOgMWTfAaqvm2kF0g7ilwuA=
++go.opentelemetry.io/otel/sdk v1.46.0 h1:h5CNQQjEbuQXY/JfZtgt3i7HVFV3aHPO2OAwO2eTYPI=
++go.opentelemetry.io/otel/sdk v1.46.0/go.mod h1:GAERFXFt5SYCEB+YiKUbMBeza6UaDH7GmGOZEfh2gSM=
+ go.opentelemetry.io/otel/sdk/log v0.19.0 h1:scYVLqT22D2gqXItnWiocLUKGH9yvkkeql5dBDiXyko=
+ go.opentelemetry.io/otel/sdk/log v0.19.0/go.mod h1:vFBowwXGLlW9AvpuF7bMgnNI95LiW10szrOdvzBHlAg=
+ go.opentelemetry.io/otel/sdk/log v0.21.0 h1:QsE7XSR0ktQdKmRKGnR+f1ObGF32WG+7MER/P9KgmYc=
+@@ -1327,8 +1387,12 @@ go.opentelemetry.io/otel/sdk/log/logtest v0.21.0 h1:X+JBBgKlswCGYsmgL0CnoUUtlE//
+ go.opentelemetry.io/otel/sdk/log/logtest v0.21.0/go.mod h1:HD1575K8e6sIFBBDd5tZB3t9DlMytWXq9FuR+Y4rfjE=
+ go.opentelemetry.io/otel/sdk/metric v1.45.0 h1:oVFszMfyj1Am6s24Vtc7wBb8BKLcwepJjNEYILuiE3o=
+ go.opentelemetry.io/otel/sdk/metric v1.45.0/go.mod h1:vUWUxDZvu1WVRj8JA8S0AdhsPrZoDpA2DdZauIh4mDA=
++go.opentelemetry.io/otel/sdk/metric v1.46.0 h1:0piZ26EG4RBfebb2jhDH6ERCYHoVWduc3kLgPCwSnSE=
++go.opentelemetry.io/otel/sdk/metric v1.46.0/go.mod h1:I1PbKrdVc8Qu8HYVDNtqVIwLwjNrhsV/uFuxfwg8mO4=
+ go.opentelemetry.io/otel/trace v1.45.0 h1:l/mP6Uv7oNO7/TblbhpbgMidxhq1uO/rPsikOyVhxag=
+ go.opentelemetry.io/otel/trace v1.45.0/go.mod h1:qoJJA2xNMnxRrdISU/kLtfUH2wNeQbiv+jhs/CxI8bc=
++go.opentelemetry.io/otel/trace v1.46.0 h1:OULy7ccdJnZtJ0UDYFOIGaCmiWzJ8Vi2G/Rsu60qs1c=
++go.opentelemetry.io/otel/trace v1.46.0/go.mod h1:J7GAXweO77XSFkB/rmAqk9D6ihszhFjLU+d9WuUxDLI=
+ go.opentelemetry.io/proto/otlp v0.7.0/go.mod h1:PqfVotwruBrMGOCsRd/89rSnXhoiJIqeYNgFYFoEGnI=
+ go.opentelemetry.io/proto/otlp v1.11.0 h1:5rrYs0Ykyj50sdU/JU0x8etU+LubXWb+gED6TbEdMIk=
+ go.opentelemetry.io/proto/otlp v1.11.0/go.mod h1:SmVizdCOAm3XBtG1g1NnOdhW6jtddT72hLMhv8VwA8E=
+@@ -1360,6 +1424,8 @@ go.yaml.in/yaml/v2 v2.4.3 h1:6gvOSjQoTB3vt1l+CU+tSyi/HOjfOjRLJ4YwYZGwRO0=
+ go.yaml.in/yaml/v2 v2.4.3/go.mod h1:zSxWcmIDjOzPXpjlTTbAsKokqkDNAVtZO0WOMiT90s8=
+ go.yaml.in/yaml/v3 v3.0.4 h1:tfq32ie2Jv2UxXFdLJdh3jXuOzWiL1fo0bu/FbuKpbc=
+ go.yaml.in/yaml/v3 v3.0.4/go.mod h1:DhzuOOF2ATzADvBadXxruRBLzYTpT36CKvDb3+aBEFg=
++go.yaml.in/yaml/v3 v3.0.5 h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=
++go.yaml.in/yaml/v3 v3.0.5/go.mod h1:HVTZu1O7/Vkt2N+BFy8Zza+lnLsABggaTM2ZpNIGuKg=
+ go.yaml.in/yaml/v4 v4.0.0-rc.4 h1:UP4+v6fFrBIb1l934bDl//mmnoIZEDK0idg1+AIvX5U=
+ go.yaml.in/yaml/v4 v4.0.0-rc.4/go.mod h1:aZqd9kCMsGL7AuUv/m/PvWLdg5sjJsZ4oHDEnfPPfY0=
+ gocloud.dev v0.26.0/go.mod h1:mkUgejbnbLotorqDyvedJO20XcZNTynmSeVSQS9btVg=
+@@ -1405,6 +1471,8 @@ golang.org/x/exp v0.0.0-20200207192155-f17229e696bd/go.mod h1:J/WKrq2StrnmMY6+EH
+ golang.org/x/exp v0.0.0-20200224162631-6cc2880d07d6/go.mod h1:3jZMyOhIsHpP37uCMkUooju7aAi5cS1Q23tOzKc+0MU=
+ golang.org/x/exp v0.0.0-20240205201215-2c58cdc269a3 h1:/RIbNt/Zr7rVhIkQhooTxCxFcdWLGIKnZA4IXNFSrvo=
+ golang.org/x/exp v0.0.0-20240205201215-2c58cdc269a3/go.mod h1:idGWGoKP1toJGkd5/ig9ZLuPcZBC3ewk7SzmH0uou08=
++golang.org/x/exp v0.0.0-20240404231335-c0f41cb1a7a0 h1:985EYyeCOxTpcgOTJpflJUwOeEz0CQOdPt73OzpE9F8=
++golang.org/x/exp v0.0.0-20240404231335-c0f41cb1a7a0/go.mod h1:/lliqkxwWAhPjf5oSOIJup2XcqJaw8RGS6k3TGEc7GI=
+ golang.org/x/image v0.0.0-20180708004352-c73c2afc3b81/go.mod h1:ux5Hcp/YLpHSI86hEcLt0YII63i6oz57MZXIpbrjZUs=
+ golang.org/x/image v0.0.0-20190227222117-0694c2d4d067/go.mod h1:kZ7UVZpmo3dzQBMxlp+ypCbDeSB+sBbTgSJuh5dn5js=
+ golang.org/x/image v0.0.0-20190802002840-cff245a6509b/go.mod h1:FeLwcggjj3mMvU+oOTbSwawSJRM1uh48EjtB4UJZlP0=
+@@ -1898,9 +1966,13 @@ google.golang.org/genproto v0.0.0-20260128011058-8636f8732409 h1:VQZ/yAbAtjkHgH8
+ google.golang.org/genproto v0.0.0-20260128011058-8636f8732409/go.mod h1:rxKD3IEILWEu3P44seeNOAwZN4SaoKaQ/2eTg4mM6EM=
+ google.golang.org/genproto/googleapis/api v0.0.0-20260803160001-6ac0973c030d h1:FarXi840EJWSHYTN3ERkADbPWjl307+FGrA22KAVjjc=
+ google.golang.org/genproto/googleapis/api v0.0.0-20260803160001-6ac0973c030d/go.mod h1:K/+WGbmBY7aNW1HDw1fJnKYo10i0DkAX6pows00dLig=
++google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688 h1:ax2KzoSRIZU/M0cIxri3pKxy99vniH1PVxWC6si/eZI=
++google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688/go.mod h1:1RJ9BQGyNdZwkGc1eTqkErfRZ6RJyYPHZo73BZ1vQqI=
+ google.golang.org/genproto/googleapis/bytestream v0.0.0-20260122232226-8e98ce8d340d/go.mod h1:Tej9lWiwVvQJP+b43pjJIsr/3mZycXWCIyoiXmbFf40=
+ google.golang.org/genproto/googleapis/rpc v0.0.0-20260803160001-6ac0973c030d h1:IL4hdHzcUv2l/gcg98/Rj3FbtE6axwqslOW8SW0C+S0=
+ google.golang.org/genproto/googleapis/rpc v0.0.0-20260803160001-6ac0973c030d/go.mod h1:4Hqkh8ycfw05ld/3BWL7rJOSfebL2Q+DVDeRgYgxUU8=
++google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 h1:cYNAzI2sUwhmCcoj9TxvihSrqsxt6uIkj3rDRhSDmW4=
++google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688/go.mod h1:DjtHYE8FKJLivXcBEjGwndXfIC23G0VpXiXKqG179uA=
+ google.golang.org/grpc v1.19.0/go.mod h1:mqu4LbDTu4XGKhr4mRzUsmM4RtVoemTSY81AxZiDr8c=
+ google.golang.org/grpc v1.20.1/go.mod h1:10oTOabMzJvdu6/UiuZezV6QK5dSlG84ov/aaiqXj38=
+ google.golang.org/grpc v1.21.1/go.mod h1:oYelfM1adQP15Ek0mdvEgi9Df8B9CZIaU1084ijfRaM=
+@@ -1950,6 +2022,8 @@ google.golang.org/protobuf v1.27.1/go.mod h1:9q0QmTI4eRPtz6boOQmLYwt+qCgq0jsYwAQ
+ google.golang.org/protobuf v1.28.0/go.mod h1:HV8QOd/L58Z+nl8r43ehVNZIU/HEI6OcFqwMG9pJV4I=
+ google.golang.org/protobuf v1.36.11 h1:fV6ZwhNocDyBLK0dj+fg8ektcVegBBuEolpbTQyBNVE=
+ google.golang.org/protobuf v1.36.11/go.mod h1:HTf+CrKn2C3g5S8VImy6tdcUvCska2kB7j23XfzDpco=
++google.golang.org/protobuf v1.36.12 h1:pJOKDDOyeXErUroCihFAd5LQuwXBSpVnKGrj5o/fwxc=
++google.golang.org/protobuf v1.36.12/go.mod h1:HTf+CrKn2C3g5S8VImy6tdcUvCska2kB7j23XfzDpco=
+ gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+ gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+ gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+diff --git a/internal/beads/bdstore_conditional_integration_test.go b/internal/beads/bdstore_conditional_integration_test.go
+index 0bff391f..3c54dfdb 100644
+--- a/internal/beads/bdstore_conditional_integration_test.go
++++ b/internal/beads/bdstore_conditional_integration_test.go
+@@ -9,6 +9,7 @@ import (
+ 	"path/filepath"
+ 	"strings"
+ 	"testing"
++	"time"
+ 
+ 	"github.com/gastownhall/gascity/internal/beads"
+ 	"github.com/gastownhall/gascity/internal/beads/beadstest"
+@@ -71,15 +72,8 @@ func TestBdStoreConditionalWriterConformance(t *testing.T) {
+ 	}
+ 
+ 	t.Run("conformance", func(t *testing.T) {
+-		// Known likely first failure once #4682 lands and this leg goes live:
+-		// the contention subtest bursts ~30 concurrent bd subprocesses at one
+-		// EMBEDDED (serverless) scope, and embedded dolt lock/busy errors are
+-		// not in isBdTransientWriteError's serialization class — a failure
+-		// with lock/busy text there is a retry-classifier gap or a
+-		// server-mode-scope problem, NOT a #4682 wire-code contract break.
+-		// Widen the serialization class (production-relevant) or move this
+-		// scope to server mode before reading such a failure as the codes
+-		// being wrong.
++		// The contention row uses the scope-owned proxied server. Serialization
++		// failures remain distinct from conditional-write wire contract failures.
+ 		beadstest.RunConditionalWriterConformanceWithOptions(t, "BdStore",
+ 			func(t *testing.T) beads.Store {
+ 				store, _ := newConditionalIntegrationBdStore(t)
+@@ -137,7 +131,7 @@ func TestBdStoreConditionalWriterConformance(t *testing.T) {
+ // a synthetic HOME whose .beads/config.yaml declares dolt.shared-server:
+ // true — the shape ga-1037rg named as the gate host's ambient config — and
+ // proves the conditional-integration scaffold still round-trips a bead
+-// against the scope's own embedded database. Before HOME was added to
++// against the scope's own proxied database. Before HOME was added to
+ // newConditionalIntegrationRunner's env overlay, bd inherited this polluted
+ // ambient HOME unfiltered and misrouted to the shared Dolt server instead of
+ // the scope directory, so this test fails on the pre-fix runner and passes
+@@ -173,14 +167,18 @@ func TestNewConditionalIntegrationRunnerIsolatesHOMEFromSharedServerConfig(t *te
+ }
+ 
+ // newConditionalIntegrationBdStore stands up a REAL bd scope in a fresh
+-// TempDir — git init + `bd init` in embedded (serverless) mode — and returns
++// temporary directory — git init + `bd init --proxied-server` — and returns
+ // the production BdStore over it plus the scope root. Environment is pinned
+ // per scope (BEADS_DIR into the scope's own .beads) so an ambient BEADS_DIR
+ // from the invoking shell can never redirect the store to a live database,
+ // mirroring the libstore env-pinning precedent.
+ func newConditionalIntegrationBdStore(t *testing.T) (*beads.BdStore, string) {
+ 	t.Helper()
+-	dir := beadstest.GuardedTempDir(t)
++	dir, err := os.MkdirTemp("", "gc-cas-proxied-")
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Logf("retained proxied CAS fixture: %s", dir)
+ 	git := exec.Command("git", "init", "--quiet", dir)
+ 	// GIT_DIR/GIT_WORK_TREE from the invoking shell would redirect init away
+ 	// from the TempDir; strip them for this one call (setting them to the
+@@ -198,18 +196,27 @@ func newConditionalIntegrationBdStore(t *testing.T) (*beads.BdStore, string) {
+ 		t.Fatalf("git init: %v\n%s", err, out)
+ 	}
+ 	runner := newConditionalIntegrationRunner(t, dir)
+-	if out, err := runner(dir, "bd", "init", "-p", "tst", "--skip-hooks", "--skip-agents"); err != nil {
++	t.Cleanup(func() {
++		if out, err := runner(dir, "bd", "dolt", "stop"); err != nil {
++			t.Errorf("retaining %s: proxy stop failed: %v\n%s", dir, err, out)
++			return
++		}
++		if err := os.RemoveAll(dir); err != nil {
++			t.Errorf("remove stopped fixture %s: %v", dir, err)
++		}
++	})
++	if out, err := runner(dir, "bd", "init", "--proxied-server", "-p", "tst", "--skip-hooks", "--skip-agents"); err != nil {
+ 		t.Fatalf("bd init: %v\n%s", err, out)
+ 	}
+ 	return beads.NewBdStore(dir, runner), dir
+ }
+ 
+ // newConditionalIntegrationRunner pins BEADS_DIR to the scope so every bd
+-// invocation resolves the scope-local embedded database, and force-clears the
++// invocation resolves the scope-local proxied database, and force-clears the
+ // dolt-server env knobs: a dev shell with BEADS_DOLT_SERVER_HOST/PORT (a live
+ // deployment's dolt server) or BEADS_DOLT_AUTO_START=1 exported must never make
+-// this row write a tst database into a live server or leave a dolt sql-server
+-// running in the TempDir. (CI's packages shard runs under env -i and is safe
++// this row write a tst database into a foreign server. The scaffold owns its
++// proxy and stops it through bd before deleting the directory. (CI's packages shard runs under env -i and is safe
+ // either way; this guards local runs.)
+ //
+ // bd also runs re-homed (toolhome.Environ): it resolves user-level config and
+@@ -217,7 +224,7 @@ func newConditionalIntegrationBdStore(t *testing.T) (*beads.BdStore, string) {
+ // route this row into their host-wide shared Dolt server.
+ func newConditionalIntegrationRunner(t *testing.T, scopeDir string) beads.CommandRunner {
+ 	t.Helper()
+-	home := filepath.Join(filepath.Dir(scopeDir), "tool-home")
++	home := filepath.Join(scopeDir, "tool-home")
+ 	if err := os.MkdirAll(home, 0o755); err != nil {
+ 		t.Fatalf("create bd tool home: %v", err)
+ 	}
+@@ -228,8 +235,15 @@ func newConditionalIntegrationRunner(t *testing.T, scopeDir string) beads.Comman
+ 	}
+ 	env["BEADS_DIR"] = filepath.Join(scopeDir, ".beads")
+ 	env["BEADS_DOLT_AUTO_START"] = "0"
++	env[beadstest.EnvBeadsTestMode] = "0"
++	env["BD_DISABLE_METRICS"] = "1"
++	env["DOLT_ROOT_PATH"] = filepath.Join(scopeDir, "dolt-home")
+ 	// toolhome.Environ drops every BEADS_* name, so BdSubprocessEnv re-applies the
+ 	// test-mode default that keeps bd's detached metrics flusher from racing the
+ 	// TempDir removal (ga-aik16g).
+-	return beads.ExecCommandRunnerWithExactEnvContext(context.Background(), beadstest.BdSubprocessEnv(env))
++	return func(dir, name string, args ...string) ([]byte, error) {
++		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
++		defer cancel()
++		return beads.ExecCommandRunnerWithExactEnvContext(ctx, beadstest.BdSubprocessEnv(env))(dir, name, args...)
++	}
+ }
+diff --git a/internal/beads/schema_cursor.go b/internal/beads/schema_cursor.go
+index 36181cf6..e20185cf 100644
+--- a/internal/beads/schema_cursor.go
++++ b/internal/beads/schema_cursor.go
+@@ -99,10 +99,10 @@ import (
+ // SchemaVersions().
+ const (
+ 	// SchemaCursorMain is schema.LatestVersion() for the pinned library.
+-	SchemaCursorMain = 66
++	SchemaCursorMain = 69
+ 	// SchemaCursorIgnored is schema.LatestIgnoredVersion() for the pinned
+ 	// library.
+-	SchemaCursorIgnored = 26
++	SchemaCursorIgnored = 27
+ )
+ 
+ // PinnedSchemaCursors returns the pair a proxied database must already be at
+diff --git a/internal/dispatch/control.go b/internal/dispatch/control.go
+index 20096b4a..17ef0651 100644
+--- a/internal/dispatch/control.go
++++ b/internal/dispatch/control.go
+@@ -29,7 +29,7 @@ const (
+ 	// attemptPass closes the control as passed.
+ 	attemptPass attemptDisposition = iota
+ 	// attemptHardFail closes the control as a terminal hard failure regardless
+-	// of attempts remaining (only the retry classifier produces this).
++	// of attempts remaining.
+ 	attemptHardFail
+ 	// attemptContinue spawns the next attempt when attempts remain, or disposes
+ 	// of the exhausted control via the strategy when max_attempts is reached.
+@@ -286,6 +286,18 @@ func evaluateRetryAttempt(store beads.Store, bead, attempt beads.Bead, _ int, op
+ // runs the check script. A GatePass closes the control; anything else spawns
+ // the next iteration or exhausts.
+ func evaluateRalphIteration(store beads.Store, bead, iteration beads.Bead, iterationNum int, opts ProcessOptions) (attemptEvaluation, error) {
++	// Explicit hard subject failures are terminal in both compiled and legacy
++	// Ralph lanes. A completed body with a blocking gate verdict still iterates.
++	if iteration.Metadata[beadmeta.OutcomeMetadataKey] == beadmeta.OutcomeFail &&
++		strings.TrimSpace(iteration.Metadata[beadmeta.FailureClassMetadataKey]) == beadmeta.FailureClassHard {
++		reason := retryFailureReason(iteration)
++		return attemptEvaluation{
++			disposition: attemptHardFail,
++			logOutcome:  "hard",
++			logDetail:   reason,
++			reason:      reason,
++		}, nil
++	}
+ 	// Propagate non-gc metadata from the iteration to the ralph control BEFORE
+ 	// running the check. This makes the iteration's output (e.g.,
+ 	// review.verdict) visible on the ralph bead for check scripts that read
+@@ -304,6 +316,34 @@ func evaluateRalphIteration(store beads.Store, bead, iteration beads.Bead, itera
+ 	if err != nil {
+ 		return attemptEvaluation{}, fmt.Errorf("%s: running check: %w", bead.ID, err)
+ 	}
++	_, blind := convergence.ClassifyInfraBlind(checkResult)
++	if blind {
++		checkResult.Outcome = convergence.GateError
++	}
++	if err := persistCheckResult(store, reloaded, checkResult); err != nil {
++		return attemptEvaluation{}, fmt.Errorf("%s: persisting check result: %w", bead.ID, err)
++	}
++	// A failed start after resolving a store-root fallback into a removed
++	// work_dir retains its existing graded-failure behavior. Only launched
++	// infrastructure-blind checks and timeouts take this retry lane.
++	if blind || checkResult.Outcome == convergence.GateTimeout {
++		infraRetries, _ := strconv.Atoi(reloaded.Metadata[beadmeta.CheckInfraRetryMetadataKey])
++		if infraRetries < maxCheckInfraRetries {
++			if err := store.SetMetadata(bead.ID, beadmeta.CheckInfraRetryMetadataKey, strconv.Itoa(infraRetries+1)); err != nil {
++				if controllerSpawnBoundaryPending(store, bead.ID, err, opts) {
++					return attemptEvaluation{}, ErrControlPending
++				}
++				return attemptEvaluation{}, fmt.Errorf("%s: recording gate infra-retry: %w", bead.ID, err)
++			}
++			return attemptEvaluation{}, ErrControlPending
++		}
++		return attemptEvaluation{
++			disposition: attemptHardFail,
++			logOutcome:  checkResult.Outcome,
++			logDetail:   checkResult.Stderr,
++			reason:      "check infrastructure retry budget exhausted",
++		}, nil
++	}
+ 	eval := attemptEvaluation{logOutcome: checkResult.Outcome, logDetail: checkResult.Stderr}
+ 	if checkResult.Outcome == convergence.GatePass {
+ 		eval.disposition = attemptPass
+diff --git a/internal/dispatch/control_test.go b/internal/dispatch/control_test.go
+index 39dd658e..a26f34bd 100644
+--- a/internal/dispatch/control_test.go
++++ b/internal/dispatch/control_test.go
+@@ -21,6 +21,89 @@ import (
+ // processRetryControl tests
+ // ---------------------------------------------------------------------------
+ 
++// A compiled Ralph must honor the same explicit hard subject disposition as
++// the legacy check lane, rather than spending a semantic iteration on it.
++func TestProcessRalphControlHardSubjectFailureDoesNotIterate(t *testing.T) {
++	t.Parallel()
++	store, control := newUnlaunchableCheckRalphControl(t, "not-needed.sh")
++	if err := store.SetMetadata(control.ID, beadmeta.MaxAttemptsMetadataKey, "4"); err != nil {
++		t.Fatal(err)
++	}
++	rows, err := store.List(beads.ListQuery{AllowScan: true, IncludeClosed: true})
++	if err != nil {
++		t.Fatal(err)
++	}
++	for _, row := range rows {
++		if row.Metadata[beadmeta.KindMetadataKey] == beadmeta.KindScope {
++			if err := store.SetMetadataBatch(row.ID, map[string]string{
++				beadmeta.OutcomeMetadataKey:       beadmeta.OutcomeFail,
++				beadmeta.FailureClassMetadataKey:  beadmeta.FailureClassHard,
++				beadmeta.FailureReasonMetadataKey: "review transport retries exhausted",
++			}); err != nil {
++				t.Fatal(err)
++			}
++		}
++	}
++	before := countAllBeads(t, store)
++	result, err := ProcessControl(store, mustGet(t, store, control.ID), ProcessOptions{})
++	if err != nil {
++		t.Fatalf("ProcessControl: %v", err)
++	}
++	got := mustGet(t, store, control.ID)
++	if result.Action != "hard-fail" || got.Status != "closed" || got.Metadata[beadmeta.FinalDispositionMetadataKey] != beadmeta.DispositionHardFail {
++		t.Fatalf("result=%+v control=%+v, want closed hard failure", result, got)
++	}
++	if got.Metadata[beadmeta.FailedAttemptMetadataKey] != "1" || countAllBeads(t, store) != before {
++		t.Fatalf("hard failure must retain iteration one without spawning a successor: %+v", got)
++	}
++}
++
++// Exit 75 is infrastructure blindness, not a semantic rejection. Reconciliation
++// must retry the same completed iteration and spend only the infrastructure budget.
++func TestProcessRalphControlInfraGateDoesNotBurnIteration(t *testing.T) {
++	t.Parallel()
++	city := t.TempDir()
++	path := filepath.Join(city, "infra.sh")
++	writeExecutableScript(t, path, "#!/bin/sh\nexit 75\n")
++	store, control := newUnlaunchableCheckRalphControl(t, "infra.sh")
++	before := countAllBeads(t, store)
++	_, err := ProcessControl(store, control, ProcessOptions{CityPath: city})
++	if !errors.Is(err, ErrControlPending) {
++		t.Fatalf("ProcessControl = %v, want attempt-free pending", err)
++	}
++	got := mustGet(t, store, control.ID)
++	if got.Status == "closed" || got.Metadata[beadmeta.CheckInfraRetryMetadataKey] != "1" || countAllBeads(t, store) != before {
++		t.Fatalf("infrastructure retry must preserve the same iteration: %+v", got)
++	}
++	writeExecutableScript(t, path, "#!/bin/sh\nexit 0\n")
++	result, err := ProcessControl(store, got, ProcessOptions{CityPath: city})
++	if err != nil || result.Action != "pass" || countAllBeads(t, store) != before {
++		t.Fatalf("recovered gate = %+v, %v; want same-iteration pass", result, err)
++	}
++}
++
++func TestProcessRalphControlInfraBudgetExhaustionIsTerminal(t *testing.T) {
++	t.Parallel()
++	city := t.TempDir()
++	writeExecutableScript(t, filepath.Join(city, "infra.sh"), "#!/bin/sh\nexit 75\n")
++	store, control := newUnlaunchableCheckRalphControl(t, "infra.sh")
++	if err := store.SetMetadataBatch(control.ID, map[string]string{
++		beadmeta.MaxAttemptsMetadataKey:     "4",
++		beadmeta.CheckInfraRetryMetadataKey: strconv.Itoa(maxCheckInfraRetries),
++	}); err != nil {
++		t.Fatal(err)
++	}
++	before := countAllBeads(t, store)
++	result, err := ProcessControl(store, mustGet(t, store, control.ID), ProcessOptions{CityPath: city})
++	if err != nil || result.Action != "hard-fail" {
++		t.Fatalf("ProcessControl = %+v, %v; want terminal infrastructure failure", result, err)
++	}
++	got := mustGet(t, store, control.ID)
++	if got.Status != "closed" || got.Metadata[beadmeta.FailedAttemptMetadataKey] != "1" || countAllBeads(t, store) != before {
++		t.Fatalf("spent infrastructure budget must terminate without another semantic iteration: %+v", got)
++	}
++}
++
+ func TestProcessRetryControlPass(t *testing.T) {
+ 	t.Parallel()
+ 	store := beads.NewMemStore()
+diff --git a/cmd/gc/dispatch_control_ready_proxied_integration_test.go b/cmd/gc/dispatch_control_ready_proxied_integration_test.go
+new file mode 100644
+index 00000000..35889c48
+--- /dev/null
++++ b/cmd/gc/dispatch_control_ready_proxied_integration_test.go
+@@ -0,0 +1,180 @@
++//go:build integration
++
++package main
++
++import (
++	"context"
++	"fmt"
++	"os"
++	"os/exec"
++	"path/filepath"
++	"slices"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/gastownhall/gascity/internal/beads"
++	"github.com/gastownhall/gascity/internal/config"
++)
++
++type readinessObservedStore struct {
++	beads.Store
++	closes   int
++	closeErr error
++}
++
++func (s *readinessObservedStore) CloseStore() error {
++	s.closes++
++	s.closeErr = closeBeadStoreHandle(s.Store)
++	return s.closeErr
++}
++
++// This candidate proof requires the same revision-capable bd as the linked
++// library. It owns one rig proxy; no supervisor or provider is launched.
++func TestControlReadyMatchedProxyDifferential(t *testing.T) {
++	if _, err := exec.LookPath("bd"); err != nil {
++		t.Fatal("matched bd is required for the proxied readiness proof")
++	}
++	root, err := os.MkdirTemp("", "gc-readiness-proxied-")
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Logf("retained readiness proof: %s", root)
++	for _, kv := range os.Environ() {
++		key, _, _ := strings.Cut(kv, "=")
++		if strings.HasPrefix(key, "GC_") || strings.HasPrefix(key, "BEADS_") || strings.HasPrefix(key, "DOLT_") {
++			t.Setenv(key, "")
++		}
++	}
++	city, rig := filepath.Join(root, "city"), filepath.Join(root, "rig")
++	for _, dir := range []string{city, rig, filepath.Join(root, "home")} {
++		if err := os.MkdirAll(dir, 0o755); err != nil {
++			t.Fatal(err)
++		}
++	}
++	t.Setenv("HOME", filepath.Join(root, "home"))
++	t.Setenv("GC_HOME", filepath.Join(root, "home", "gc"))
++	t.Setenv("GC_BEADS", "bd")
++	t.Setenv("BEADS_DIR", filepath.Join(rig, ".beads"))
++	t.Setenv("BEADS_TEST_MODE", "0")
++	t.Setenv("BD_DISABLE_METRICS", "1")
++	t.Setenv("DOLT_ROOT_PATH", filepath.Join(root, "dolt-home"))
++	trace := filepath.Join(root, "bd-trace.jsonl")
++	t.Setenv("GC_BD_TRACE_JSON", trace)
++	runner := func(dir, name string, args ...string) ([]byte, error) {
++		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
++		defer cancel()
++		cmd := exec.CommandContext(ctx, name, args...)
++		cmd.Dir = dir
++		return cmd.CombinedOutput()
++	}
++	t.Cleanup(func() {
++		if out, err := runner(rig, "bd", "dolt", "stop"); err != nil {
++			t.Errorf("owned proxy stop failed; retaining %s: %v: %s", root, err, out)
++			return
++		}
++		if err := os.RemoveAll(root); err != nil {
++			t.Errorf("remove stopped proof scope: %v", err)
++		}
++	})
++	for _, args := range [][]string{{"git", "init"}, {"bd", "init", "--proxied-server", "-p", "rd", "--skip-hooks", "--skip-agents"}} {
++		if out, err := runner(rig, args[0], args[1:]...); err != nil {
++			t.Fatalf("fixture %v: %v: %s", args, err, out)
++		}
++	}
++	source := fmt.Sprintf("[workspace]\nname = \"readiness-proof\"\n[beads]\nprovider = \"bd\"\nconditional_writes = \"require\"\n[[rigs]]\nname = \"fixture\"\nprefix = \"rd\"\npath = %q\n", rig)
++	if err := os.WriteFile(filepath.Join(city, "city.toml"), []byte(source), 0o644); err != nil {
++		t.Fatal(err)
++	}
++	cfg, err := config.Parse([]byte(source))
++	if err != nil {
++		t.Fatal(err)
++	}
++	writer := beads.NewBdStoreWithPrefix(rig, runner, "rd")
++	create := func(title string, ephemeral bool) beads.Bead {
++		b, err := writer.Create(beads.Bead{Title: title, Type: "task", Ephemeral: ephemeral})
++		if err != nil {
++			t.Fatalf("create %s: %v", title, err)
++		}
++		return b
++	}
++	ready := create("ready", false)
++	wisp := create("ephemeral ready", true)
++	blocker, blocked, closed := create("blocker", false), create("blocked", false), create("closed", false)
++	if err := writer.DepAdd(blocked.ID, blocker.ID, "blocks"); err != nil {
++		t.Fatal(err)
++	}
++	if err := writer.Close(closed.ID); err != nil {
++		t.Fatal(err)
++	}
++	head := func() string {
++		out, err := runner(rig, "bd", "sql", "--json", "SELECT DOLT_HASHOF('HEAD') AS head")
++		if err != nil {
++			t.Fatalf("read HEAD: %v: %s", err, out)
++		}
++		return strings.TrimSpace(string(out))
++	}
++	before := head()
++	var diagnostic beads.BeadsDiagnostic
++	var openedStore *readinessObservedStore
++	previous := openStoreFactoryForCity
++	openStoreFactoryForCity = func(ctx context.Context, opts beads.StoreOpenOptions) (beads.StoreOpenResult, error) {
++		result, err := previous(ctx, opts)
++		diagnostic = result.Diagnostic
++		if err == nil {
++			openedStore = &readinessObservedStore{Store: result.Store}
++			result.Store = openedStore
++		}
++		return result, err
++	}
++	t.Cleanup(func() { openStoreFactoryForCity = previous })
++	scan := func(native string) []string {
++		t.Setenv("GC_BEADS_PROXIED_NATIVE", native)
++		rows, opened, err := controlReadyLegsReady(rig, city, cfg)
++		if err != nil || !opened {
++			t.Fatalf("scan native=%s: opened=%t err=%v", native, opened, err)
++		}
++		ids := make([]string, len(rows))
++		for i, row := range rows {
++			ids[i] = row.ID
++		}
++		slices.Sort(ids)
++		return ids
++	}
++	expected := []string{ready.ID, wisp.ID, blocker.ID}
++	slices.Sort(expected)
++	if ids := scan("0"); !slices.Equal(ids, expected) || diagnostic.Store != "BdStore" {
++		t.Fatalf("Bd readiness = %v, %s; want %v", ids, diagnostic.Store, expected)
++	}
++	readyForks := func() int {
++		data, err := os.ReadFile(trace)
++		if err != nil {
++			t.Fatalf("read owned bd trace: %v", err)
++		}
++		return strings.Count(string(data), `"args":["ready"`)
++	}
++	fallbackForks := readyForks()
++	if fallbackForks != 1 {
++		t.Fatalf("Bd scan ready forks = %d, want one", fallbackForks)
++	}
++	if ids := scan("1"); !slices.Equal(ids, expected) || diagnostic.Store != "NativeDoltStore" {
++		t.Fatalf("native readiness = %v, %s, %+v; want %v", ids, diagnostic.Store, diagnostic.Proxied, expected)
++	}
++	if openedStore.closes != 1 || openedStore.closeErr != nil {
++		t.Fatalf("native handle closure = %d, %v; want once successfully", openedStore.closes, openedStore.closeErr)
++	}
++	if readyForks() != fallbackForks {
++		t.Fatal("admitted native readiness still forked bd ready")
++	}
++	cfg, err = config.Parse([]byte(strings.Replace(source, "provider = \"bd\"", "provider = \"bd\"\nnative_transport = \"off\"", 1)))
++	if err != nil {
++		t.Fatal(err)
++	}
++	if ids := scan("1"); !slices.Equal(ids, expected) || diagnostic.Store != "BdStore" || readyForks() != fallbackForks+1 {
++		t.Fatalf("operator-off readiness = %v, %s; want Bd fallback with the same frontier", ids, diagnostic.Store)
++	}
++	if after := head(); after != before {
++		t.Fatalf("readiness changed HEAD: before=%s after=%s", before, after)
++	}
++	t.Log("matched native/Bd ready, blocked, closed and ephemeral rows agree; owned native handle closed; HEAD unchanged")
++}
+diff --git a/schemas/runtime/heartbeat/result.schema.json b/schemas/runtime/heartbeat/result.schema.json
+new file mode 100644
+index 00000000..e49d94a8
+--- /dev/null
++++ b/schemas/runtime/heartbeat/result.schema.json
+@@ -0,0 +1,13 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "type": "object",
++  "required": ["schema_version", "ok", "command", "session", "held_until"],
++  "properties": {
++    "schema_version": { "const": "1" },
++    "ok": { "const": true },
++    "command": { "const": "runtime heartbeat" },
++    "session": { "type": "string", "minLength": 1 },
++    "held_until": { "type": "string", "format": "date-time" }
++  },
++  "additionalProperties": true
++}

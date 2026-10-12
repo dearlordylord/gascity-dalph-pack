@@ -1,0 +1,25 @@
+{
+  "qualification": "candidate",
+  "platform": "linux-arm64",
+  "go": "1.27.2",
+  "gc": {
+    "repository": "https://github.com/gastownhall/gascity.git",
+    "revision": "8fd6aa25ce73b3e8cf0c1e092e8a14ab00b4c15a",
+    "version": "dev-dalph-native-v4-candidate",
+    "patch": "gascity-matched-native-candidate.patch",
+    "patchSha256": "879e0b006f688e59685f3cd2464cd1be32570a8b47d92f6ff8b39c8c02cafd8a",
+    "beadsModule": "github.com/steveyegge/beads",
+    "beadsModuleVersion": "v1.3.1-0.20261010163319-1b7bf9b1910d",
+    "beadsModuleSum": "h1:kOJptrP3/VelJlqzmmMpzLtcD2nHhe6ABagkaYpg7s0=",
+    "schema": {
+      "main": 69,
+      "ignored": 27
+    }
+  },
+  "bd": {
+    "repository": "https://github.com/gastownhall/beads.git",
+    "revision": "1b7bf9b1910d8ecec3f461f70f478314b654eaa6",
+    "buildTag": "gms_pure_go",
+    "cgo": false
+  }
+}

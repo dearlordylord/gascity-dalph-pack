@@ -6,6 +6,7 @@ import { makeCommands } from "../../src/delivery/command.ts"
 import { BoundaryFailure } from "../../src/domain/shared.ts"
 import { Bead } from "../../src/delivery/tracker.ts"
 import { runCommand } from "../../src/quality/command.ts"
+import { nativeTransportEnvironment } from "../../src/native/transport-environment.ts"
 
 const port = Effect.tryPromise({
   try: () =>
@@ -49,6 +50,7 @@ export const makeNativeCity = (fault: boolean | string = false) =>
     const tmuxRoot = dirname(dirname(yield* fs.realPath(tmux)))
     const lib = join(tmuxRoot, "lib", process.arch === "arm64" ? "aarch64-linux-gnu" : "x86_64-linux-gnu")
     const env = {
+      ...(yield* nativeTransportEnvironment),
       GC_HOME: home,
       TMUX_TMPDIR: join(root, "tmux"),
       GC_BEADS: "bd",
@@ -88,7 +90,7 @@ export const makeNativeCity = (fault: boolean | string = false) =>
         "--bundle",
         "--platform=node",
         "--format=esm",
-        "--packages=external",
+        '--banner:js=import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);',
         ...(qualificationCut ? ["--inject:./test/helpers/native-qualification-cut.ts"] : []),
         `--outfile=${pack}/dist/native.js`
       ],

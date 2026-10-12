@@ -2,6 +2,7 @@ import { Config, Console, Effect, FileSystem } from "effect"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { parse } from "smol-toml"
 import { fileURLToPath } from "node:url"
+import { nativeTransportEnvironment } from "../src/native/transport-environment.ts"
 import { BoundaryFailure } from "../src/domain/shared.ts"
 
 const settings = Config.unwrap({
@@ -30,6 +31,7 @@ const main = Effect.gen(function* () {
     source = source.replaceAll(`"@@${placeholder}@@"`, JSON.stringify(value))
   const environment = {
     ...(yield* runtimeEnvironment),
+    ...(yield* nativeTransportEnvironment),
     ...Object.fromEntries(
       Object.entries(values).map(([key, value]) => [`DALPH_${key === "BRANCH" ? "TARGET_BRANCH" : key}`, value])
     )

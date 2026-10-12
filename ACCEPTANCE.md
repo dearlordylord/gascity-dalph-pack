@@ -1,5 +1,28 @@
 # Dalph pack on Gas City: accepted trial contract
 
+Native CLI packaging includes its pinned dependencies in the Node ESM artifact.
+An operator invokes the artifact from a directory without node_modules; an
+invalid operation still refuses before tracker or task writers, and the scoped
+error file records that refusal. Node built-in loading remains available.
+This packaging check maps to test/native-bundle.test.ts; native workflow
+scenarios and boundary calls remain unchanged.
+
+S11 dependency candidate qualification: the Operator explicitly selects an
+isolated GC build `dev-dalph-native-v4-candidate` linked to Beads revision
+`1b7bf9b1910d8ecec3f461f70f478314b654eaa6`, with the same CLI revision.
+Preflight accepts only the existing v3 or this exact candidate identifier;
+unknown builds still refuse before cook or task writers. A fresh disposable
+city must report NativeDoltStore with cursors 69/27, read persistent and
+ephemeral records, retain CAS replay/conflict and observe close. This maps to
+`test/native-proxied-city.test.ts` and the native-controller build refusal tests.
+The operator renders a city with explicit proxy rollout and idle settings;
+the renderer retains them in workspace.env, so a clean native check launcher
+observes the same settings. With no selection, rollout 0 and idle 30m remain
+the defaults. Rendering repeats without filesystem changes or task writers.
+This maps to native-render.test.ts and native-transport-env.test.ts.
+Existing launch/review/delivery/recovery assertions remain mandatory. This
+worktree qualifies the candidate; it does not establish production adoption.
+
 The operator authorizes an isolated Gas City to deliver a seven-task expenses
 CLI through Codex gpt-6-luna with reasoning max. This implements the workflow
 agreed in the conversation; it does not modify Dalph production runtime.

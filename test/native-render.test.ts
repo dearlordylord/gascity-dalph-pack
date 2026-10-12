@@ -25,7 +25,9 @@ it.live(
         DALPH_PROJECT_CONTRACT_PATH: `${root}/project-contract.md`,
         GC_HOME: `${root}/home`,
         DOLT_ROOT_PATH: `${root}/dolt`,
-        TMUX_TMPDIR: `${root}/tmux`
+        TMUX_TMPDIR: `${root}/tmux`,
+        GC_BEADS_PROXIED_NATIVE: "1",
+        GC_BEADS_PROXIED_IDLE_TIMEOUT: "0"
       }
       const render = runCommand({
         executable: "env",
