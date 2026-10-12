@@ -13,6 +13,26 @@ const receipt = {
   outcome: "swapped"
 }
 
+it.effect("native fact CAS owns replay, empty keys, conflict and missing-bead refusal", () =>
+  Effect.gen(function* () {
+    const f = yield* nativeFixture
+    yield* Effect.gen(function* () {
+      const id = BeadId.make("work")
+      yield* f.tracker.record(id, "proof", { exact: true })
+      yield* f.tracker.record(id, "proof", { exact: true })
+      yield* Effect.flip(f.tracker.record(id, "proof", { exact: false }))
+      expect(f.raw("work").metadata["dalph.proof"]).toBe('{"exact":true}')
+      f.raw("work").metadata["dalph.empty"] = ""
+      yield* f.tracker.record(id, "empty", { exact: true })
+      expect(f.raw("work").metadata["dalph.empty"]).toBe('{"exact":true}')
+      yield* Effect.flip(f.tracker.record(BeadId.make("missing"), "proof", { exact: true }))
+      f.raw("work").metadata.raw_empty = ""
+      yield* Effect.flip(f.tracker.metadata(id, "raw_empty", "value"))
+      expect(f.raw("work").metadata.raw_empty).toBe("")
+    }).pipe(Effect.provide(f.layer))
+  })
+)
+
 for (const outcome of ["swapped", "already_next"])
   it.effect(`native ${outcome} receipt acknowledges the exact fact without a second read`, () =>
     Effect.gen(function* () {
@@ -29,7 +49,7 @@ for (const outcome of ["swapped", "already_next"])
         return execute(root, args, cwd, timeout, logs)
       }
       yield* f.tracker.record(BeadId.make("work"), "proof", { exact: true }).pipe(Effect.provide(f.layer))
-      expect(reads).toBe(1)
+      expect(reads).toBe(0)
       expect(writes).toBe(1)
     })
   )
@@ -60,7 +80,7 @@ for (const response of [
       )
       expect(error._tag).not.toBe("CommandRejected")
       expect(f.raw("work").metadata["dalph.proof"]).toBe('{"exact":true}')
-      expect(reads).toBe(1)
+      expect(reads).toBe(0)
       expect(f.state.pushCalls).toBe(0)
     })
   )
@@ -86,6 +106,6 @@ for (const applied of [true, false])
       if (applied) yield* operation
       else expect((yield* Effect.flip(operation))._tag).toBe("CommandRejected")
       expect(writes).toBe(1)
-      expect(reads).toBe(2)
+      expect(reads).toBe(1)
     })
   )

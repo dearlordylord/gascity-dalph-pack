@@ -132,14 +132,21 @@ export const nativeFixture = Effect.gen(function* () {
           const key = args.find((arg) => arg.startsWith("--key="))?.slice(6)
           if (key && !/^[a-zA-Z_][a-zA-Z0-9_./]*$/.test(key))
             return yield* new BoundaryFailure({ message: "native metadata key is invalid" })
-          yield* fixture.commands.execute(root, args, cwd, timeout, logs)
+          const id = args[args.indexOf("metadata-cas") + 1]
+          const row = fixture.rows.get(String(id))
+          const next = args.find((arg) => arg.startsWith("--next="))?.slice("--next=".length)
+          if (!row || !key) return yield* new BoundaryFailure({ message: "native CAS bead or key is missing" })
+          const retained = row.metadata[key]
+          const outcome =
+            retained === next ? "already_next" : retained || !fixture.state.casAcknowledged ? "conflict" : "swapped"
+          if (outcome === "swapped") yield* fixture.commands.execute(root, args, cwd, timeout, logs)
           return JSON.stringify({
             schema_version: "1",
             ok: true,
-            bead_id: args[args.indexOf("metadata-cas") + 1],
+            bead_id: id,
             store_ref: `rig:${config.rig}`,
             key,
-            outcome: fixture.state.casAcknowledged ? "swapped" : "conflict"
+            outcome
           })
         }
         if (args.includes("session") && args.includes("close")) {

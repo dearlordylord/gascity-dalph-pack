@@ -81,13 +81,26 @@ export const makeTracker = (config: RuntimeConfig, commands: Commands, nativeCli
       const encoded = (yield* bead(id)).metadata?.[`dalph.${key}`]
       return encoded ? yield* Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(encoded) : null
     })
+  const factWriteRequired = Effect.fn("Tracker.factWriteRequired")(function* (
+    id: BeadId,
+    key: string,
+    encoded: string
+  ) {
+    if (config.executionVersion === "native-v1") {
+      if (!nativeClient)
+        return yield* new BoundaryFailure({ message: "native tracker requires its scoped HTTP client" })
+    } else {
+      const current = (yield* bead(id)).metadata?.[`dalph.${key}`]
+      if (current) {
+        if (current !== encoded) return yield* new BoundaryFailure({ message: `contradictory durable fact: ${key}` })
+        return false
+      }
+    }
+    return true
+  })
   const record = Effect.fn("Tracker.recordFact")(function* (id: BeadId, key: string, value: Schema.JsonObject) {
     const encoded = canonical(value)
-    const current = (yield* bead(id)).metadata?.[`dalph.${key}`]
-    if (current) {
-      if (current !== encoded) return yield* new BoundaryFailure({ message: `contradictory durable fact: ${key}` })
-      return
-    }
+    if (!(yield* factWriteRequired(id, key, encoded))) return
     const reconciled = yield* commands
       .execute(
         config.root,

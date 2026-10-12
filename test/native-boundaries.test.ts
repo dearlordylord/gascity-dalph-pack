@@ -269,6 +269,7 @@ it.effect("native tracker rejects missing scoped client and foreign write acknow
     const f = yield* nativeFixture
     yield* Effect.gen(function* () {
       yield* Effect.flip(makeTracker(f.config, f.commands).bead(BeadId.make("work")))
+      yield* Effect.flip(makeTracker(f.config, f.commands).record(BeadId.make("work"), "proof", { exact: true }))
       const execute = f.commands.execute
       let reads = 0
       f.commands.execute = (root, args, cwd, timeout, logs) => {

@@ -639,16 +639,23 @@ foreign/missing identities, foreign replies, lost replies and strict unfinished
 refusal. Native city acceptance retains the external lifecycle checks in the
 full stage; controlled tests do not prove its wall-clock performance.
 
-For a native immutable fact, the pack first reads the exact bead and refuses a
-contradictory retained value. It then calls public `gc beads metadata-cas` with
+For a native immutable fact, the pack calls public `gc beads metadata-cas` with
 the exact bead, store, key, expected empty value and requested next value.
 Gas City's version1 receipt must name that bead/store/key and report `swapped`
 or `already_next`; this acknowledges the durable write without another show.
-The native primitive owns atomic comparison and same-store already-next readback.
+The native primitive owns both the contradictory-value guard and acknowledgement:
+absent or empty keys swap, identical retained values return already-next, and
+different values conflict without overwrite. Missing beads fail at that exact
+store without fallback. No preliminary show is needed for immutable fact writes.
+Raw metadata writes retain their initial show, including refusal to replace an
+existing empty string with a nonempty value. The required scoped client remains
+an admission condition. Mutable lifecycle, claim and custody checks still read
+their own fresh authorities; a CAS receipt does not replace those observations.
 Conflict, malformed/version-mismatched or foreign receipts fail closed, even
 with exit0 and an applied value. Only a lost command response permits a fresh
 exact read to reconcile that value; an unapplied write or failed read remains
 failed. No mutation is repeated during reconciliation. Legacy acknowledgement
 and mutable lifecycle/custody reads remain unchanged. Controlled tracker tests
-map each outcome, identity refusal and ambiguous before/after-commit case;
+map each outcome, replay, empty/missing/conflicting keys, identity refusal and
+ambiguous before/after-commit case;
 native city tests remain the live composition proof.
