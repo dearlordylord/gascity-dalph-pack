@@ -3,4 +3,39 @@ prompt_template = "native-reviewer.md"
 sleep_after_idle = "10s"
 min_active_sessions = 0
 max_active_sessions = 2
-work_query = 'gc ready --metadata-field "gc.routed_to=$GC_TEMPLATE" --unassigned --exclude-type=epic --sort oldest --limit 20 --json'
+work_query = '''
+[ -n "${GC_TEMPLATE:-}" ] || { echo "native work query requires GC_TEMPLATE" >&2; exit 1; }
+workspace=""
+if [ -n "${GC_SESSION_ID:-}" ]; then
+  [ -n "${GC_DIR:-}" ] || { echo "native seat work query requires GC_DIR" >&2; exit 1; }
+  workspace="${GC_DIR%/}"
+  workspace="${workspace##*/}"
+  [ -n "$workspace" ] || { echo "native seat work query requires a workspace slug" >&2; exit 1; }
+fi
+query_ready() {
+  if [ -n "$workspace" ]; then
+    gc ready --metadata-field "gc.routed_to=$GC_TEMPLATE" --metadata-field "gc.pack_workspace=$workspace" --exclude-type=epic --sort oldest --limit 20 --json "$@"
+  else
+    gc ready --metadata-field "gc.routed_to=$GC_TEMPLATE" --exclude-type=epic --sort oldest --limit 20 --json "$@"
+  fi
+}
+arrays=""
+for tier in in_progress ready; do
+  for identity in "${GC_SESSION_ID:-}" "${GC_SESSION_NAME:-}" "${GC_ALIAS:-}"; do
+    [ -n "$identity" ] || continue
+    if [ "$tier" = in_progress ]; then
+      result=$(query_ready --status in_progress --assignee "$identity") || exit
+    else
+      result=$(query_ready --assignee "$identity") || exit
+    fi
+    [ -n "$result" ] || { echo "native work query returned no JSON" >&2; exit 1; }
+    arrays="$arrays
+$result"
+  done
+done
+result=$(query_ready --unassigned) || exit
+[ -n "$result" ] || { echo "native work query returned no JSON" >&2; exit 1; }
+arrays="$arrays
+$result"
+printf '%s\n' "$arrays" | jq -s 'if all(.[]; type == "array") then add else error("native work query requires JSON arrays") end'
+'''

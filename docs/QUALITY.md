@@ -20,7 +20,9 @@ the owned child process group; it never counts as a pass. Stage output streams
 live and each completed stage reports its elapsed time.
 
 Fast runs every static check, controlled tests with 99% coverage of every
-production source file, and example checks. Full adds the real Gas City
+production source file, and example checks. Controlled tests use at most four
+Vitest workers; this changes only test scheduling, not Dalph runtime behavior.
+Full adds the real Gas City
 acceptance suite, with at most two fixture workers. Native scenarios remain
 unchanged in `vitest.native.config.ts`; they are not part of routine fast runs.
 Retain the daily full result and diagnose its failed boundary through fast checks

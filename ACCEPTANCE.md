@@ -564,6 +564,37 @@ immutable attempt; a matching stamp cannot recreate missing history.
 exercise review, fix, stop and recovery boundaries. The native daily cases remain
 required for live provider and public session lifecycle acceptance.
 
+### Workspace-scoped native pool discovery
+
+When an assigned in-progress candidate is blocked and an unassigned ready
+candidate exists in the same workspace, discovery returns both in native priority
+order, preserving `blocked_by`. Gas City's hook filters and selects candidates;
+a nonempty earlier tier must not suppress later ready work. The controlled query
+test proves transport composition, not native claim selection.
+
+Two ready tasks A/B route to the same native worker or reviewer template but
+declare different `gc.pack_workspace` slugs. Gas City runs seat A with native
+`GC_DIR` naming A's exact checkout. Its configured work query uses public
+`gc ready` metadata filters for that workspace; B never enters A's candidate
+set. The controller query without a seat sees both ready tasks, and native
+`scale_check` continues to own demand. The query does not claim or stamp tasks.
+The native hook remains responsible for canonical claim, adoption and restamping.
+
+Discovery retains native priority: assigned `in_progress`, assigned ready, then
+routed unassigned ready. Each assigned tier checks nonempty native session ID,
+session name and alias. A committed claim without its best-effort `gc.session_id`
+stamp remains discoverable by assignee and can be restamped by the native hook.
+An absent workspace, missing template or failed native query returns an error;
+it does not produce successful empty work or a false drain. Full path, immutable
+attempt and task/session validation still run at publication and cleanup.
+
+`test/native-work-query.test.ts` executes both configured queries against a
+controlled public-query command port: independent workspaces, controller demand,
+assigned recovery, assigned ready and failure propagation. These checks establish
+the query composition, not live native filtering or hook adoption. The existing
+two-result native delivery case remains the live cross-workspace proof in the
+daily full acceptance.
+
 The actor's exact self-hook current/claim commands delegate session and claim
 custody to Gas City. Failed native calls retain output without creating a
 project-writer stopped receipt. Operator targets, extra operands, copied session

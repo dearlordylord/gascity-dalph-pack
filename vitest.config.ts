@@ -12,7 +12,7 @@ export default defineConfig({
   test: {
     include: ["test/**/*.test.ts"],
     exclude: nativeAcceptanceFiles,
-    maxWorkers: 2,
+    maxWorkers: 4,
     reporters: ["verbose"],
     coverage: {
       provider: "v8",
