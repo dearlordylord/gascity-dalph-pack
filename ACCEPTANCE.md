@@ -500,6 +500,15 @@ this cut; its process-stop proof is inapplicable. Coverage belongs to the paired
 
 ## Completed actor drain acknowledgement
 
+The actor's exact self-hook current/claim commands delegate session and claim
+custody to Gas City. Failed native calls retain output without creating a
+project-writer stopped receipt. Operator targets, extra operands, copied session
+environments and shell wrappers do not qualify. Project commands, Git mutations
+and worktree cleanup retain their own guards. `test/native-hook-command.test.ts`
+covers accepted/rejected calls and a failed native boundary with retained output
+and no fabricated stopped-writer observation. Native city acceptance remains
+the external lifecycle proof in the daily full stage.
+
 An actor holds its exact native claim and session identity. When preparation,
 review preparation, qualification or integration closes its own node, the actor
 requests public `gc runtime drain-ack --json`. The response must name that actor.
