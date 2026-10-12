@@ -18,6 +18,7 @@ import { reviewBatch, reviewIdentityMatches, reviewNodes, reviewPublicationMatch
 import { reviewWritersStopped } from "./review-writers.ts"
 import { publishSharedWorkspace } from "./shared-workspace.ts"
 import { reviewFactKey } from "./review-fact-key.ts"
+import { retainedFact } from "./retained-fact.ts"
 import { isExecutionMetadata, isReviewControlMetadata } from "./nodes.ts"
 import { correlateCompletedReview, retainedReviewMatches } from "./completed-review.ts"
 
@@ -41,14 +42,14 @@ export const makeNativeReview = (config: RuntimeConfig, commands: Commands, trac
     batch: string,
     work: Bead
   ) {
-    if (round > 1) return yield* tracker.fact(work.id, verdictKey(batch, round - 1), NativeReviewVerdict)
+    if (round > 1) return yield* retainedFact(work, verdictKey(batch, round - 1), NativeReviewVerdict)
     const previous = current.metadata?.["dalph.previous_review_batch"]
-    return previous ? yield* tracker.fact(work.id, verdictKey(previous, REVIEW_ROUNDS), NativeReviewVerdict) : null
+    return previous ? yield* retainedFact(work, verdictKey(previous, REVIEW_ROUNDS), NativeReviewVerdict) : null
   })
   const context = Effect.fn("NativeReview.context")(function* (current: Bead) {
     const group = yield* nativeGroup(config, commands, current)
-    const attempt = yield* tracker.fact(group.work.id, "native_attempt", NativeAttempt)
-    const proposal = yield* tracker.fact(group.work.id, "native_proposal", NativeProposal)
+    const attempt = yield* retainedFact(group.work, "native_attempt", NativeAttempt)
+    const proposal = yield* retainedFact(group.work, "native_proposal", NativeProposal)
     if (!attempt || !proposal)
       return yield* new BoundaryFailure({ message: "review requires a retained native attempt and candidate" })
     const round = yield* reviewRound(current)
@@ -63,8 +64,8 @@ export const makeNativeReview = (config: RuntimeConfig, commands: Commands, trac
   })
   const correlated = Effect.fn("NativeReview.correlated")(function* (current: Bead, verdict: NativeReviewVerdict) {
     const facts = yield* context(current)
-    const pinned = yield* tracker.fact(
-      facts.group.work.id,
+    const pinned = yield* retainedFact(
+      facts.group.work,
       reviewFactKey("native_review_candidate", facts.batch, facts.round),
       ReviewCandidate
     )

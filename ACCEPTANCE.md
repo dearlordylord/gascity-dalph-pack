@@ -671,3 +671,16 @@ second integration ordinal and one successful publication, as covered by
 `test/candidate-refresh.test.ts`. `test/native-workflow.test.ts` covers selected
 leaves, excluded controls, partial replay and retained old copies. This reduces
 write fan-out; controlled tests do not establish live timing or full acceptance.
+
+S3/S4 immutable review reads: after the producer retains its attempt and proposal,
+each review context obtains a fresh uncached native group and decodes those facts,
+the previous completed verdict and the pinned candidate from that exact work row.
+CAS facts cannot be overwritten; another node's copy cannot fill a missing fact.
+Missing or malformed required facts refuse before publication. If a fact appears
+after this read, the current invocation may refuse; a new invocation must read a
+new group and may proceed. No snapshot survives the invocation. Session, claims,
+terminal history and writer custody retain their separate fresh reads. Crashes
+and retries retain the same immutable keys and contradiction guards. Controlled
+acceptance is mapped to `test/native-review-snapshot.test.ts` and the existing
+review safety, cleared-claim, changed-candidate and writer-custody tests; live
+city/review tests remain the composition proof.
