@@ -36,6 +36,14 @@ const verdictKey = (batch: string, round: number) => reviewFactKey("native_revie
 
 /** Native controls own iteration and retries; this boundary only validates their evidence. */
 export const makeNativeReview = (config: RuntimeConfig, commands: Commands, tracker: Tracker, git: Git) => {
+  const candidate = Effect.fn("NativeReview.candidate")(function* (attempt: typeof NativeAttempt.Type) {
+    const commit = yield* git
+      .git(["rev-parse", "HEAD"], attempt.plan.path)
+      .pipe(Effect.flatMap(Schema.decodeUnknownEffect(NativeProposal.fields.commit)))
+    if (yield* git.git(["status", "--porcelain"], attempt.plan.path))
+      return yield* new BoundaryFailure({ message: "review candidate must be committed and clean" })
+    return commit
+  })
   const previousReview = Effect.fn("NativeReview.previous")(function* (
     current: Bead,
     round: number,
@@ -54,11 +62,7 @@ export const makeNativeReview = (config: RuntimeConfig, commands: Commands, trac
       return yield* new BoundaryFailure({ message: "review requires a retained native attempt and candidate" })
     const round = yield* reviewRound(current)
     const batch = reviewBatch(current)
-    const commit = yield* git
-      .git(["rev-parse", "HEAD"], attempt.plan.path)
-      .pipe(Effect.flatMap(Schema.decodeUnknownEffect(NativeProposal.fields.commit)))
-    if (yield* git.git(["status", "--porcelain"], attempt.plan.path))
-      return yield* new BoundaryFailure({ message: "review candidate must be committed and clean" })
+    const commit = yield* candidate(attempt)
     const previous = yield* previousReview(current, round, batch, group.work)
     return { group, attempt, proposal, round, batch, commit, previous }
   })
@@ -136,6 +140,15 @@ export const makeNativeReview = (config: RuntimeConfig, commands: Commands, trac
       commit: facts.commit
     })
   })
+  // Provenance stays invocation-local; mutable Git is observed after intervening effects.
+  const pinAfterEffects = Effect.fn("NativeReview.pinAfterEffects")(function* (
+    facts: Effect.Success<ReturnType<typeof context>>
+  ) {
+    const commit = yield* candidate(facts.attempt)
+    yield* tracker.record(facts.group.work.id, reviewFactKey("native_review_candidate", facts.batch, facts.round), {
+      commit
+    })
+  })
   const prepare = Effect.fn("NativeReview.prepare")(function* (current: Bead) {
     const facts = yield* context(current)
     yield* stoppedNativeSession(config, commands, facts.proposal, facts.attempt, tracker)
@@ -166,7 +179,7 @@ export const makeNativeReview = (config: RuntimeConfig, commands: Commands, trac
         message: "previous completed review is missing; no fixes authorized"
       })
     if (!previous?.findings.some((finding) => finding.disposition === "blocking")) {
-      yield* pin(current)
+      yield* pinAfterEffects(facts)
       yield* tracker.metadata(fix.id, "gc.outcome", "skipped")
       yield* tracker.close(fix.id, "Exact native review iteration work settled")
     }
@@ -194,7 +207,7 @@ export const makeNativeReview = (config: RuntimeConfig, commands: Commands, trac
       if (!retained) return yield* new BoundaryFailure({ message: "closed fix has no retained result" })
     }
     yield* tracker.record(current.id, key, { session: sessionId, commit: facts.commit })
-    yield* pin(current)
+    yield* pinAfterEffects(facts)
     yield* tracker.metadata(current.id, "gc.outcome", "pass")
     yield* tracker.close(current.id, "Exact native review iteration work settled")
   })

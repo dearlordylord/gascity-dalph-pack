@@ -726,6 +726,18 @@ acceptance is mapped to `test/native-review-snapshot.test.ts` and the existing
 review safety, cleared-claim, changed-candidate and writer-custody tests; live
 city/review tests remain the composition proof.
 
+Within one review-preparation or fix-completion invocation, immutable identity
+and provenance remain the already validated context. After workspace publication
+or retention of the fix result, pinning must read Git HEAD and dirty status
+again. A clean HEAD change is pinned as the current candidate; a newly dirty
+worktree refuses the pin and leaves the actor open without successful outcome.
+Earlier acknowledged publication/fix facts remain retained. A crash or retry
+starts with a new native group and reconciles the same immutable CAS keys;
+there is no durable snapshot or cross-invocation cache. Standalone `pin` obtains
+its own fresh context. `test/native-review-pin-freshness.test.ts` exercises both
+boundaries with late HEAD changes and late dirty edits. These controls preserve
+the existing freshness boundary and do not establish a full-suite speedup.
+
 S3/S6 qualification and delivery obtain their own fresh native group and decode
 immutable attempt, proposal, approved verdict and accepted result from its exact
 work row. Missing or malformed required facts refuse; a fact published after the

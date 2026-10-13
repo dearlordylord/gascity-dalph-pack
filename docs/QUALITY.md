@@ -42,6 +42,15 @@ Native city fixtures enable Gas City's `GC_BD_TRACE_JSON` in their own retained
 root. Its `native-beads-trace.jsonl` records native Beads command durations and
 call sites for focused latency diagnosis. This fixture observation does not
 change pack runtime behavior, scenario assertions or production configuration.
+An owned diagnostic city may opt into `DALPH_NATIVE_ACTOR_TIMING=true` in its
+workspace environment. The controlled provider then retains entry, claim,
+workspace-validation and command durations under
+`evidence/native-actor-timing/<session>.jsonl`. Records contain command kind and
+operand count rather than payloads. Diagnostic writes must succeed for the
+measurement to proceed. The default fixture uses its original command port;
+this option changes neither native selection nor project acceptance. Resuming
+an expired fixture for measurement does not restore its acceptance deadline or
+credit its original incomplete run.
 Clean-delivery and review-settlement tests poll their final state every five
 seconds, including exhausted and clean human continuation batches. Each
 observation still reads the native authority freshly; the existing

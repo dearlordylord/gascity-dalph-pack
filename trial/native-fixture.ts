@@ -1,5 +1,5 @@
 import * as HttpClient from "effect/http/HttpClient"
-import { Config, Effect, FileSystem, Layer, Schema } from "effect"
+import { Clock, Config, Effect, FileSystem, Layer, Schema } from "effect"
 import { NodeHttpClient, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { configuration } from "../src/delivery/config.ts"
 import { makeNativeCommands } from "../src/delivery/command.ts"
@@ -24,13 +24,50 @@ const main = Effect.gen(function* () {
     .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(NativeContract))))
   const config = { ...settings, executionVersion: "native-v1" as const, projectCheck: contract.check }
   const session = yield* Config.schema(BeadId, "GC_SESSION_ID")
-  const commands = yield* makeNativeCommands
+  const actualCommands = yield* makeNativeCommands
+  const timing = yield* Config.Boolean("DALPH_NATIVE_ACTOR_TIMING").pipe(Config.withDefault(false))
+  const timingDirectory = `${config.root}/evidence/native-actor-timing`
+  if (timing) yield* fs.makeDirectory(timingDirectory, { recursive: true })
+  const trace = (record: { readonly boundary: string; readonly milliseconds: number; readonly operands?: number }) =>
+    timing
+      ? Clock.currentTimeMillis.pipe(
+          Effect.flatMap((observed) =>
+            fs.writeFileString(`${timingDirectory}/${session}.jsonl`, JSON.stringify({ observed, ...record }) + "\n", {
+              flag: "a"
+            })
+          )
+        )
+      : Effect.void
+  yield* trace({ boundary: "fixture-entry", milliseconds: 0 })
+  const timedCommands = {
+    ...actualCommands,
+    execute: Effect.fn("Fixture.commandTiming")(function* (...args: Parameters<typeof actualCommands.execute>) {
+      const started = yield* Clock.currentTimeMillis
+      return yield* actualCommands.execute(...args).pipe(
+        Effect.ensuring(
+          Clock.currentTimeMillis.pipe(
+            Effect.flatMap((ended) =>
+              trace({
+                boundary: args[1][0] ?? "missing-command",
+                operands: args[1].length,
+                milliseconds: ended - started
+              })
+            ),
+            Effect.orDie
+          )
+        )
+      )
+    })
+  }
+  const commands = timing ? timedCommands : actualCommands
   const tracker = makeTracker(config, commands, yield* HttpClient.HttpClient)
   const git = makeGit(config, commands)
   const workflow = makeNativeWorkflow(config, contract, commands, tracker, git)
   const review = makeNativeReview(config, commands, tracker, git)
   yield* Effect.sleep("3 seconds")
+  yield* trace({ boundary: "claim-start", milliseconds: 0 })
   const claim = yield* workflow.claim()
+  yield* trace({ boundary: "claim-end", milliseconds: 0 })
   if (!claim) return
   const work = yield* tracker.bead(claim.bead_id)
   const group = yield* nativeGroup(config, commands, work)
@@ -43,6 +80,7 @@ const main = Effect.gen(function* () {
       message: `fixture ${work.id} started in ${actualWorkspace}; expected ${plannedWorkspace}`
     })
   yield* fs.writeFileString(`${config.root}/native-started-${work.id}`, JSON.stringify({ session, attempt }))
+  yield* trace({ boundary: "workspace-validated", milliseconds: 0 })
   const fault = yield* Config.String("DALPH_NATIVE_FIXTURE_FAULT").pipe(Config.withDefault("none"))
   const reviewFault = yield* Config.String("DALPH_NATIVE_REVIEW_FIXTURE").pipe(Config.withDefault("clean"))
   if (work.metadata?.["dalph.phase"] === "review") {

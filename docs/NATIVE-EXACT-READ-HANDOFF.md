@@ -87,3 +87,32 @@ public backend shutdown; this repair does not rewrite historical custody.
 The original blocking/human/clean scenario still exceeded its deadline after
 four initial reviews and entry into human continuation. That incomplete run
 does not qualify the full suite. Transition delays remain under investigation.
+
+## Fresh installation and pin observations
+
+The original S11/S12 fresh installation case passed in 25.33 seconds. It proves
+repeat preflight without launch and legacy-resume refusal while preserving the
+retained legacy worktree, branch and uncertain receipt. Its isolated supervisor
+and both backend scopes were confirmed stopped afterward. This is focused
+installation evidence, not full-suite qualification.
+
+Review preparation and fix completion now reuse their invocation-local immutable
+context when pinning. Git HEAD and dirty status are still read after intervening
+effects; standalone pin keeps its own context read. Four controls passed against
+the previous behavior and after the change: late clean HEAD is observed, late
+dirty changes refuse, and retry preserves acknowledged facts. The combined
+review/snapshot checks passed 21 tests. Astra closed the scoped review without
+blockers.
+
+The subsequent fast gate passed 313 pack tests and 47 example tests, with all
+static checks and the oracle inside 60 seconds. Coverage is 99.40% statements,
+99.08% branches, 99.32% functions and 99.50% lines.
+
+An opt-in timing probe resumed only the retained diagnostic city. The measured
+reviewer interval from fixture entry to its last command record was 23.741
+seconds: claim was 4.649 seconds and subsequent workspace validation 2.157
+seconds. The final native retirement acknowledgement took 4.310 seconds. These
+records do not by themselves attribute the entire interval to review closure
+or prove a production speedup. The diagnostic city and supervisor were stopped;
+both backend scopes were stopped and all 69 command receipts were reconciled.
+The original expired acceptance run remains incomplete.
