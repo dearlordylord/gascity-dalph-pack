@@ -9,6 +9,10 @@ it.effect("native read classification excludes mutation operands and process lau
     for (const args of [
       ["git", "-C", "/repo", "rev-parse", "HEAD"],
       ["git", "status"],
+      ["tmux", "-V"],
+      ["node", "--version"],
+      ["codex", "--version"],
+      ["claude", "--version"],
       ["git", "show-ref"],
       ["git", "merge-base", "--is-ancestor", "a", "b"],
       ["git", "symbolic-ref", "HEAD"],
@@ -33,6 +37,12 @@ it.effect("native read classification excludes mutation operands and process lau
       ["git", "remote", "add", "get-url", "/other"],
       ["git", "push"],
       ["node", "ready"],
+      ["tmux", "new-session"],
+      ["tmux", "-V", "new-session"],
+      ["node", "--version", "script.ts"],
+      ["codex", "--version", "exec"],
+      ["claude", "--version", "--print", "task"],
+      ["other-provider", "--version"],
       ["gc"],
       ["gc", "--city", "/city"],
       ["gc", "beads"],
@@ -58,6 +68,7 @@ it.live("native Git observations use operational output without durable success 
     const directory = `${root}/evidence/boundaries`
     const before = yield* fs.readDirectory(directory)
     expect(yield* commands.execute(root, ["git", "-C", root, "rev-parse", "--git-dir"])).toBe(".git")
+    expect(yield* commands.execute(root, ["node", "--version"])).toMatch(/^v\d+/)
     expect(yield* fs.readDirectory(directory)).toEqual(before)
     const rejected = yield* Effect.flip(commands.execute(root, ["git", "-C", root, "show", "missing"]))
     expect(rejected._tag).toBe("CommandRejected")

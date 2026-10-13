@@ -1,5 +1,14 @@
 # Dalph pack on Gas City: accepted trial contract
 
+Native preflight reads the exact configured runtime and harness versions through
+`tmux -V` and `node`, `codex` or `claude --version`. These exact two-argument
+observations retain exit/error handling but create no project-writer custody
+receipt. Extra operands, arbitrary providers, readiness commands and actual
+execution still use their existing boundaries. Version mismatch still refuses
+before task launch. Acceptance: operational-read.test.ts verifies the positive
+and negative boundary, real Node output and absence of new custody receipts;
+the existing native preflight refusal tests remain mandatory.
+
 Native worker/reviewer work-query reads preserve the existing public `gc ready`
 tiers, workspace filter, assignee identities, blocked rows and twenty-row limit
 per query. Starting from the native query environment, they execute at most four

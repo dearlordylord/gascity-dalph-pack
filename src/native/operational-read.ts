@@ -25,9 +25,16 @@ function nativeRead(args: ReadonlyArray<string>): boolean {
   if (command === "ready" || command === "version") return true
   return (nativeOperations.get(command) ?? []).includes(args[index + 1] ?? "")
 }
+function versionRead(args: ReadonlyArray<string>): boolean {
+  const executable = args[0]
+  if (args.length !== OPTION_PAIR) return false
+  if (executable === "tmux") return args[1] === "-V"
+  return ["node", "codex", "claude"].includes(executable ?? "") && args[1] === "--version"
+}
 /** These observations cannot mutate the owned Git refs or native workflow facts. */
 export function operationalRead(args: ReadonlyArray<string>): boolean {
   const executable = args[0]
+  if (versionRead(args)) return true
   if (executable === "git") return gitRead(args)
   if (executable === "gc") return nativeRead(args)
   if (executable === "env" && args.includes("GC_NO_API=1") && args.includes("gc")) return nativeRead(args)
