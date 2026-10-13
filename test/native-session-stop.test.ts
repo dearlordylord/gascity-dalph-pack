@@ -85,7 +85,7 @@ it.effect("successful native close needs no optional process confirmation", () =
       f.nativeState.runtimeAbsent = true
       const closed = yield* nativeSession(f.config, f.commands, live.id)
       yield* stopNativeWriter(f.config, f.commands, f.tracker, closed, BeadId.make("work"))
-      expect(f.events.filter((event) => event === "native-close:session")).toHaveLength(1)
+      expect(f.events.filter((event) => event === "native-close:session")).toHaveLength(2)
     }).pipe(Effect.provide(f.layer))
   })
 )
@@ -126,7 +126,7 @@ it.effect("known close replay still checks terminal custody despite stale awake 
       expect(closed.status).toBe("closed")
       expect(closed.metadata.state).toBe("awake")
       yield* stopNativeWriter(f.config, f.commands, f.tracker, closed, BeadId.make("work"))
-      expect(f.events.filter((event) => event === "native-close:session")).toHaveLength(1)
+      expect(f.events.filter((event) => event === "native-close:session")).toHaveLength(2)
       expect(f.raw("work").metadata[`dalph.${nativeStopKey(live.id)}_observed`]).toBeDefined()
     }).pipe(Effect.provide(f.layer))
   })

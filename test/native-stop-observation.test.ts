@@ -107,7 +107,7 @@ it.effect("interruption before close observation retains intent and requires ano
   })
 )
 
-it.effect("applied close observation with lost write response reconciles without another close", () =>
+it.effect("applied close observation with lost write response still requires current native close", () =>
   Effect.gen(function* () {
     const f = yield* nativeFixture
     yield* Effect.gen(function* () {
@@ -128,7 +128,23 @@ it.effect("applied close observation with lost write response reconciles without
       yield* stopNativeWriter(f.config, f.commands, f.tracker, before, workId)
       expect(f.raw("work").metadata[observationKey]).toBeDefined()
       yield* stopNativeWriter(f.config, f.commands, f.tracker, before, workId)
-      expect(f.events.filter((event) => event === "native-close:session")).toHaveLength(1)
+      expect(f.events.filter((event) => event === "native-close:session")).toHaveLength(2)
+    }).pipe(Effect.provide(f.layer))
+  })
+)
+
+it.effect("reopened and reclosed session cannot reuse a historical close outcome", () =>
+  Effect.gen(function* () {
+    const f = yield* nativeFixture
+    yield* Effect.gen(function* () {
+      f.raw("work").status = "closed"
+      f.raw("session").status = "closed"
+      const before = yield* nativeSession(f.config, f.commands, sessionId)
+      yield* stopNativeWriter(f.config, f.commands, f.tracker, before, workId)
+      f.raw("session").status = "open"
+      f.raw("session").status = "closed"
+      yield* stopNativeWriter(f.config, f.commands, f.tracker, before, workId)
+      expect(f.events.filter((event) => event === "native-close:session")).toHaveLength(2)
     }).pipe(Effect.provide(f.layer))
   })
 )

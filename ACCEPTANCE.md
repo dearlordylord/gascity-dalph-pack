@@ -3,8 +3,10 @@
 Native session stop first retains the exact intent, calls public stock close,
 validates its exact successful response, then freshly confirms terminal pool
 session/task/template/workspace/claim bindings before retaining a compact close
-observation. A later gate/recovery may reuse that observation only alongside
-the matching original intent and fresh terminal bindings and disposition checks.
+observation. A later gate/recovery validates retained observations and fresh terminal
+bindings, then repeats public idempotent close. Generic public bead mutations
+can reopen and reclose the same session with unchanged bindings; the current
+public response supplies no incarnation fence that authorizes skipping close.
 Malformed/conflicting observations refuse without overwrite. An observation
 without its intent does not authorize replay. Missing/lost responses or an
 interruption before observation require idempotent close reconciliation; a
