@@ -8,20 +8,11 @@ import { settleNative } from "../src/native/settlement.ts"
 import { BeadId } from "../src/domain/shared.ts"
 import { RESULT } from "./helpers/workflow-fixture.ts"
 
-it.effect(
-  "settlement recovery requires the exact clean review after delivery but before its final acknowledgement",
-  () =>
-    Effect.gen(function* () {
-      for (const fault of [
-        "none",
-        "missing-outcome",
-        "missing",
-        "commit",
-        "attempt",
-        "task",
-        "base",
-        "blocking"
-      ] as const) {
+for (const fault of ["none", "missing-outcome", "missing", "commit", "attempt", "task", "base", "blocking"] as const) {
+  it.effect(
+    `settlement recovery ${fault} requires the exact clean review after delivery but before its final acknowledgement`,
+    () =>
+      Effect.gen(function* () {
         const f = yield* nativeReviewFixture
         yield* Effect.gen(function* () {
           yield* f.start
@@ -59,6 +50,6 @@ it.effect(
           expect(f.state.pushCalls).toBe(1)
           expect(f.paths.size).toBe(0)
         }).pipe(Effect.provide(f.layer))
-      }
-    })
-)
+      })
+  )
+}

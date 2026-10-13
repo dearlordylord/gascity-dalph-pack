@@ -201,31 +201,31 @@ it.effect("S4 four blocking rounds retain findings and same-attempt fixes withou
   })
 )
 
-it.effect(
-  "S3 review refuses contradictory evidence while closed native status supersedes unknown lifecycle metadata",
-  () =>
-    Effect.gen(function* () {
-      for (const fault of [
-        "transport",
-        "malformed",
-        "candidate",
-        "session",
-        "node",
-        "attempt",
-        "task",
-        "base",
-        "round",
-        "batch",
-        "trigger",
-        "path",
-        "template",
-        "live",
-        "state",
-        "basis",
-        "pin",
-        "dirty",
-        "duplicate"
-      ] as const) {
+for (const fault of [
+  "transport",
+  "malformed",
+  "candidate",
+  "session",
+  "node",
+  "attempt",
+  "task",
+  "base",
+  "round",
+  "batch",
+  "trigger",
+  "path",
+  "template",
+  "live",
+  "state",
+  "basis",
+  "pin",
+  "dirty",
+  "duplicate"
+] as const) {
+  it.effect(
+    `S3 review refuses contradictory ${fault} evidence while closed native status supersedes unknown lifecycle metadata`,
+    () =>
+      Effect.gen(function* () {
         const f = yield* fixture
         yield* Effect.gen(function* () {
           yield* f.start
@@ -278,9 +278,9 @@ it.effect(
           else expect(f.raw("work").metadata["dalph.native_approved_initial_1"]).toBeUndefined()
           expect(f.state.qualificationCalls).toBe(1)
         }).pipe(Effect.provide(f.layer))
-      }
-    })
-)
+      })
+  )
+}
 
 it.effect("S4 later clean review qualifies and settles the repaired commit", () =>
   Effect.gen(function* () {

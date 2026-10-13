@@ -12,7 +12,7 @@ export default defineConfig({
   test: {
     include: ["test/**/*.test.ts"],
     exclude: nativeAcceptanceFiles,
-    maxWorkers: 3,
+    maxWorkers: 2,
     pool: "forks",
     isolate: false,
     fsModuleCache: true,

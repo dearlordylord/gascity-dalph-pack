@@ -22,7 +22,7 @@ it.effect("a failed static check interrupts its concurrent sibling before covera
     const gate = makeQualityGate((command) => {
       const stage = command.args[0] ?? ""
       calls.push(stage)
-      if (stage === "verify:schema-boundaries")
+      if (stage === "lint")
         return Deferred.succeed(started, undefined).pipe(
           Effect.andThen(Effect.never),
           Effect.ensuring(Ref.set(stopped, true))

@@ -43,6 +43,8 @@ export const makeNativeCity = (fault: boolean | string = false) =>
     const repo = join(root, "target")
     const city = join(root, "city")
     const home = join(root, "home")
+    const temporary = join(root, "tmp")
+    yield* fs.makeDirectory(temporary, { mode: 0o700 })
     yield* fs.makeDirectory(home, { recursive: true })
     yield* fs.makeDirectory(city, { recursive: true })
     yield* fs.makeDirectory(repo, { recursive: true })
@@ -52,6 +54,7 @@ export const makeNativeCity = (fault: boolean | string = false) =>
     const env = {
       ...(yield* nativeTransportEnvironment),
       GC_HOME: home,
+      TMPDIR: temporary,
       TMUX_TMPDIR: join(root, "tmux"),
       GC_BEADS: "bd",
       GC_BD_TRACE_JSON: join(root, "native-beads-trace.jsonl"),

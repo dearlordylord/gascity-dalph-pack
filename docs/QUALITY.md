@@ -29,10 +29,14 @@ or cached check result is executed. This avoids the unbounded module-loading
 delay observed before the first stage with the tsx entry.
 
 Fast runs every static check, controlled tests with 99% coverage of every
-production source file, and example checks. Controlled tests use at most three
+production source file, and example checks. Controlled tests use at most two
 Vitest processes and reuse source modules within each process. Every case
 creates its scoped layers and fixtures; global mocking remains prohibited.
-This changes only test scheduling, not Dalph runtime behavior.
+The measured complete coverage cycle took 41.6 seconds with three processes
+and 36.7 seconds with two. Static lint starts beside circular checking rather
+than behind the shorter checks; its measured 14.9-second stage otherwise
+extended the static critical path. These changes affect only test scheduling,
+not Dalph runtime behavior or required checks.
 Vitest persists source-keyed module transformations between runs. Every test
 and coverage measurement still executes; test outcomes are never reused.
 Short verification CLIs compile their current TypeScript entry with esbuild
@@ -50,6 +54,13 @@ critical paths first, without using cached results. The critical-path ordering a
 The bodies and assertions are unchanged, including all dependent human
 continuation batches in the original case. This limit governs
 qualification fixtures; application concurrency is unchanged.
+Each fixture creates a private 0700 temporary directory and passes `TMPDIR`
+to its SDK commands and configured actors. Gas City's existing private-command
+staging and orphan sweep therefore share that owned namespace. The retained
+host directory had 283,958 entries; the SDK's directory traversal took
+0.53–0.70 seconds per call, versus 34–166 microseconds in an empty namespace.
+This fixture isolation changes no runtime policy, acknowledgement order,
+secret-file permissions, scenario assertions or cleanup requirements.
 Fixture scope closure waits for supervisor shutdown and stops its exact city
 and rig provider backend through Gas City. Backend idle timeout zero does not
 authorize leaked services across cases. Files and evidence remain available;
