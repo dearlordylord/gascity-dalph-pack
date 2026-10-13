@@ -14,6 +14,10 @@ lost observation-write response is reconciled through exact tracker readback.
 Reopened, foreign, named/manual and unfinished CompletedWork writers remain
 refusals. Neither command exit nor a bare closed status substitutes for the
 known native close outcome. Pack-owned command custody is unchanged.
+Intent, historical observation and initial task binding are decoded from one
+fresh exact task read before effects. Each close still has independent fresh
+terminal task/session confirmation. Repeating an identical compact observation
+does not rewrite it; missing observations are retained after confirmation.
 Acceptance: native-session-stop.test.ts, native-stop-observation.test.ts and the
 existing native review/recovery/cleanup scenarios. The complete native suite
 and its 600-second whole-cycle requirement remain mandatory.

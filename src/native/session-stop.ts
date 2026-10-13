@@ -61,19 +61,36 @@ const stopBindingMatches = (session: typeof NativeSession.Type, writer: Bead, in
 }
 
 const confirmedClose = Effect.fn("Native.confirmedClose")(function* (
-  tracker: ReturnType<typeof makeTracker>,
+  writer: Bead,
   intent: typeof NativeStopIntent.Type,
   key: string
 ) {
-  const observed = yield* tracker.fact(intent.node, `${key}_observed`, NativeStopObservation)
-  if (!observed) return
+  const observed = yield* retainedFact(writer, `${key}_observed`, NativeStopObservation)
+  if (!observed) return null
   if (canonical(observed.intent) !== canonical(intent) || observed.response.session_id !== intent.session)
     return yield* new BoundaryFailure({ message: "retained native close outcome belongs to another stop identity" })
+  return observed
 })
+
+const retainedFact = <A>(writer: Bead, key: string, schema: Schema.ConstraintDecoder<A, never>) => {
+  const encoded = writer.metadata?.[`dalph.${key}`]
+  return encoded ? Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(encoded) : Effect.succeed(null)
+}
 
 function stopIntentConflicts(retained: typeof NativeStopIntent.Type | null, intent: typeof NativeStopIntent.Type) {
   return !!retained && canonical(retained) !== canonical(intent)
 }
+
+const retainCloseObservation = Effect.fn("Native.retainCloseObservation")(function* (
+  tracker: ReturnType<typeof makeTracker>,
+  node: BeadId,
+  key: string,
+  retained: typeof NativeStopObservation.Type | null,
+  observation: typeof NativeStopObservation.Type
+) {
+  if (retained && canonical(retained) === canonical(observation)) return
+  yield* tracker.record(node, `${key}_observed`, observation)
+})
 
 export const stopNativeWriter = Effect.fn("Native.stopWriter")(function* (
   config: RuntimeConfig,
@@ -91,11 +108,11 @@ export const stopNativeWriter = Effect.fn("Native.stopWriter")(function* (
     template: session.metadata.template
   })
   const key = nativeStopKey(session.id)
-  const retained = yield* tracker.fact(intent.node, key, NativeStopIntent)
+  const writer = yield* tracker.bead(intent.node)
+  const retained = yield* retainedFact(writer, key, NativeStopIntent)
   if (stopIntentConflicts(retained, intent))
     return yield* new BoundaryFailure({ message: "native stop belongs to another session incarnation or workspace" })
-  yield* confirmedClose(tracker, intent, key)
-  const writer = yield* tracker.bead(intent.node)
+  const observed = yield* confirmedClose(writer, intent, key)
   if (disposition._tag === "RetainedRecovery")
     yield* confirmStoppedSession(yield* nativeSession(config, commands, session.id), intent, tracker)
   else if (writer.status !== "closed")
@@ -124,5 +141,6 @@ export const stopNativeWriter = Effect.fn("Native.stopWriter")(function* (
     return yield* new BoundaryFailure({ message: "native close returned another session" })
   const stopped = yield* nativeSession(config, commands, session.id)
   yield* confirmStoppedSession(stopped, intent, tracker)
-  yield* tracker.record(intent.node, `${key}_observed`, { version: 1, intent, response })
+  const observation = { version: 1, intent, response } as const
+  yield* retainCloseObservation(tracker, intent.node, key, observed, observation)
 })
