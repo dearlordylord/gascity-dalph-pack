@@ -46,6 +46,15 @@ Keep the executable physically named `gc`: native control-agent liveness matches
 that process name. A symlink to an executable with another basename changes
 that observation.
 
+The patched CLI also supplies `gc beads show ID --store-ref=rig:NAME
+--format=json`. The pack requires this public capability before preparing tasks
+and uses it for fresh reads from the configured RIG, retaining Gas City's
+normalized Bead output. CITY session observations retain ordinary logical
+routing, including migrated class bindings. An older candidate without this
+flag fails preflight before task launch. Exact reads close their owned store
+handle and do not scan neighboring stores. Legacy file-provider layouts retain
+their shared CITY backing; this flag does not migrate their storage layout.
+
 The candidate adds the existing admitted proxied reader to control readiness
 scans. Control mutations keep the guarded CLI write leaf. `native_transport =
 "off"` retains that fallback; the ordinary direct-native backend is unchanged.

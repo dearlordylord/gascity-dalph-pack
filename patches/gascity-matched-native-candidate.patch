@@ -1,19 +1,20 @@
 diff --git a/AGENTS.md b/AGENTS.md
-index d50f5fb3..63f3d61c 100644
+index d50f5fb..afc5605 100644
 --- a/AGENTS.md
 +++ b/AGENTS.md
-@@ -35,6 +35,9 @@ next to that code; read the matching file before changing it.
+@@ -35,6 +35,10 @@ next to that code; read the matching file before changing it.
  | Anything under `docs/` | `.claude/skills/gascity-docs/SKILL.md` |
  | New SDK surface or a new primitive | `engdocs/contributors/primitive-test.md` |
  | A controller or session reconciler incident | `engdocs/contributors/reconciler-debugging.md` (use `gc trace`) |
 +| Runtime heartbeat or execution backstop | `cmd/gc/cmd_runtime_heartbeat.go` and `cmd/gc/execution_backstop.go`; an active finite `held_until` prevents execution-stall observation and drain. Re-read the exact session before draining; expiry restores the bounded backstop, and controller restart never extends the hold. Keep `schemas/runtime/heartbeat/result.schema.json` embedded and verify the public root CLI JSON guard. |
 +| Control readiness reads | `cmd/gc/dispatch_control_ready.go`; a scan opens a short-lived scoped reader through the existing store factory, reads each graph leg once, and closes only its owned handles. Preserve operator rollout/fallback policy, ephemeral/dependency semantics, and shared binding ownership. Control mutations retain their separate guarded BdStore path; do not infer that enabling the readiness reader also qualifies native control mutations. |
++| Exact store bead reads | `cmd/gc/cmd_beads_scoped_show.go`; an explicit store locator selects one local authoritative handle and closes it before output. CITY class residency refuses migrated relics; RIG reads use their own graph store. Preserve factory admission and the ordinary show route when the locator is absent. |
 +| Ralph outcome classification | `docs/reference/specs/formula-spec-v2.md` section 3.1; verify the compiled `KindRalph` and legacy `KindCheck` paths. Explicit hard subject failure terminates; launched infrastructure-blind checks retry within their separate bounded budget. Preserve the documented removed-work-directory start-failure rule. |
  | Worktree isolation or worker cleanup | `engdocs/archive/backlogs/worktree-roadmap.md` (lifecycle analysis and cleanup-bug lessons) |
  | A `release-gates/*.md` deploy gate | `engdocs/contributors/release-gate-criteria-conventions.md` |
  | Bazel builds | `engdocs/bazel-quickstart.md` |
 diff --git a/BUILD.bazel b/BUILD.bazel
-index 7be17911..513e4873 100644
+index 7be1791..513e487 100644
 --- a/BUILD.bazel
 +++ b/BUILD.bazel
 @@ -210,6 +210,7 @@ go_library(
@@ -25,10 +26,26 @@ index 7be17911..513e4873 100644
          "schemas/service/doctor/result.schema.json",
          "schemas/service/list/result.schema.json",
 diff --git a/cmd/gc/BUILD.bazel b/cmd/gc/BUILD.bazel
-index afaf5765..7815783f 100644
+index afaf576..dcbca69 100644
 --- a/cmd/gc/BUILD.bazel
 +++ b/cmd/gc/BUILD.bazel
-@@ -1219,6 +1219,7 @@ go_test(
+@@ -138,6 +138,7 @@ go_library(
+         "cmd_beads_city.go",
+         "cmd_beads_city_migrate_proxied.go",
+         "cmd_beads_metadata_cas.go",
++        "cmd_beads_scoped_show.go",
+         "cmd_build_image.go",
+         "cmd_citystatus.go",
+         "cmd_commands.go",
+@@ -1006,6 +1007,7 @@ go_test(
+         "cmd_beads_city_migrate_proxied_test.go",
+         "cmd_beads_city_test.go",
+         "cmd_beads_metadata_cas_test.go",
++        "cmd_beads_scoped_show_test.go",
+         "cmd_beads_test.go",
+         "cmd_build_image_test.go",
+         "cmd_citystatus_test.go",
+@@ -1219,6 +1221,7 @@ go_test(
          "dispatch_control_ready_freshness_test.go",
          "dispatch_control_ready_hold_label_test.go",
          "dispatch_control_ready_leak_test.go",
@@ -36,8 +53,418 @@ index afaf5765..7815783f 100644
          "dispatch_control_ready_test.go",
          "dispatch_control_ready_wal_test.go",
          "dispatch_ep8_recovery_hold_label_test.go",
+diff --git a/cmd/gc/cmd_beads.go b/cmd/gc/cmd_beads.go
+index 72e8e9f..65a4df3 100644
+--- a/cmd/gc/cmd_beads.go
++++ b/cmd/gc/cmd_beads.go
+@@ -75,7 +75,7 @@ and is not wired for this command; use --format=json.`,
+ }
+ 
+ func newBeadsShowCmd(stdout, stderr io.Writer) *cobra.Command {
+-	var format string
++	var format, storeRef string
+ 	cmd := &cobra.Command{
+ 		Use:   "show <bead-id>",
+ 		Short: "Show a single bead (API-routed with bd fallback)",
+@@ -83,6 +83,12 @@ func newBeadsShowCmd(stdout, stderr io.Writer) *cobra.Command {
+ controller is alive and falling back to a direct multi-store lookup
+ otherwise.
+ 
++An explicit --store-ref=city:<name> or rig:<name> reads that exact local
++store freshly, without the API cache or cross-store fallback. A migrated
++CITY class record must be read through its authoritative binding instead.
++Legacy file-provider layouts retain their shared CITY backing; scope-local
++file layouts keep CITY and RIG storage separate.
++
+ Supports --format. --format=json emits JSON (API-path JSON includes
+ _cache_age_s; fallback-path JSON omits it). The bare --json flag is
+ reserved by the CLI's JSON-contract layer and is not wired for this
+@@ -95,18 +101,25 @@ command; use --format=json.`,
+ 		// depends on. ExactArgs would reject the zero-arg case in cobra, before
+ 		// the resolver, inverting that documented ordering.
+ 		Args: cobra.MaximumNArgs(1),
+-		RunE: func(_ *cobra.Command, args []string) error {
++		RunE: func(command *cobra.Command, args []string) error {
+ 			id := ""
+ 			if len(args) > 0 {
+ 				id = args[0]
+ 			}
+-			if cmdBeadsShow(id, format, stdout, stderr) != 0 {
++			var code int
++			if command.Flags().Changed("store-ref") {
++				code = cmdBeadsScopedShow(id, storeRef, format, stdout, stderr)
++			} else {
++				code = cmdBeadsShow(id, format, stdout, stderr)
++			}
++			if code != 0 {
+ 				return errExit
+ 			}
+ 			return nil
+ 		},
+ 	}
+ 	cmd.Flags().StringVar(&format, "format", "text", "output format: text or json")
++	cmd.Flags().StringVar(&storeRef, "store-ref", "", "read an exact local city:<name> or rig:<name> store without cache or fallback")
+ 	return cmd
+ }
+ 
+diff --git a/cmd/gc/cmd_beads_scoped_show.go b/cmd/gc/cmd_beads_scoped_show.go
+new file mode 100644
+index 0000000..0cef2c4
+--- /dev/null
++++ b/cmd/gc/cmd_beads_scoped_show.go
+@@ -0,0 +1,84 @@
++package main
++
++import (
++	"bytes"
++	"errors"
++	"fmt"
++	"io"
++
++	"github.com/gastownhall/gascity/internal/beads"
++)
++
++var (
++	openBeadsScopedShowStore  = openAuthoritativeStoreAtForCity
++	closeBeadsScopedShowStore = closeBeadStoreHandle
++)
++
++// cmdBeadsScopedShow projects an exact authoritative Store.Get through the
++// existing Bead formatter. The caller owns only the handle it opened; class
++// binding handles remain owned by the CLI's storage routing composition.
++func cmdBeadsScopedShow(id, storeRef, format string, stdout, stderr io.Writer) int {
++	_, remote, cityPath, err := resolveReadTarget()
++	if err != nil {
++		return failBeadsScopedShow(stderr, err)
++	}
++	if !validMetadataCASToken(id, metadataCASMaxBeadIDBytes) {
++		return failBeadsScopedShow(stderr, errors.New("invalid bead id"))
++	}
++	if format != "json" && format != "text" {
++		return failBeadsScopedShow(stderr, fmt.Errorf("invalid --format %q: expected text or json", format))
++	}
++	if _, _, err := parseBeadsMetadataCASStoreRef(storeRef); err != nil {
++		return failBeadsScopedShow(stderr, err)
++	}
++	if remote {
++		return failBeadsScopedShow(stderr, errors.New("exact store reads require a local city"))
++	}
++	cfg, err := loadCityConfig(cityPath, configWarnWriter(format == "json", stderr))
++	if err != nil {
++		return failBeadsScopedShow(stderr, err)
++	}
++	scopeRoot, canonicalRef, err := resolveBeadsMetadataCASStore(cfg, cityPath, storeRef)
++	if err != nil {
++		return failBeadsScopedShow(stderr, err)
++	}
++	if scopeIsCity(cityPath, scopeRoot) {
++		owner, relocated, err := cliByIDBindingOwner(cityPath, id)
++		if err != nil {
++			return failBeadsScopedShow(stderr, err)
++		}
++		if relocated {
++			return failBeadsScopedShow(stderr, fmt.Errorf("exact store %s cannot serve migrated bead %s owned by %s", canonicalRef, id, owner.Ref))
++		}
++	}
++	store, err := openBeadsScopedShowStore(scopeRoot, cityPath)
++	if err != nil {
++		return failBeadsScopedShow(stderr, err)
++	}
++	bead, readErr := store.Get(id)
++	if err := errors.Join(readErr, closeBeadsScopedShowStore(store)); err != nil {
++		return failBeadsScopedShow(stderr, err)
++	}
++	if bead.ID != id {
++		return failBeadsScopedShow(stderr, errors.New("exact store returned another bead"))
++	}
++	return renderBeadsScopedShow(bead, format, stdout, stderr)
++}
++
++func renderBeadsScopedShow(bead beads.Bead, format string, stdout, stderr io.Writer) int {
++	var rendered bytes.Buffer
++	if format == "json" {
++		writeBeadJSON(bead, &rendered)
++	} else {
++		writeBeadDetail(bead, &rendered)
++	}
++	if _, err := io.Copy(stdout, &rendered); err != nil {
++		return failBeadsScopedShow(stderr, err)
++	}
++	return 0
++}
++
++func failBeadsScopedShow(stderr io.Writer, err error) int {
++	fmt.Fprintf(stderr, "gc beads show: %v\n", err) //nolint:errcheck // best-effort stderr
++	return 1
++}
+diff --git a/cmd/gc/cmd_beads_scoped_show_test.go b/cmd/gc/cmd_beads_scoped_show_test.go
+new file mode 100644
+index 0000000..021b0bd
+--- /dev/null
++++ b/cmd/gc/cmd_beads_scoped_show_test.go
+@@ -0,0 +1,260 @@
++package main
++
++import (
++	"bytes"
++	"encoding/json"
++	"errors"
++	"io"
++	"path/filepath"
++	"strings"
++	"testing"
++
++	"github.com/gastownhall/gascity/internal/api"
++	"github.com/gastownhall/gascity/internal/beads"
++	"github.com/rogpeppe/go-internal/testscript"
++)
++
++// The exact-store projection must not let a CITY collision answer a RIG read.
++func TestRunBeadsShowScopedStoreCollision(t *testing.T) {
++	clearGCEnv(t)
++	configureIsolatedRuntimeEnv(t)
++	cityPath, rigPath := writeMetadataCASScopedFileCity(t)
++	cityStore, err := openScopeLocalFileStore(cityPath)
++	if err != nil {
++		t.Fatal(err)
++	}
++	rigStore, err := openScopeLocalFileStore(rigPath)
++	if err != nil {
++		t.Fatal(err)
++	}
++	cityBead, err := cityStore.Create(beads.Bead{Title: "CITY collision", Metadata: beads.StringMap{"source": "city"}})
++	if err != nil {
++		t.Fatal(err)
++	}
++	rigBead, err := rigStore.Create(beads.Bead{Title: "exact RIG", Metadata: beads.StringMap{"source": "rig"}})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if cityBead.ID != rigBead.ID {
++		t.Fatalf("fixture IDs differ: city=%s rig=%s", cityBead.ID, rigBead.ID)
++	}
++	var stdout, stderr bytes.Buffer
++	code := run([]string{"--city", cityPath, "beads", "show", rigBead.ID, "--store-ref=rig:tributary", "--format=json"}, &stdout, &stderr)
++	if code != 0 {
++		t.Fatalf("exit=%d stderr=%q", code, stderr.String())
++	}
++	var observed beads.Bead
++	if err := json.Unmarshal(stdout.Bytes(), &observed); err != nil {
++		t.Fatalf("invalid Bead JSON: %v", err)
++	}
++	if observed.ID != rigBead.ID || observed.Title != rigBead.Title || observed.Metadata["source"] != "rig" {
++		t.Fatalf("returned the wrong store: %+v", observed)
++	}
++}
++
++func TestRunBeadsShowScopedMissingIDDoesNotFallBack(t *testing.T) {
++	clearGCEnv(t)
++	configureIsolatedRuntimeEnv(t)
++	cityPath, _ := writeMetadataCASScopedFileCity(t)
++	cityStore, err := openScopeLocalFileStore(cityPath)
++	if err != nil {
++		t.Fatal(err)
++	}
++	bead, err := cityStore.Create(beads.Bead{Title: "CITY only"})
++	if err != nil {
++		t.Fatal(err)
++	}
++	var stdout, stderr bytes.Buffer
++	code := run([]string{"--city", cityPath, "beads", "show", bead.ID, "--store-ref=rig:tributary", "--format=json"}, &stdout, &stderr)
++	if code == 0 || stdout.Len() != 0 {
++		t.Fatalf("missing RIG ID fell back: exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
++	}
++}
++
++type scopedShowProbeStore struct {
++	beads.Store
++	bead     beads.Bead
++	readErr  error
++	closeErr error
++	gets     int
++	closes   int
++}
++
++func (store *scopedShowProbeStore) Get(string) (beads.Bead, error) {
++	store.gets++
++	return store.bead, store.readErr
++}
++
++func (store *scopedShowProbeStore) CloseStore() error {
++	store.closes++
++	return store.closeErr
++}
++
++func installScopedShowStore(t *testing.T, open func(string, string) (beads.Store, error)) {
++	t.Helper()
++	previous := openBeadsScopedShowStore
++	openBeadsScopedShowStore = open
++	t.Cleanup(func() { openBeadsScopedShowStore = previous })
++}
++
++func TestScopedShowBypassesAPICacheAndPreservesNormalizedBead(t *testing.T) {
++	for _, ephemeral := range []bool{false, true} {
++		t.Run(map[bool]string{false: "persistent", true: "ephemeral"}[ephemeral], func(t *testing.T) {
++			clearGCEnv(t)
++			configureIsolatedRuntimeEnv(t)
++			cityPath := writeMetadataCASTestCity(t)
++			probe := &scopedShowProbeStore{
++				Store: beads.NewMemStore(),
++				bead: beads.Bead{
++					ID: "tr-1", Title: "fresh normalized row", Status: "closed", Ephemeral: ephemeral,
++					Metadata: beads.StringMap{"large": "9007199254740993", "complex": "{ \"nested\": true }", "blank": ""},
++				},
++			}
++			opens := 0
++			installScopedShowStore(t, func(scope, city string) (beads.Store, error) {
++				opens++
++				if scope != filepath.Join(cityPath, "tributary") || city != cityPath {
++					t.Fatalf("wrong store opened: scope=%s city=%s", scope, city)
++				}
++				return probe, nil
++			})
++			previous := beadsShowAPIClient
++			apiCalls := 0
++			beadsShowAPIClient = func(string) (*api.Client, string) { apiCalls++; return nil, "unexpected cache route" }
++			t.Cleanup(func() { beadsShowAPIClient = previous })
++			writer := &scopedShowOrderWriter{store: probe}
++			var stderr bytes.Buffer
++			code := run([]string{"--city", cityPath, "beads", "show", "tr-1", "--store-ref=rig:tributary", "--format=json"}, writer, &stderr)
++			var expected bytes.Buffer
++			writeBeadJSON(probe.bead, &expected)
++			if code != 0 || opens != 1 || probe.gets != 1 || probe.closes != 1 || apiCalls != 0 || writer.buffer.String() != expected.String() {
++				t.Fatalf("incorrect scoped projection: exit=%d opens=%d gets=%d closes=%d api=%d stdout=%q stderr=%q", code, opens, probe.gets, probe.closes, apiCalls, writer.buffer.String(), stderr.String())
++			}
++		})
++	}
++}
++
++type scopedShowOrderWriter struct {
++	store  *scopedShowProbeStore
++	buffer bytes.Buffer
++	fail   bool
++}
++
++func (writer *scopedShowOrderWriter) Write(value []byte) (int, error) {
++	if writer.store.closes != 1 {
++		return 0, errors.New("output before owned close")
++	}
++	if writer.fail {
++		return 0, errors.New("output failed")
++	}
++	return writer.buffer.Write(value)
++}
++
++func TestScopedShowRefusesReadIdentityCloseAndOutputFailures(t *testing.T) {
++	for _, boundary := range []string{"open", "read", "identity", "close", "read and close", "output"} {
++		t.Run(boundary, func(t *testing.T) {
++			clearGCEnv(t)
++			configureIsolatedRuntimeEnv(t)
++			cityPath := writeMetadataCASTestCity(t)
++			probe := &scopedShowProbeStore{Store: beads.NewMemStore(), bead: beads.Bead{ID: "tr-1"}}
++			if boundary == "read" || boundary == "read and close" {
++				probe.readErr = errors.New("read failed")
++			}
++			if boundary == "close" || boundary == "read and close" {
++				probe.closeErr = errors.New("close failed")
++			}
++			if boundary == "identity" {
++				probe.bead.ID = "tr-other"
++			}
++			installScopedShowStore(t, func(string, string) (beads.Store, error) {
++				if boundary == "open" {
++					return nil, errors.New("open failed")
++				}
++				return probe, nil
++			})
++			writer := &scopedShowOrderWriter{store: probe, fail: boundary == "output"}
++			var stderr bytes.Buffer
++			code := run([]string{"--city", cityPath, "beads", "show", "tr-1", "--store-ref=rig:tributary", "--format=json"}, writer, &stderr)
++			wantCloses := 1
++			if boundary == "open" {
++				wantCloses = 0
++			}
++			if code == 0 || writer.buffer.Len() != 0 || probe.closes != wantCloses || stderr.Len() == 0 {
++				t.Fatalf("failure leaked success or custody: exit=%d closes=%d stdout=%q stderr=%q", code, probe.closes, writer.buffer.String(), stderr.String())
++			}
++			if boundary == "read and close" && (!strings.Contains(stderr.String(), "read failed") || !strings.Contains(stderr.String(), "close failed")) {
++				t.Fatalf("lost a boundary failure: %q", stderr.String())
++			}
++		})
++	}
++}
++
++func TestScopedShowRefusesInvalidForeignAndRemoteInputsBeforeOpening(t *testing.T) {
++	for _, input := range []struct {
++		name, id, ref, format string
++		remote                bool
++	}{
++		{name: "empty locator", id: "tr-1", format: "json"},
++		{name: "invalid locator", id: "tr-1", ref: "rig:../foreign", format: "json"},
++		{name: "foreign city", id: "tr-1", ref: "city:foreign", format: "json"},
++		{name: "unknown rig", id: "tr-1", ref: "rig:foreign", format: "json"},
++		{name: "missing id", ref: "rig:tributary", format: "json"},
++		{name: "unsafe id", id: "../tr-1", ref: "rig:tributary", format: "json"},
++		{name: "invalid format", id: "tr-1", ref: "rig:tributary", format: "yaml"},
++		{name: "remote target", id: "tr-1", ref: "rig:tributary", format: "json", remote: true},
++	} {
++		t.Run(input.name, func(t *testing.T) {
++			clearGCEnv(t)
++			configureIsolatedRuntimeEnv(t)
++			cityPath := writeMetadataCASTestCity(t)
++			opens := 0
++			installScopedShowStore(t, func(string, string) (beads.Store, error) { opens++; return beads.NewMemStore(), nil })
++			args := []string{"--city", cityPath}
++			if input.remote {
++				args = []string{"--city-url", "http://127.0.0.1:1", "--city-name", "demo"}
++			}
++			args = append(args, "beads", "show")
++			if input.id != "" {
++				args = append(args, input.id)
++			}
++			args = append(args, "--store-ref="+input.ref, "--format="+input.format)
++			var stdout, stderr bytes.Buffer
++			code := run(args, &stdout, &stderr)
++			if code == 0 || opens != 0 || stdout.Len() != 0 || stderr.Len() == 0 {
++				t.Fatalf("guard dispatched a store: exit=%d opens=%d stdout=%q stderr=%q", code, opens, stdout.String(), stderr.String())
++			}
++		})
++	}
++}
++
++func TestScopedShowRefusesMigratedCityRelicWhileOrdinaryShowReadsBinding(t *testing.T) {
++	cityPath, _ := foreignProviderCity(t)
++	work := workStoreFor(t, cityPath)
++	frozen, err := work.Create(beads.Bead{Title: "frozen CITY copy", Type: "task"})
++	if err != nil {
++		t.Fatal(err)
++	}
++	classResidentWorkShapedBead(t, cityPath, frozen.ID, "live migrated class row")
++	cfg, err := loadCityConfig(cityPath, io.Discard)
++	if err != nil {
++		t.Fatal(err)
++	}
++	opens := 0
++	installScopedShowStore(t, func(string, string) (beads.Store, error) { opens++; return work, nil })
++	previous := cityFlag
++	cityFlag = cityPath
++	t.Cleanup(func() { cityFlag = previous })
++	var stdout, stderr bytes.Buffer
++	if code := cmdBeadsScopedShow(frozen.ID, "city:"+loadedCityName(cfg, cityPath), "json", &stdout, &stderr); code == 0 || opens != 0 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "migrated bead") {
++		t.Fatalf("CITY relic served: exit=%d opens=%d stdout=%q stderr=%q", code, opens, stdout.String(), stderr.String())
++	}
++	stdout.Reset()
++	stderr.Reset()
++	if code := doBeadsShowFallback(cityPath, frozen.ID, "json", &stdout, &stderr); code != 0 || !strings.Contains(stdout.String(), "live migrated class row") || strings.Contains(stdout.String(), "frozen CITY copy") {
++		t.Fatalf("ordinary residency changed: exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
++	}
++}
++
++func TestBeadsScopedShowScript(t *testing.T) {
++	testscript.Run(t, newTestscriptParams(t, filepath.Join("testdata", "beads-scoped-show.txtar")))
++}
 diff --git a/cmd/gc/cmd_runtime_heartbeat.go b/cmd/gc/cmd_runtime_heartbeat.go
-index fb0b289d..0615c3ed 100644
+index fb0b289..0615c3e 100644
 --- a/cmd/gc/cmd_runtime_heartbeat.go
 +++ b/cmd/gc/cmd_runtime_heartbeat.go
 @@ -21,7 +21,7 @@ const (
@@ -75,7 +502,7 @@ index fb0b289d..0615c3ed 100644
  a false-alarm watchdog kill.
  
 diff --git a/cmd/gc/cmd_runtime_heartbeat_test.go b/cmd/gc/cmd_runtime_heartbeat_test.go
-index 8b6f4d82..7ba1506f 100644
+index 8b6f4d8..7ba1506 100644
 --- a/cmd/gc/cmd_runtime_heartbeat_test.go
 +++ b/cmd/gc/cmd_runtime_heartbeat_test.go
 @@ -22,6 +22,44 @@ func makeSessionBead(id, sessionName string) beads.Bead {
@@ -124,7 +551,7 @@ index 8b6f4d82..7ba1506f 100644
  	const sessionName = "testpack__worker"
  	const beadID = "bead-123"
 diff --git a/cmd/gc/dispatch_control_ready.go b/cmd/gc/dispatch_control_ready.go
-index ed4f94cf..318d542f 100644
+index ed4f94c..318d542 100644
 --- a/cmd/gc/dispatch_control_ready.go
 +++ b/cmd/gc/dispatch_control_ready.go
 @@ -476,7 +476,7 @@ func controlReadyLegsReady(dir, cityPath string, cfg *config.City) (ready []bead
@@ -147,8 +574,194 @@ index ed4f94cf..318d542f 100644
  	if err != nil {
  		return nil, nil, err
  	}
+diff --git a/cmd/gc/dispatch_control_ready_proxied_integration_test.go b/cmd/gc/dispatch_control_ready_proxied_integration_test.go
+new file mode 100644
+index 0000000..35889c4
+--- /dev/null
++++ b/cmd/gc/dispatch_control_ready_proxied_integration_test.go
+@@ -0,0 +1,180 @@
++//go:build integration
++
++package main
++
++import (
++	"context"
++	"fmt"
++	"os"
++	"os/exec"
++	"path/filepath"
++	"slices"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/gastownhall/gascity/internal/beads"
++	"github.com/gastownhall/gascity/internal/config"
++)
++
++type readinessObservedStore struct {
++	beads.Store
++	closes   int
++	closeErr error
++}
++
++func (s *readinessObservedStore) CloseStore() error {
++	s.closes++
++	s.closeErr = closeBeadStoreHandle(s.Store)
++	return s.closeErr
++}
++
++// This candidate proof requires the same revision-capable bd as the linked
++// library. It owns one rig proxy; no supervisor or provider is launched.
++func TestControlReadyMatchedProxyDifferential(t *testing.T) {
++	if _, err := exec.LookPath("bd"); err != nil {
++		t.Fatal("matched bd is required for the proxied readiness proof")
++	}
++	root, err := os.MkdirTemp("", "gc-readiness-proxied-")
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Logf("retained readiness proof: %s", root)
++	for _, kv := range os.Environ() {
++		key, _, _ := strings.Cut(kv, "=")
++		if strings.HasPrefix(key, "GC_") || strings.HasPrefix(key, "BEADS_") || strings.HasPrefix(key, "DOLT_") {
++			t.Setenv(key, "")
++		}
++	}
++	city, rig := filepath.Join(root, "city"), filepath.Join(root, "rig")
++	for _, dir := range []string{city, rig, filepath.Join(root, "home")} {
++		if err := os.MkdirAll(dir, 0o755); err != nil {
++			t.Fatal(err)
++		}
++	}
++	t.Setenv("HOME", filepath.Join(root, "home"))
++	t.Setenv("GC_HOME", filepath.Join(root, "home", "gc"))
++	t.Setenv("GC_BEADS", "bd")
++	t.Setenv("BEADS_DIR", filepath.Join(rig, ".beads"))
++	t.Setenv("BEADS_TEST_MODE", "0")
++	t.Setenv("BD_DISABLE_METRICS", "1")
++	t.Setenv("DOLT_ROOT_PATH", filepath.Join(root, "dolt-home"))
++	trace := filepath.Join(root, "bd-trace.jsonl")
++	t.Setenv("GC_BD_TRACE_JSON", trace)
++	runner := func(dir, name string, args ...string) ([]byte, error) {
++		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
++		defer cancel()
++		cmd := exec.CommandContext(ctx, name, args...)
++		cmd.Dir = dir
++		return cmd.CombinedOutput()
++	}
++	t.Cleanup(func() {
++		if out, err := runner(rig, "bd", "dolt", "stop"); err != nil {
++			t.Errorf("owned proxy stop failed; retaining %s: %v: %s", root, err, out)
++			return
++		}
++		if err := os.RemoveAll(root); err != nil {
++			t.Errorf("remove stopped proof scope: %v", err)
++		}
++	})
++	for _, args := range [][]string{{"git", "init"}, {"bd", "init", "--proxied-server", "-p", "rd", "--skip-hooks", "--skip-agents"}} {
++		if out, err := runner(rig, args[0], args[1:]...); err != nil {
++			t.Fatalf("fixture %v: %v: %s", args, err, out)
++		}
++	}
++	source := fmt.Sprintf("[workspace]\nname = \"readiness-proof\"\n[beads]\nprovider = \"bd\"\nconditional_writes = \"require\"\n[[rigs]]\nname = \"fixture\"\nprefix = \"rd\"\npath = %q\n", rig)
++	if err := os.WriteFile(filepath.Join(city, "city.toml"), []byte(source), 0o644); err != nil {
++		t.Fatal(err)
++	}
++	cfg, err := config.Parse([]byte(source))
++	if err != nil {
++		t.Fatal(err)
++	}
++	writer := beads.NewBdStoreWithPrefix(rig, runner, "rd")
++	create := func(title string, ephemeral bool) beads.Bead {
++		b, err := writer.Create(beads.Bead{Title: title, Type: "task", Ephemeral: ephemeral})
++		if err != nil {
++			t.Fatalf("create %s: %v", title, err)
++		}
++		return b
++	}
++	ready := create("ready", false)
++	wisp := create("ephemeral ready", true)
++	blocker, blocked, closed := create("blocker", false), create("blocked", false), create("closed", false)
++	if err := writer.DepAdd(blocked.ID, blocker.ID, "blocks"); err != nil {
++		t.Fatal(err)
++	}
++	if err := writer.Close(closed.ID); err != nil {
++		t.Fatal(err)
++	}
++	head := func() string {
++		out, err := runner(rig, "bd", "sql", "--json", "SELECT DOLT_HASHOF('HEAD') AS head")
++		if err != nil {
++			t.Fatalf("read HEAD: %v: %s", err, out)
++		}
++		return strings.TrimSpace(string(out))
++	}
++	before := head()
++	var diagnostic beads.BeadsDiagnostic
++	var openedStore *readinessObservedStore
++	previous := openStoreFactoryForCity
++	openStoreFactoryForCity = func(ctx context.Context, opts beads.StoreOpenOptions) (beads.StoreOpenResult, error) {
++		result, err := previous(ctx, opts)
++		diagnostic = result.Diagnostic
++		if err == nil {
++			openedStore = &readinessObservedStore{Store: result.Store}
++			result.Store = openedStore
++		}
++		return result, err
++	}
++	t.Cleanup(func() { openStoreFactoryForCity = previous })
++	scan := func(native string) []string {
++		t.Setenv("GC_BEADS_PROXIED_NATIVE", native)
++		rows, opened, err := controlReadyLegsReady(rig, city, cfg)
++		if err != nil || !opened {
++			t.Fatalf("scan native=%s: opened=%t err=%v", native, opened, err)
++		}
++		ids := make([]string, len(rows))
++		for i, row := range rows {
++			ids[i] = row.ID
++		}
++		slices.Sort(ids)
++		return ids
++	}
++	expected := []string{ready.ID, wisp.ID, blocker.ID}
++	slices.Sort(expected)
++	if ids := scan("0"); !slices.Equal(ids, expected) || diagnostic.Store != "BdStore" {
++		t.Fatalf("Bd readiness = %v, %s; want %v", ids, diagnostic.Store, expected)
++	}
++	readyForks := func() int {
++		data, err := os.ReadFile(trace)
++		if err != nil {
++			t.Fatalf("read owned bd trace: %v", err)
++		}
++		return strings.Count(string(data), `"args":["ready"`)
++	}
++	fallbackForks := readyForks()
++	if fallbackForks != 1 {
++		t.Fatalf("Bd scan ready forks = %d, want one", fallbackForks)
++	}
++	if ids := scan("1"); !slices.Equal(ids, expected) || diagnostic.Store != "NativeDoltStore" {
++		t.Fatalf("native readiness = %v, %s, %+v; want %v", ids, diagnostic.Store, diagnostic.Proxied, expected)
++	}
++	if openedStore.closes != 1 || openedStore.closeErr != nil {
++		t.Fatalf("native handle closure = %d, %v; want once successfully", openedStore.closes, openedStore.closeErr)
++	}
++	if readyForks() != fallbackForks {
++		t.Fatal("admitted native readiness still forked bd ready")
++	}
++	cfg, err = config.Parse([]byte(strings.Replace(source, "provider = \"bd\"", "provider = \"bd\"\nnative_transport = \"off\"", 1)))
++	if err != nil {
++		t.Fatal(err)
++	}
++	if ids := scan("1"); !slices.Equal(ids, expected) || diagnostic.Store != "BdStore" || readyForks() != fallbackForks+1 {
++		t.Fatalf("operator-off readiness = %v, %s; want Bd fallback with the same frontier", ids, diagnostic.Store)
++	}
++	if after := head(); after != before {
++		t.Fatalf("readiness changed HEAD: before=%s after=%s", before, after)
++	}
++	t.Log("matched native/Bd ready, blocked, closed and ephemeral rows agree; owned native handle closed; HEAD unchanged")
++}
 diff --git a/cmd/gc/execution_backstop.go b/cmd/gc/execution_backstop.go
-index 82186245..a9757377 100644
+index 8218624..a975737 100644
 --- a/cmd/gc/execution_backstop.go
 +++ b/cmd/gc/execution_backstop.go
 @@ -66,6 +66,7 @@ import (
@@ -219,7 +832,7 @@ index 82186245..a9757377 100644
  	if p.rec == nil {
  		return
 diff --git a/cmd/gc/execution_backstop_test.go b/cmd/gc/execution_backstop_test.go
-index b5d445f8..019ea0e8 100644
+index b5d445f..019ea0e 100644
 --- a/cmd/gc/execution_backstop_test.go
 +++ b/cmd/gc/execution_backstop_test.go
 @@ -142,6 +142,53 @@ func (f *executionBackstopFixture) nudgeCount() int {
@@ -277,7 +890,7 @@ index b5d445f8..019ea0e8 100644
  // slot holds an in-progress claim, the provider reports no activity past the
  // grace, and the configured claim nudge is re-delivered once with the attempt
 diff --git a/cmd/gc/store_rollout.go b/cmd/gc/store_rollout.go
-index de87c373..9e307dd4 100644
+index de87c37..9e307dd 100644
 --- a/cmd/gc/store_rollout.go
 +++ b/cmd/gc/store_rollout.go
 @@ -92,12 +92,20 @@ func conditionalWritesStoreID(scopeRoot, cityPath string) string {
@@ -339,7 +952,7 @@ index de87c373..9e307dd4 100644
  		return nil, err
  	}
 diff --git a/cmd/gc/store_rollout_test.go b/cmd/gc/store_rollout_test.go
-index 2e0f8d08..eac29baa 100644
+index 2e0f8d0..eac29ba 100644
 --- a/cmd/gc/store_rollout_test.go
 +++ b/cmd/gc/store_rollout_test.go
 @@ -618,6 +618,51 @@ func TestOpenControlBdStoreThroughFactoryStamps(t *testing.T) {
@@ -394,8 +1007,53 @@ index 2e0f8d08..eac29baa 100644
  func TestConditionalWritesDegradedRecorder(t *testing.T) {
  	t.Run("nil recorder yields nil callback", func(t *testing.T) {
  		if cb := conditionalWritesDegradedRecorder(nil, rollout.Flags{}, "rig/r1"); cb != nil {
+diff --git a/cmd/gc/testdata/beads-scoped-show.txtar b/cmd/gc/testdata/beads-scoped-show.txtar
+new file mode 100644
+index 0000000..9bff2dc
+--- /dev/null
++++ b/cmd/gc/testdata/beads-scoped-show.txtar
+@@ -0,0 +1,39 @@
++# Exact-store show retains the normal Bead JSON and refuses fallback.
++env GC_SESSION=fake
++env GC_BEADS=file
++env GC_DOLT=skip
++cd $WORK/city
++
++exec gc beads show gc-1 --store-ref=rig:tributary --format=json
++stdout '"title": "exact RIG"'
++! stdout 'CITY collision'
++! stdout '_cache_age_s'
++
++! exec gc beads show gc-2 --store-ref=rig:tributary --format=json
++stderr 'bead not found'
++! stdout 'CITY only'
++
++exec gc beads show gc-1 --store-ref=city:city --format=json
++stdout '"title": "CITY collision"'
++
++! exec gc beads show gc-1 --store-ref= --format=json
++stderr 'invalid --store-ref'
++
++exec gc beads show --help
++stdout '--store-ref'
++
++-- city/city.toml --
++[workspace]
++name = "city"
++[beads]
++provider = "file"
++[[rigs]]
++name = "tributary"
++path = "tributary"
++prefix = "tr"
++-- city/.gc/file-beads-layout --
++scope-local-v1
++-- city/.gc/beads.json --
++{"seq":2,"beads":[{"id":"gc-1","title":"CITY collision","status":"open","issue_type":"task"},{"id":"gc-2","title":"CITY only","status":"open","issue_type":"task"}],"revisions":{"gc-1":1,"gc-2":1},"revisions_sealed":true}
++-- city/tributary/.gc/beads.json --
++{"seq":1,"beads":[{"id":"gc-1","title":"exact RIG","status":"closed","issue_type":"task"}],"revisions":{"gc-1":1},"revisions_sealed":true}
 diff --git a/go.mod b/go.mod
-index 645d0821..d5a0fe49 100644
+index 645d082..d5a0fe4 100644
 --- a/go.mod
 +++ b/go.mod
 @@ -10,13 +10,13 @@ require (
@@ -529,7 +1187,7 @@ index 645d0821..d5a0fe49 100644
  	gopkg.in/go-jose/go-jose.v2 v2.6.3 // indirect
  	gopkg.in/inf.v0 v0.9.1 // indirect
 diff --git a/go.sum b/go.sum
-index 8559f967..9cbdbd57 100644
+index 8559f96..9cbdbd5 100644
 --- a/go.sum
 +++ b/go.sum
 @@ -610,6 +610,8 @@ github.com/fatih/color v1.18.0/go.mod h1:4FelSpRwEGDpQ12mAdzqdOukCy4u8WUtOY6lkT/
@@ -753,7 +1411,7 @@ index 8559f967..9cbdbd57 100644
  gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
  gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 diff --git a/internal/beads/bdstore_conditional_integration_test.go b/internal/beads/bdstore_conditional_integration_test.go
-index 0bff391f..3c54dfdb 100644
+index 0bff391..3c54dfd 100644
 --- a/internal/beads/bdstore_conditional_integration_test.go
 +++ b/internal/beads/bdstore_conditional_integration_test.go
 @@ -9,6 +9,7 @@ import (
@@ -871,7 +1529,7 @@ index 0bff391f..3c54dfdb 100644
 +	}
  }
 diff --git a/internal/beads/schema_cursor.go b/internal/beads/schema_cursor.go
-index 36181cf6..e20185cf 100644
+index 36181cf..e20185c 100644
 --- a/internal/beads/schema_cursor.go
 +++ b/internal/beads/schema_cursor.go
 @@ -99,10 +99,10 @@ import (
@@ -888,7 +1546,7 @@ index 36181cf6..e20185cf 100644
  
  // PinnedSchemaCursors returns the pair a proxied database must already be at
 diff --git a/internal/dispatch/control.go b/internal/dispatch/control.go
-index 20096b4a..17ef0651 100644
+index 20096b4..17ef065 100644
 --- a/internal/dispatch/control.go
 +++ b/internal/dispatch/control.go
 @@ -29,7 +29,7 @@ const (
@@ -955,7 +1613,7 @@ index 20096b4a..17ef0651 100644
  	if checkResult.Outcome == convergence.GatePass {
  		eval.disposition = attemptPass
 diff --git a/internal/dispatch/control_test.go b/internal/dispatch/control_test.go
-index 39dd658e..a26f34bd 100644
+index 39dd658..a26f34b 100644
 --- a/internal/dispatch/control_test.go
 +++ b/internal/dispatch/control_test.go
 @@ -21,6 +21,89 @@ import (
@@ -1048,195 +1706,9 @@ index 39dd658e..a26f34bd 100644
  func TestProcessRetryControlPass(t *testing.T) {
  	t.Parallel()
  	store := beads.NewMemStore()
-diff --git a/cmd/gc/dispatch_control_ready_proxied_integration_test.go b/cmd/gc/dispatch_control_ready_proxied_integration_test.go
-new file mode 100644
-index 00000000..35889c48
---- /dev/null
-+++ b/cmd/gc/dispatch_control_ready_proxied_integration_test.go
-@@ -0,0 +1,180 @@
-+//go:build integration
-+
-+package main
-+
-+import (
-+	"context"
-+	"fmt"
-+	"os"
-+	"os/exec"
-+	"path/filepath"
-+	"slices"
-+	"strings"
-+	"testing"
-+	"time"
-+
-+	"github.com/gastownhall/gascity/internal/beads"
-+	"github.com/gastownhall/gascity/internal/config"
-+)
-+
-+type readinessObservedStore struct {
-+	beads.Store
-+	closes   int
-+	closeErr error
-+}
-+
-+func (s *readinessObservedStore) CloseStore() error {
-+	s.closes++
-+	s.closeErr = closeBeadStoreHandle(s.Store)
-+	return s.closeErr
-+}
-+
-+// This candidate proof requires the same revision-capable bd as the linked
-+// library. It owns one rig proxy; no supervisor or provider is launched.
-+func TestControlReadyMatchedProxyDifferential(t *testing.T) {
-+	if _, err := exec.LookPath("bd"); err != nil {
-+		t.Fatal("matched bd is required for the proxied readiness proof")
-+	}
-+	root, err := os.MkdirTemp("", "gc-readiness-proxied-")
-+	if err != nil {
-+		t.Fatal(err)
-+	}
-+	t.Logf("retained readiness proof: %s", root)
-+	for _, kv := range os.Environ() {
-+		key, _, _ := strings.Cut(kv, "=")
-+		if strings.HasPrefix(key, "GC_") || strings.HasPrefix(key, "BEADS_") || strings.HasPrefix(key, "DOLT_") {
-+			t.Setenv(key, "")
-+		}
-+	}
-+	city, rig := filepath.Join(root, "city"), filepath.Join(root, "rig")
-+	for _, dir := range []string{city, rig, filepath.Join(root, "home")} {
-+		if err := os.MkdirAll(dir, 0o755); err != nil {
-+			t.Fatal(err)
-+		}
-+	}
-+	t.Setenv("HOME", filepath.Join(root, "home"))
-+	t.Setenv("GC_HOME", filepath.Join(root, "home", "gc"))
-+	t.Setenv("GC_BEADS", "bd")
-+	t.Setenv("BEADS_DIR", filepath.Join(rig, ".beads"))
-+	t.Setenv("BEADS_TEST_MODE", "0")
-+	t.Setenv("BD_DISABLE_METRICS", "1")
-+	t.Setenv("DOLT_ROOT_PATH", filepath.Join(root, "dolt-home"))
-+	trace := filepath.Join(root, "bd-trace.jsonl")
-+	t.Setenv("GC_BD_TRACE_JSON", trace)
-+	runner := func(dir, name string, args ...string) ([]byte, error) {
-+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-+		defer cancel()
-+		cmd := exec.CommandContext(ctx, name, args...)
-+		cmd.Dir = dir
-+		return cmd.CombinedOutput()
-+	}
-+	t.Cleanup(func() {
-+		if out, err := runner(rig, "bd", "dolt", "stop"); err != nil {
-+			t.Errorf("owned proxy stop failed; retaining %s: %v: %s", root, err, out)
-+			return
-+		}
-+		if err := os.RemoveAll(root); err != nil {
-+			t.Errorf("remove stopped proof scope: %v", err)
-+		}
-+	})
-+	for _, args := range [][]string{{"git", "init"}, {"bd", "init", "--proxied-server", "-p", "rd", "--skip-hooks", "--skip-agents"}} {
-+		if out, err := runner(rig, args[0], args[1:]...); err != nil {
-+			t.Fatalf("fixture %v: %v: %s", args, err, out)
-+		}
-+	}
-+	source := fmt.Sprintf("[workspace]\nname = \"readiness-proof\"\n[beads]\nprovider = \"bd\"\nconditional_writes = \"require\"\n[[rigs]]\nname = \"fixture\"\nprefix = \"rd\"\npath = %q\n", rig)
-+	if err := os.WriteFile(filepath.Join(city, "city.toml"), []byte(source), 0o644); err != nil {
-+		t.Fatal(err)
-+	}
-+	cfg, err := config.Parse([]byte(source))
-+	if err != nil {
-+		t.Fatal(err)
-+	}
-+	writer := beads.NewBdStoreWithPrefix(rig, runner, "rd")
-+	create := func(title string, ephemeral bool) beads.Bead {
-+		b, err := writer.Create(beads.Bead{Title: title, Type: "task", Ephemeral: ephemeral})
-+		if err != nil {
-+			t.Fatalf("create %s: %v", title, err)
-+		}
-+		return b
-+	}
-+	ready := create("ready", false)
-+	wisp := create("ephemeral ready", true)
-+	blocker, blocked, closed := create("blocker", false), create("blocked", false), create("closed", false)
-+	if err := writer.DepAdd(blocked.ID, blocker.ID, "blocks"); err != nil {
-+		t.Fatal(err)
-+	}
-+	if err := writer.Close(closed.ID); err != nil {
-+		t.Fatal(err)
-+	}
-+	head := func() string {
-+		out, err := runner(rig, "bd", "sql", "--json", "SELECT DOLT_HASHOF('HEAD') AS head")
-+		if err != nil {
-+			t.Fatalf("read HEAD: %v: %s", err, out)
-+		}
-+		return strings.TrimSpace(string(out))
-+	}
-+	before := head()
-+	var diagnostic beads.BeadsDiagnostic
-+	var openedStore *readinessObservedStore
-+	previous := openStoreFactoryForCity
-+	openStoreFactoryForCity = func(ctx context.Context, opts beads.StoreOpenOptions) (beads.StoreOpenResult, error) {
-+		result, err := previous(ctx, opts)
-+		diagnostic = result.Diagnostic
-+		if err == nil {
-+			openedStore = &readinessObservedStore{Store: result.Store}
-+			result.Store = openedStore
-+		}
-+		return result, err
-+	}
-+	t.Cleanup(func() { openStoreFactoryForCity = previous })
-+	scan := func(native string) []string {
-+		t.Setenv("GC_BEADS_PROXIED_NATIVE", native)
-+		rows, opened, err := controlReadyLegsReady(rig, city, cfg)
-+		if err != nil || !opened {
-+			t.Fatalf("scan native=%s: opened=%t err=%v", native, opened, err)
-+		}
-+		ids := make([]string, len(rows))
-+		for i, row := range rows {
-+			ids[i] = row.ID
-+		}
-+		slices.Sort(ids)
-+		return ids
-+	}
-+	expected := []string{ready.ID, wisp.ID, blocker.ID}
-+	slices.Sort(expected)
-+	if ids := scan("0"); !slices.Equal(ids, expected) || diagnostic.Store != "BdStore" {
-+		t.Fatalf("Bd readiness = %v, %s; want %v", ids, diagnostic.Store, expected)
-+	}
-+	readyForks := func() int {
-+		data, err := os.ReadFile(trace)
-+		if err != nil {
-+			t.Fatalf("read owned bd trace: %v", err)
-+		}
-+		return strings.Count(string(data), `"args":["ready"`)
-+	}
-+	fallbackForks := readyForks()
-+	if fallbackForks != 1 {
-+		t.Fatalf("Bd scan ready forks = %d, want one", fallbackForks)
-+	}
-+	if ids := scan("1"); !slices.Equal(ids, expected) || diagnostic.Store != "NativeDoltStore" {
-+		t.Fatalf("native readiness = %v, %s, %+v; want %v", ids, diagnostic.Store, diagnostic.Proxied, expected)
-+	}
-+	if openedStore.closes != 1 || openedStore.closeErr != nil {
-+		t.Fatalf("native handle closure = %d, %v; want once successfully", openedStore.closes, openedStore.closeErr)
-+	}
-+	if readyForks() != fallbackForks {
-+		t.Fatal("admitted native readiness still forked bd ready")
-+	}
-+	cfg, err = config.Parse([]byte(strings.Replace(source, "provider = \"bd\"", "provider = \"bd\"\nnative_transport = \"off\"", 1)))
-+	if err != nil {
-+		t.Fatal(err)
-+	}
-+	if ids := scan("1"); !slices.Equal(ids, expected) || diagnostic.Store != "BdStore" || readyForks() != fallbackForks+1 {
-+		t.Fatalf("operator-off readiness = %v, %s; want Bd fallback with the same frontier", ids, diagnostic.Store)
-+	}
-+	if after := head(); after != before {
-+		t.Fatalf("readiness changed HEAD: before=%s after=%s", before, after)
-+	}
-+	t.Log("matched native/Bd ready, blocked, closed and ephemeral rows agree; owned native handle closed; HEAD unchanged")
-+}
 diff --git a/schemas/runtime/heartbeat/result.schema.json b/schemas/runtime/heartbeat/result.schema.json
 new file mode 100644
-index 00000000..e49d94a8
+index 0000000..e49d94a
 --- /dev/null
 +++ b/schemas/runtime/heartbeat/result.schema.json
 @@ -0,0 +1,13 @@

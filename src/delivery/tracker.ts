@@ -24,7 +24,19 @@ export const makeTracker = (config: RuntimeConfig, commands: Commands, nativeCli
     if (!nativeClient) return yield* new BoundaryFailure({ message: "native tracker requires its scoped HTTP client" })
     // Bypass the native supervisor's derived cache for immutable custody and acceptance facts.
     const current = yield* commands
-      .execute(config.root, trackerArgs(["env", "GC_NO_API=1", ...gc, "beads", "show", id, "--format=json"]))
+      .execute(
+        config.root,
+        trackerArgs([
+          "env",
+          "GC_NO_API=1",
+          ...gc,
+          "beads",
+          "show",
+          id,
+          `--store-ref=rig:${config.rig}`,
+          "--format=json"
+        ])
+      )
       .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Bead))))
     if (current.id !== id) return yield* new BoundaryFailure({ message: "tracker did not return the exact bead" })
     return current

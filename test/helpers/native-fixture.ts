@@ -114,6 +114,7 @@ export const nativeFixture = Effect.gen(function* () {
     runtime: "tmux 3.3a",
     version: "fixture-1",
     gasCityVersion: "dev-dalph-native-v3",
+    scopedPointReads: true,
     providerPermission: "",
     permissionModes: {},
     stopFailure: false,
@@ -128,6 +129,8 @@ export const nativeFixture = Effect.gen(function* () {
     ...fixture.commands,
     execute: (root, args, cwd, timeout, logs) =>
       Effect.gen(function* () {
+        if (args.includes("beads") && args.includes("show") && args.includes("--help"))
+          return state.scopedPointReads ? "--store-ref string: exact local store" : "--format string"
         if (args.includes("metadata-cas")) {
           const key = args.find((arg) => arg.startsWith("--key="))?.slice(6)
           if (key && !/^[a-zA-Z_][a-zA-Z0-9_./]*$/.test(key))

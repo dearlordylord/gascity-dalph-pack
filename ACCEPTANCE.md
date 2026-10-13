@@ -740,3 +740,25 @@ missing, malformed or contradictory history refuses. The snapshot is local to
 this correlation call. Existing cleared-claim and reassigned-producer cases in
 `test/native-workflow.test.ts` cover rejection and retry; its immutable-read
 regression covers the absence of redundant fact point reads.
+
+S1/S11 exact RIG task observations: given a configured native RIG and exact task
+ID, the tracker calls public `gc beads show --store-ref=rig:NAME --format=json`
+with `GC_NO_API=1`. Gas City owns configured scope resolution, backend admission,
+fresh Get and normal Bead serialization. Another store's colliding ID cannot
+answer, and a missing selected-store ID fails without fallback. The pack decodes
+its existing Bead schema and checks the exact returned ID. Its raw metadata
+empty-string guard, CAS acknowledgement and immutable facts remain unchanged.
+CITY session observations retain the existing fresh logical lookup so migrated
+class authority can answer them. No snapshot persists across calls or retries.
+Reads authorize no resource effects or completion by themselves.
+
+Given a native build whose public show help omits `--store-ref`, mandatory
+preflight refuses before task/worktree planning or workflow launch. A command
+failure remains a failure. The required scoped HTTP client remains mandatory;
+the new CLI projection does not replace mutable lifecycle or custody checks.
+`test/native-scoped-point.test.ts` owns locator selection, retained CITY routing
+and missing-capability refusal; the existing native tracker tests retain exact
+ID, client, metadata, conflict and lost-response checks. GC controls own missing,
+collision, cache, remote, class migration and owned-close refusal. A small live
+persistent/ephemeral comparison owns equal ordinary/scoped JSON in each backend
+mode and unchanged DB HEAD; it cannot qualify a complete workflow or full gate.

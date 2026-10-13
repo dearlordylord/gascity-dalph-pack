@@ -7,7 +7,7 @@
     "revision": "8fd6aa25ce73b3e8cf0c1e092e8a14ab00b4c15a",
     "version": "dev-dalph-native-v4-candidate",
     "patch": "gascity-matched-native-candidate.patch",
-    "patchSha256": "879e0b006f688e59685f3cd2464cd1be32570a8b47d92f6ff8b39c8c02cafd8a",
+    "patchSha256": "4fd8c3979ea956ff666d2aa6292dc58bd0a789cb5681959a9c2f7718edac2098",
     "beadsModule": "github.com/steveyegge/beads",
     "beadsModuleVersion": "v1.3.1-0.20261010163319-1b7bf9b1910d",
     "beadsModuleSum": "h1:kOJptrP3/VelJlqzmmMpzLtcD2nHhe6ABagkaYpg7s0=",

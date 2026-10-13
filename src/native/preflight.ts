@@ -101,6 +101,9 @@ export const nativePreflight = Effect.fn("Native.preflight")(function* (
     Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(NativeBuild))),
     Effect.mapError(() => new BoundaryFailure({ message: "native Ralph infrastructure build is not qualified" }))
   )
+  const pointReadHelp = yield* commands.execute(config.root, [...gc, "beads", "show", "--help"])
+  if (!pointReadHelp.includes("--store-ref"))
+    return yield* reject("native exact-store read capability is unavailable; no task launch authorized")
   const loaded = yield* commands
     .execute(config.root, [...gc, "config", "show", "--json"])
     .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(NativeConfig))))
