@@ -4,8 +4,8 @@ import * as Request from "effect/http/HttpClientRequest"
 import * as Response from "effect/http/HttpClientResponse"
 import { type BeadId, BoundaryFailure } from "../domain/shared.ts"
 import type { RuntimeConfig } from "./config.ts"
-import { nativeTrackerArgs } from "../native/tracker-command.ts"
 import { acknowledgeNativeMetadata } from "../native/metadata-acknowledgement.ts"
+import { nativeLiveBead } from "../native/scoped-read.ts"
 import { nativeMetadataCAS } from "../native/metadata-http.ts"
 import { canonical } from "./files.ts"
 import { Bead, Claim, verifyCity } from "./tracker-observation.ts"
@@ -19,8 +19,6 @@ const Status = Schema.Struct({ status: Schema.String })
 
 export const makeTracker = (config: RuntimeConfig, commands: Commands, nativeClient?: HttpClient.HttpClient) => {
   const gc = ["gc", "--city", config.city, "--rig", config.rig]
-  const trackerArgs = (args: ReadonlyArray<string>) =>
-    config.executionVersion === "native-v1" ? nativeTrackerArgs(args) : args
   const scopedNativeClient = Effect.fn("Tracker.scopedNativeClient")(function* () {
     if (!nativeClient) return yield* new BoundaryFailure({ message: "native tracker requires its scoped HTTP client" })
     return nativeClient
@@ -30,25 +28,7 @@ export const makeTracker = (config: RuntimeConfig, commands: Commands, nativeCli
     return yield* nativeMetadataCAS(config, client, id, key, value)
   })
   const nativeBead = Effect.fn("Tracker.readNativeBead")(function* (id: BeadId) {
-    yield* scopedNativeClient()
-    // Bypass the native supervisor's derived cache for immutable custody and acceptance facts.
-    const current = yield* commands
-      .execute(
-        config.root,
-        trackerArgs([
-          "env",
-          "GC_NO_API=1",
-          ...gc,
-          "beads",
-          "show",
-          id,
-          `--store-ref=rig:${config.rig}`,
-          "--format=json"
-        ])
-      )
-      .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Bead))))
-    if (current.id !== id) return yield* new BoundaryFailure({ message: "tracker did not return the exact bead" })
-    return current
+    return yield* nativeLiveBead(config, yield* scopedNativeClient(), id)
   })
   const bead = Effect.fn("Tracker.readBead")(function* (id: BeadId) {
     if (config.executionVersion === "native-v1") return yield* nativeBead(id)
@@ -80,20 +60,17 @@ export const makeTracker = (config: RuntimeConfig, commands: Commands, nativeCli
     if (current !== undefined) return yield* new BoundaryFailure({ message: `contradictory durable metadata: ${key}` })
     const response = yield* config.executionVersion === "native-v1"
       ? nativeWrite(id, key, value)
-      : commands.execute(
-          config.root,
-          trackerArgs([
-            ...gc,
-            "beads",
-            "metadata-cas",
-            id,
-            `--store-ref=rig:${config.rig}`,
-            `--key=${key}`,
-            "--expected=",
-            `--next=${value}`,
-            "--json"
-          ])
-        )
+      : commands.execute(config.root, [
+          ...gc,
+          "beads",
+          "metadata-cas",
+          id,
+          `--store-ref=rig:${config.rig}`,
+          `--key=${key}`,
+          "--expected=",
+          `--next=${value}`,
+          "--json"
+        ])
     if (config.executionVersion === "native-v1")
       yield* acknowledgeNativeMetadata(response, id, `rig:${config.rig}`, key)
     else if ((yield* bead(id)).metadata?.[key] !== value)
@@ -127,7 +104,7 @@ export const makeTracker = (config: RuntimeConfig, commands: Commands, nativeCli
       if (config.executionVersion === "native-v1") return yield* nativeWrite(id, `dalph.${key}`, encoded)
       return yield* commands.execute(
         config.root,
-        trackerArgs([
+        [
           ...gc,
           "beads",
           "metadata-cas",
@@ -137,7 +114,7 @@ export const makeTracker = (config: RuntimeConfig, commands: Commands, nativeCli
           "--expected=",
           `--next=${encoded}`,
           "--json"
-        ]),
+        ],
         undefined,
         Duration.seconds(BOUNDARY_SECONDS)
       )

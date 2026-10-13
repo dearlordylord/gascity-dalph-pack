@@ -1682,7 +1682,7 @@ index 0000000..9bff2dc
 +-- city/tributary/.gc/beads.json --
 +{"seq":1,"beads":[{"id":"gc-1","title":"exact RIG","status":"closed","issue_type":"task"}],"revisions":{"gc-1":1},"revisions_sealed":true}
 diff --git a/docs/reference/schema/openapi.json b/docs/reference/schema/openapi.json
-index cc64b6f..bb685dd 100644
+index cc64b6f..74f0096 100644
 --- a/docs/reference/schema/openapi.json
 +++ b/docs/reference/schema/openapi.json
 @@ -1217,6 +1217,104 @@
@@ -1790,7 +1790,114 @@ index cc64b6f..bb685dd 100644
        "BeadUpdateBody": {
          "additionalProperties": false,
          "properties": {
-@@ -30698,6 +30796,179 @@
+@@ -7560,6 +7658,106 @@
+         "additionalProperties": false,
+         "type": "object"
+       },
++      "ScopedBeadReadOutputBody": {
++        "additionalProperties": false,
++        "properties": {
++          "bead": {
++            "$ref": "#/components/schemas/Bead"
++          },
++          "ok": {
++            "type": "boolean"
++          },
++          "revision": {
++            "description": "Opaque signed row token from this same live observation; equality only.",
++            "pattern": "^-?[1-9][0-9]*$",
++            "type": "string"
++          },
++          "schema_version": {
++            "enum": [
++              "1"
++            ],
++            "type": "string"
++          },
++          "store_ref": {
++            "type": "string"
++          }
++        },
++        "required": [
++          "schema_version",
++          "ok",
++          "store_ref",
++          "bead",
++          "revision"
++        ],
++        "type": "object"
++      },
++      "ScopedBeadsReadOutputBody": {
++        "additionalProperties": false,
++        "properties": {
++          "beads": {
++            "items": {
++              "$ref": "#/components/schemas/Bead"
++            },
++            "type": [
++              "array",
++              "null"
++            ]
++          },
++          "ok": {
++            "type": "boolean"
++          },
++          "schema_version": {
++            "enum": [
++              "1"
++            ],
++            "type": "string"
++          },
++          "store_ref": {
++            "type": "string"
++          }
++        },
++        "required": [
++          "schema_version",
++          "ok",
++          "store_ref",
++          "beads"
++        ],
++        "type": "object"
++      },
++      "ScopedReadCapabilityOutputBody": {
++        "additionalProperties": false,
++        "properties": {
++          "capability": {
++            "enum": [
++              "exact-live-beads-v1"
++            ],
++            "type": "string"
++          },
++          "ok": {
++            "type": "boolean"
++          },
++          "schema_version": {
++            "enum": [
++              "1"
++            ],
++            "type": "string"
++          },
++          "store_ref": {
++            "type": "string"
++          },
++          "supported": {
++            "type": "boolean"
++          }
++        },
++        "required": [
++          "schema_version",
++          "ok",
++          "store_ref",
++          "capability",
++          "supported"
++        ],
++        "type": "object"
++      },
+       "ServiceRestartOutputBody": {
+         "additionalProperties": false,
+         "properties": {
+@@ -30698,6 +30896,297 @@
          "summary": "Get v0 city by city name bead by ID deps"
        }
      },
@@ -1967,16 +2074,9 @@ index cc64b6f..bb685dd 100644
 +        "summary": "Post v0 city by city name bead by ID metadata cas"
 +      }
 +    },
-     "/v0/city/{cityName}/bead/{id}/reopen": {
-       "post": {
-         "operationId": "post-v0-city-by-city-name-bead-by-id-reopen",
-@@ -39505,6 +39776,112 @@
-         "summary": "Get v0 city by city name maintenance status"
-       }
-     },
-+    "/v0/city/{cityName}/metadata-cas-capability": {
++    "/v0/city/{cityName}/bead/{id}/read-exact": {
 +      "get": {
-+        "operationId": "get-v0-city-by-city-name-metadata-cas-capability",
++        "operationId": "get-v0-city-by-city-name-bead-by-id-read-exact",
 +        "parameters": [
 +          {
 +            "description": "City name.",
@@ -1991,11 +2091,23 @@ index cc64b6f..bb685dd 100644
 +            }
 +          },
 +          {
++            "description": "Exact local rig locator (rig:name).",
 +            "explode": false,
 +            "in": "query",
 +            "name": "store_ref",
 +            "required": true,
 +            "schema": {
++              "description": "Exact local rig locator (rig:name).",
++              "type": "string"
++            }
++          },
++          {
++            "in": "path",
++            "name": "id",
++            "required": true,
++            "schema": {
++              "maxLength": 512,
++              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
 +              "type": "string"
 +            }
 +          }
@@ -2005,7 +2117,122 @@ index cc64b6f..bb685dd 100644
 +            "content": {
 +              "application/json": {
 +                "schema": {
-+                  "$ref": "#/components/schemas/BeadMetadataCASCapabilityOutputBody"
++                  "$ref": "#/components/schemas/ScopedBeadReadOutputBody"
++                }
++              }
++            },
++            "description": "OK",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "400": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Bad Request",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "404": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Not Found",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "422": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Unprocessable Entity",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "500": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Internal Server Error",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          }
++        },
++        "summary": "Get v0 city by city name bead by ID read exact"
++      }
++    },
+     "/v0/city/{cityName}/bead/{id}/reopen": {
+       "post": {
+         "operationId": "post-v0-city-by-city-name-bead-by-id-reopen",
+@@ -31543,6 +32032,99 @@
+         "summary": "Get v0 city by city name beads graph by root ID"
+       }
+     },
++    "/v0/city/{cityName}/beads/read-exact": {
++      "get": {
++        "operationId": "get-v0-city-by-city-name-beads-read-exact",
++        "parameters": [
++          {
++            "description": "City name.",
++            "in": "path",
++            "name": "cityName",
++            "required": true,
++            "schema": {
++              "description": "City name.",
++              "minLength": 1,
++              "pattern": "\\S",
++              "type": "string"
++            }
++          },
++          {
++            "description": "Exact local rig locator (rig:name).",
++            "explode": false,
++            "in": "query",
++            "name": "store_ref",
++            "required": true,
++            "schema": {
++              "description": "Exact local rig locator (rig:name).",
++              "type": "string"
++            }
++          }
++        ],
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ScopedBeadsReadOutputBody"
 +                }
 +              }
 +            },
@@ -2060,8 +2287,100 @@ index cc64b6f..bb685dd 100644
 +                "$ref": "#/components/headers/X-GC-Request-Id"
 +              }
 +            }
++          }
++        },
++        "summary": "Get v0 city by city name beads read exact"
++      }
++    },
+     "/v0/city/{cityName}/beads/ready": {
+       "get": {
+         "operationId": "get-v0-city-by-city-name-beads-ready",
+@@ -39074,71 +39656,220 @@
+             }
+           },
+           {
+-            "description": "Message ID.",
+-            "in": "path",
+-            "name": "id",
+-            "required": true,
+-            "schema": {
+-              "description": "Message ID.",
+-              "type": "string"
+-            }
+-          },
+-          {
+-            "description": "Rig hint.",
++            "description": "Message ID.",
++            "in": "path",
++            "name": "id",
++            "required": true,
++            "schema": {
++              "description": "Message ID.",
++              "type": "string"
++            }
 +          },
-+          "501": {
++          {
++            "description": "Rig hint.",
++            "explode": false,
++            "in": "query",
++            "name": "rig",
++            "schema": {
++              "description": "Rig hint.",
++              "type": "string"
++            }
++          },
++          {
++            "description": "Idempotency key for safe retries.",
++            "in": "header",
++            "name": "Idempotency-Key",
++            "schema": {
++              "description": "Idempotency key for safe retries.",
++              "type": "string"
++            }
++          }
++        ],
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/MailReplyInputBody"
++              }
++            }
++          },
++          "required": true
++        },
++        "responses": {
++          "201": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/Message"
++                }
++              }
++            },
++            "description": "Created",
++            "headers": {
++              "X-GC-Cache-Age-S": {
++                "schema": {
++                  "description": "Age in seconds of the CachingStore snapshot that served this response (0 if not applicable).",
++                  "format": "double",
++                  "type": "number"
++                }
++              },
++              "X-GC-Index": {
++                "schema": {
++                  "description": "Latest event sequence number.",
++                  "format": "int64",
++                  "minimum": 0,
++                  "type": "integer"
++                }
++              },
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "401": {
 +            "content": {
 +              "application/problem+json": {
 +                "schema": {
@@ -2069,7 +2388,82 @@ index cc64b6f..bb685dd 100644
 +                }
 +              }
 +            },
-+            "description": "Not Implemented",
++            "description": "Unauthorized",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "403": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Forbidden",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "404": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Not Found",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "409": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Conflict",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "422": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Unprocessable Entity",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "500": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Internal Server Error",
 +            "headers": {
 +              "X-GC-Request-Id": {
 +                "$ref": "#/components/headers/X-GC-Request-Id"
@@ -2077,14 +2471,435 @@ index cc64b6f..bb685dd 100644
 +            }
 +          }
 +        },
-+        "summary": "Get v0 city by city name metadata cas capability"
++        "summary": "Reply to a mail message"
 +      }
 +    },
-     "/v0/city/{cityName}/order/history/{bead_id}": {
++    "/v0/city/{cityName}/maintenance/dolt-gc": {
++      "post": {
++        "description": "Trigger a one-off maintenance cycle (dolt backup + CALL DOLT_GC + smoke test). Default async (202); ?wait=true blocks until completion (200). Returns 409 when a run is already in flight.",
++        "operationId": "trigger-maintenance-dolt-gc",
++        "parameters": [
++          {
++            "description": "Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.",
++            "in": "header",
++            "name": "X-GC-Request",
++            "required": true,
++            "schema": {
++              "description": "Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.",
++              "minLength": 1,
++              "type": "string"
++            }
++          },
++          {
++            "description": "City name.",
++            "in": "path",
++            "name": "cityName",
++            "required": true,
++            "schema": {
++              "description": "City name.",
++              "minLength": 1,
++              "pattern": "\\S",
++              "type": "string"
++            }
++          },
++          {
++            "description": "When true, the handler blocks until the run completes and returns 200 with the full Run. When false (default), the handler returns 202 Accepted immediately.",
+             "explode": false,
+             "in": "query",
+-            "name": "rig",
+-            "schema": {
+-              "description": "Rig hint.",
+-              "type": "string"
+-            }
+-          },
+-          {
+-            "description": "Idempotency key for safe retries.",
+-            "in": "header",
+-            "name": "Idempotency-Key",
++            "name": "wait",
+             "schema": {
+-              "description": "Idempotency key for safe retries.",
+-              "type": "string"
++              "description": "When true, the handler blocks until the run completes and returns 200 with the full Run. When false (default), the handler returns 202 Accepted immediately.",
++              "type": "boolean"
+             }
+           }
+         ],
+-        "requestBody": {
+-          "content": {
+-            "application/json": {
+-              "schema": {
+-                "$ref": "#/components/schemas/MailReplyInputBody"
+-              }
+-            }
+-          },
+-          "required": true
+-        },
+         "responses": {
+-          "201": {
++          "202": {
+             "content": {
+               "application/json": {
+                 "schema": {
+-                  "$ref": "#/components/schemas/Message"
++                  "$ref": "#/components/schemas/MaintenanceTriggerBody"
+                 }
+               }
+             },
+-            "description": "Created",
++            "description": "Accepted",
+             "headers": {
+-              "X-GC-Cache-Age-S": {
+-                "schema": {
+-                  "description": "Age in seconds of the CachingStore snapshot that served this response (0 if not applicable).",
+-                  "format": "double",
+-                  "type": "number"
+-                }
+-              },
+-              "X-GC-Index": {
+-                "schema": {
+-                  "description": "Latest event sequence number.",
+-                  "format": "int64",
+-                  "minimum": 0,
+-                  "type": "integer"
+-                }
+-              },
+               "X-GC-Request-Id": {
+                 "$ref": "#/components/headers/X-GC-Request-Id"
+               }
+@@ -39233,27 +39964,30 @@
+                 "$ref": "#/components/headers/X-GC-Request-Id"
+               }
+             }
++          },
++          "503": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Service Unavailable",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
+           }
+         },
+-        "summary": "Reply to a mail message"
++        "summary": "Trigger a Dolt store maintenance run"
+       }
+     },
+-    "/v0/city/{cityName}/maintenance/dolt-gc": {
+-      "post": {
+-        "description": "Trigger a one-off maintenance cycle (dolt backup + CALL DOLT_GC + smoke test). Default async (202); ?wait=true blocks until completion (200). Returns 409 when a run is already in flight.",
+-        "operationId": "trigger-maintenance-dolt-gc",
++    "/v0/city/{cityName}/maintenance/status": {
++      "get": {
++        "operationId": "get-v0-city-by-city-name-maintenance-status",
+         "parameters": [
+-          {
+-            "description": "Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.",
+-            "in": "header",
+-            "name": "X-GC-Request",
+-            "required": true,
+-            "schema": {
+-              "description": "Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.",
+-              "minLength": 1,
+-              "type": "string"
+-            }
+-          },
+           {
+             "description": "City name.",
+             "in": "path",
+@@ -39265,59 +39999,25 @@
+               "pattern": "\\S",
+               "type": "string"
+             }
+-          },
+-          {
+-            "description": "When true, the handler blocks until the run completes and returns 200 with the full Run. When false (default), the handler returns 202 Accepted immediately.",
+-            "explode": false,
+-            "in": "query",
+-            "name": "wait",
+-            "schema": {
+-              "description": "When true, the handler blocks until the run completes and returns 200 with the full Run. When false (default), the handler returns 202 Accepted immediately.",
+-              "type": "boolean"
+-            }
+           }
+         ],
+         "responses": {
+-          "202": {
++          "200": {
+             "content": {
+               "application/json": {
+                 "schema": {
+-                  "$ref": "#/components/schemas/MaintenanceTriggerBody"
+-                }
+-              }
+-            },
+-            "description": "Accepted",
+-            "headers": {
+-              "X-GC-Request-Id": {
+-                "$ref": "#/components/headers/X-GC-Request-Id"
+-              }
+-            }
+-          },
+-          "401": {
+-            "content": {
+-              "application/problem+json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/ErrorModel"
++                  "$ref": "#/components/schemas/MaintenanceStatusBody"
+                 }
+               }
+             },
+-            "description": "Unauthorized",
++            "description": "OK",
+             "headers": {
+-              "X-GC-Request-Id": {
+-                "$ref": "#/components/headers/X-GC-Request-Id"
+-              }
+-            }
+-          },
+-          "403": {
+-            "content": {
+-              "application/problem+json": {
++              "X-GC-Cache-Age-S": {
+                 "schema": {
+-                  "$ref": "#/components/schemas/ErrorModel"
++                  "format": "double",
++                  "type": "number"
+                 }
+-              }
+-            },
+-            "description": "Forbidden",
+-            "headers": {
++              },
+               "X-GC-Request-Id": {
+                 "$ref": "#/components/headers/X-GC-Request-Id"
+               }
+@@ -39338,21 +40038,6 @@
+               }
+             }
+           },
+-          "409": {
+-            "content": {
+-              "application/problem+json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/ErrorModel"
+-                }
+-              }
+-            },
+-            "description": "Conflict",
+-            "headers": {
+-              "X-GC-Request-Id": {
+-                "$ref": "#/components/headers/X-GC-Request-Id"
+-              }
+-            }
+-          },
+           "422": {
+             "content": {
+               "application/problem+json": {
+@@ -39399,12 +40084,12 @@
+             }
+           }
+         },
+-        "summary": "Trigger a Dolt store maintenance run"
++        "summary": "Get v0 city by city name maintenance status"
+       }
+     },
+-    "/v0/city/{cityName}/maintenance/status": {
++    "/v0/city/{cityName}/metadata-cas-capability": {
        "get": {
-         "operationId": "get-v0-city-by-city-name-order-history-by-bead-id",
+-        "operationId": "get-v0-city-by-city-name-maintenance-status",
++        "operationId": "get-v0-city-by-city-name-metadata-cas-capability",
+         "parameters": [
+           {
+             "description": "City name.",
+@@ -39417,6 +40102,15 @@
+               "pattern": "\\S",
+               "type": "string"
+             }
++          },
++          {
++            "explode": false,
++            "in": "query",
++            "name": "store_ref",
++            "required": true,
++            "schema": {
++              "type": "string"
++            }
+           }
+         ],
+         "responses": {
+@@ -39424,24 +40118,18 @@
+             "content": {
+               "application/json": {
+                 "schema": {
+-                  "$ref": "#/components/schemas/MaintenanceStatusBody"
++                  "$ref": "#/components/schemas/BeadMetadataCASCapabilityOutputBody"
+                 }
+               }
+             },
+             "description": "OK",
+             "headers": {
+-              "X-GC-Cache-Age-S": {
+-                "schema": {
+-                  "format": "double",
+-                  "type": "number"
+-                }
+-              },
+               "X-GC-Request-Id": {
+                 "$ref": "#/components/headers/X-GC-Request-Id"
+               }
+             }
+           },
+-          "404": {
++          "400": {
+             "content": {
+               "application/problem+json": {
+                 "schema": {
+@@ -39449,7 +40137,7 @@
+                 }
+               }
+             },
+-            "description": "Not Found",
++            "description": "Bad Request",
+             "headers": {
+               "X-GC-Request-Id": {
+                 "$ref": "#/components/headers/X-GC-Request-Id"
+@@ -39486,7 +40174,7 @@
+               }
+             }
+           },
+-          "503": {
++          "501": {
+             "content": {
+               "application/problem+json": {
+                 "schema": {
+@@ -39494,7 +40182,7 @@
+                 }
+               }
+             },
+-            "description": "Service Unavailable",
++            "description": "Not Implemented",
+             "headers": {
+               "X-GC-Request-Id": {
+                 "$ref": "#/components/headers/X-GC-Request-Id"
+@@ -39502,7 +40190,7 @@
+             }
+           }
+         },
+-        "summary": "Get v0 city by city name maintenance status"
++        "summary": "Get v0 city by city name metadata cas capability"
+       }
+     },
+     "/v0/city/{cityName}/order/history/{bead_id}": {
+@@ -45583,6 +46271,99 @@
+         "summary": "Get v0 city by city name runs by run ID steps"
+       }
+     },
++    "/v0/city/{cityName}/scoped-read-capability": {
++      "get": {
++        "operationId": "get-v0-city-by-city-name-scoped-read-capability",
++        "parameters": [
++          {
++            "description": "City name.",
++            "in": "path",
++            "name": "cityName",
++            "required": true,
++            "schema": {
++              "description": "City name.",
++              "minLength": 1,
++              "pattern": "\\S",
++              "type": "string"
++            }
++          },
++          {
++            "description": "Exact local rig locator (rig:name).",
++            "explode": false,
++            "in": "query",
++            "name": "store_ref",
++            "required": true,
++            "schema": {
++              "description": "Exact local rig locator (rig:name).",
++              "type": "string"
++            }
++          }
++        ],
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ScopedReadCapabilityOutputBody"
++                }
++              }
++            },
++            "description": "OK",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "400": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Bad Request",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "422": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Unprocessable Entity",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "500": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Internal Server Error",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          }
++        },
++        "summary": "Get v0 city by city name scoped read capability"
++      }
++    },
+     "/v0/city/{cityName}/service/{name}": {
+       "get": {
+         "operationId": "get-v0-city-by-city-name-service-by-name",
 diff --git a/docs/reference/schema/openapi.txt b/docs/reference/schema/openapi.txt
-index cc64b6f..bb685dd 100644
+index cc64b6f..74f0096 100644
 --- a/docs/reference/schema/openapi.txt
 +++ b/docs/reference/schema/openapi.txt
 @@ -1217,6 +1217,104 @@
@@ -2192,7 +3007,114 @@ index cc64b6f..bb685dd 100644
        "BeadUpdateBody": {
          "additionalProperties": false,
          "properties": {
-@@ -30698,6 +30796,179 @@
+@@ -7560,6 +7658,106 @@
+         "additionalProperties": false,
+         "type": "object"
+       },
++      "ScopedBeadReadOutputBody": {
++        "additionalProperties": false,
++        "properties": {
++          "bead": {
++            "$ref": "#/components/schemas/Bead"
++          },
++          "ok": {
++            "type": "boolean"
++          },
++          "revision": {
++            "description": "Opaque signed row token from this same live observation; equality only.",
++            "pattern": "^-?[1-9][0-9]*$",
++            "type": "string"
++          },
++          "schema_version": {
++            "enum": [
++              "1"
++            ],
++            "type": "string"
++          },
++          "store_ref": {
++            "type": "string"
++          }
++        },
++        "required": [
++          "schema_version",
++          "ok",
++          "store_ref",
++          "bead",
++          "revision"
++        ],
++        "type": "object"
++      },
++      "ScopedBeadsReadOutputBody": {
++        "additionalProperties": false,
++        "properties": {
++          "beads": {
++            "items": {
++              "$ref": "#/components/schemas/Bead"
++            },
++            "type": [
++              "array",
++              "null"
++            ]
++          },
++          "ok": {
++            "type": "boolean"
++          },
++          "schema_version": {
++            "enum": [
++              "1"
++            ],
++            "type": "string"
++          },
++          "store_ref": {
++            "type": "string"
++          }
++        },
++        "required": [
++          "schema_version",
++          "ok",
++          "store_ref",
++          "beads"
++        ],
++        "type": "object"
++      },
++      "ScopedReadCapabilityOutputBody": {
++        "additionalProperties": false,
++        "properties": {
++          "capability": {
++            "enum": [
++              "exact-live-beads-v1"
++            ],
++            "type": "string"
++          },
++          "ok": {
++            "type": "boolean"
++          },
++          "schema_version": {
++            "enum": [
++              "1"
++            ],
++            "type": "string"
++          },
++          "store_ref": {
++            "type": "string"
++          },
++          "supported": {
++            "type": "boolean"
++          }
++        },
++        "required": [
++          "schema_version",
++          "ok",
++          "store_ref",
++          "capability",
++          "supported"
++        ],
++        "type": "object"
++      },
+       "ServiceRestartOutputBody": {
+         "additionalProperties": false,
+         "properties": {
+@@ -30698,6 +30896,297 @@
          "summary": "Get v0 city by city name bead by ID deps"
        }
      },
@@ -2369,16 +3291,9 @@ index cc64b6f..bb685dd 100644
 +        "summary": "Post v0 city by city name bead by ID metadata cas"
 +      }
 +    },
-     "/v0/city/{cityName}/bead/{id}/reopen": {
-       "post": {
-         "operationId": "post-v0-city-by-city-name-bead-by-id-reopen",
-@@ -39505,6 +39776,112 @@
-         "summary": "Get v0 city by city name maintenance status"
-       }
-     },
-+    "/v0/city/{cityName}/metadata-cas-capability": {
++    "/v0/city/{cityName}/bead/{id}/read-exact": {
 +      "get": {
-+        "operationId": "get-v0-city-by-city-name-metadata-cas-capability",
++        "operationId": "get-v0-city-by-city-name-bead-by-id-read-exact",
 +        "parameters": [
 +          {
 +            "description": "City name.",
@@ -2393,11 +3308,23 @@ index cc64b6f..bb685dd 100644
 +            }
 +          },
 +          {
++            "description": "Exact local rig locator (rig:name).",
 +            "explode": false,
 +            "in": "query",
 +            "name": "store_ref",
 +            "required": true,
 +            "schema": {
++              "description": "Exact local rig locator (rig:name).",
++              "type": "string"
++            }
++          },
++          {
++            "in": "path",
++            "name": "id",
++            "required": true,
++            "schema": {
++              "maxLength": 512,
++              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
 +              "type": "string"
 +            }
 +          }
@@ -2407,7 +3334,122 @@ index cc64b6f..bb685dd 100644
 +            "content": {
 +              "application/json": {
 +                "schema": {
-+                  "$ref": "#/components/schemas/BeadMetadataCASCapabilityOutputBody"
++                  "$ref": "#/components/schemas/ScopedBeadReadOutputBody"
++                }
++              }
++            },
++            "description": "OK",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "400": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Bad Request",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "404": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Not Found",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "422": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Unprocessable Entity",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "500": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Internal Server Error",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          }
++        },
++        "summary": "Get v0 city by city name bead by ID read exact"
++      }
++    },
+     "/v0/city/{cityName}/bead/{id}/reopen": {
+       "post": {
+         "operationId": "post-v0-city-by-city-name-bead-by-id-reopen",
+@@ -31543,6 +32032,99 @@
+         "summary": "Get v0 city by city name beads graph by root ID"
+       }
+     },
++    "/v0/city/{cityName}/beads/read-exact": {
++      "get": {
++        "operationId": "get-v0-city-by-city-name-beads-read-exact",
++        "parameters": [
++          {
++            "description": "City name.",
++            "in": "path",
++            "name": "cityName",
++            "required": true,
++            "schema": {
++              "description": "City name.",
++              "minLength": 1,
++              "pattern": "\\S",
++              "type": "string"
++            }
++          },
++          {
++            "description": "Exact local rig locator (rig:name).",
++            "explode": false,
++            "in": "query",
++            "name": "store_ref",
++            "required": true,
++            "schema": {
++              "description": "Exact local rig locator (rig:name).",
++              "type": "string"
++            }
++          }
++        ],
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ScopedBeadsReadOutputBody"
 +                }
 +              }
 +            },
@@ -2462,8 +3504,100 @@ index cc64b6f..bb685dd 100644
 +                "$ref": "#/components/headers/X-GC-Request-Id"
 +              }
 +            }
++          }
++        },
++        "summary": "Get v0 city by city name beads read exact"
++      }
++    },
+     "/v0/city/{cityName}/beads/ready": {
+       "get": {
+         "operationId": "get-v0-city-by-city-name-beads-ready",
+@@ -39074,71 +39656,220 @@
+             }
+           },
+           {
+-            "description": "Message ID.",
+-            "in": "path",
+-            "name": "id",
+-            "required": true,
+-            "schema": {
+-              "description": "Message ID.",
+-              "type": "string"
+-            }
+-          },
+-          {
+-            "description": "Rig hint.",
++            "description": "Message ID.",
++            "in": "path",
++            "name": "id",
++            "required": true,
++            "schema": {
++              "description": "Message ID.",
++              "type": "string"
++            }
 +          },
-+          "501": {
++          {
++            "description": "Rig hint.",
++            "explode": false,
++            "in": "query",
++            "name": "rig",
++            "schema": {
++              "description": "Rig hint.",
++              "type": "string"
++            }
++          },
++          {
++            "description": "Idempotency key for safe retries.",
++            "in": "header",
++            "name": "Idempotency-Key",
++            "schema": {
++              "description": "Idempotency key for safe retries.",
++              "type": "string"
++            }
++          }
++        ],
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/MailReplyInputBody"
++              }
++            }
++          },
++          "required": true
++        },
++        "responses": {
++          "201": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/Message"
++                }
++              }
++            },
++            "description": "Created",
++            "headers": {
++              "X-GC-Cache-Age-S": {
++                "schema": {
++                  "description": "Age in seconds of the CachingStore snapshot that served this response (0 if not applicable).",
++                  "format": "double",
++                  "type": "number"
++                }
++              },
++              "X-GC-Index": {
++                "schema": {
++                  "description": "Latest event sequence number.",
++                  "format": "int64",
++                  "minimum": 0,
++                  "type": "integer"
++                }
++              },
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "401": {
 +            "content": {
 +              "application/problem+json": {
 +                "schema": {
@@ -2471,7 +3605,82 @@ index cc64b6f..bb685dd 100644
 +                }
 +              }
 +            },
-+            "description": "Not Implemented",
++            "description": "Unauthorized",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "403": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Forbidden",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "404": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Not Found",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "409": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Conflict",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "422": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Unprocessable Entity",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "500": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Internal Server Error",
 +            "headers": {
 +              "X-GC-Request-Id": {
 +                "$ref": "#/components/headers/X-GC-Request-Id"
@@ -2479,12 +3688,433 @@ index cc64b6f..bb685dd 100644
 +            }
 +          }
 +        },
-+        "summary": "Get v0 city by city name metadata cas capability"
++        "summary": "Reply to a mail message"
 +      }
 +    },
-     "/v0/city/{cityName}/order/history/{bead_id}": {
++    "/v0/city/{cityName}/maintenance/dolt-gc": {
++      "post": {
++        "description": "Trigger a one-off maintenance cycle (dolt backup + CALL DOLT_GC + smoke test). Default async (202); ?wait=true blocks until completion (200). Returns 409 when a run is already in flight.",
++        "operationId": "trigger-maintenance-dolt-gc",
++        "parameters": [
++          {
++            "description": "Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.",
++            "in": "header",
++            "name": "X-GC-Request",
++            "required": true,
++            "schema": {
++              "description": "Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.",
++              "minLength": 1,
++              "type": "string"
++            }
++          },
++          {
++            "description": "City name.",
++            "in": "path",
++            "name": "cityName",
++            "required": true,
++            "schema": {
++              "description": "City name.",
++              "minLength": 1,
++              "pattern": "\\S",
++              "type": "string"
++            }
++          },
++          {
++            "description": "When true, the handler blocks until the run completes and returns 200 with the full Run. When false (default), the handler returns 202 Accepted immediately.",
+             "explode": false,
+             "in": "query",
+-            "name": "rig",
+-            "schema": {
+-              "description": "Rig hint.",
+-              "type": "string"
+-            }
+-          },
+-          {
+-            "description": "Idempotency key for safe retries.",
+-            "in": "header",
+-            "name": "Idempotency-Key",
++            "name": "wait",
+             "schema": {
+-              "description": "Idempotency key for safe retries.",
+-              "type": "string"
++              "description": "When true, the handler blocks until the run completes and returns 200 with the full Run. When false (default), the handler returns 202 Accepted immediately.",
++              "type": "boolean"
+             }
+           }
+         ],
+-        "requestBody": {
+-          "content": {
+-            "application/json": {
+-              "schema": {
+-                "$ref": "#/components/schemas/MailReplyInputBody"
+-              }
+-            }
+-          },
+-          "required": true
+-        },
+         "responses": {
+-          "201": {
++          "202": {
+             "content": {
+               "application/json": {
+                 "schema": {
+-                  "$ref": "#/components/schemas/Message"
++                  "$ref": "#/components/schemas/MaintenanceTriggerBody"
+                 }
+               }
+             },
+-            "description": "Created",
++            "description": "Accepted",
+             "headers": {
+-              "X-GC-Cache-Age-S": {
+-                "schema": {
+-                  "description": "Age in seconds of the CachingStore snapshot that served this response (0 if not applicable).",
+-                  "format": "double",
+-                  "type": "number"
+-                }
+-              },
+-              "X-GC-Index": {
+-                "schema": {
+-                  "description": "Latest event sequence number.",
+-                  "format": "int64",
+-                  "minimum": 0,
+-                  "type": "integer"
+-                }
+-              },
+               "X-GC-Request-Id": {
+                 "$ref": "#/components/headers/X-GC-Request-Id"
+               }
+@@ -39233,27 +39964,30 @@
+                 "$ref": "#/components/headers/X-GC-Request-Id"
+               }
+             }
++          },
++          "503": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Service Unavailable",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
+           }
+         },
+-        "summary": "Reply to a mail message"
++        "summary": "Trigger a Dolt store maintenance run"
+       }
+     },
+-    "/v0/city/{cityName}/maintenance/dolt-gc": {
+-      "post": {
+-        "description": "Trigger a one-off maintenance cycle (dolt backup + CALL DOLT_GC + smoke test). Default async (202); ?wait=true blocks until completion (200). Returns 409 when a run is already in flight.",
+-        "operationId": "trigger-maintenance-dolt-gc",
++    "/v0/city/{cityName}/maintenance/status": {
++      "get": {
++        "operationId": "get-v0-city-by-city-name-maintenance-status",
+         "parameters": [
+-          {
+-            "description": "Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.",
+-            "in": "header",
+-            "name": "X-GC-Request",
+-            "required": true,
+-            "schema": {
+-              "description": "Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.",
+-              "minLength": 1,
+-              "type": "string"
+-            }
+-          },
+           {
+             "description": "City name.",
+             "in": "path",
+@@ -39265,59 +39999,25 @@
+               "pattern": "\\S",
+               "type": "string"
+             }
+-          },
+-          {
+-            "description": "When true, the handler blocks until the run completes and returns 200 with the full Run. When false (default), the handler returns 202 Accepted immediately.",
+-            "explode": false,
+-            "in": "query",
+-            "name": "wait",
+-            "schema": {
+-              "description": "When true, the handler blocks until the run completes and returns 200 with the full Run. When false (default), the handler returns 202 Accepted immediately.",
+-              "type": "boolean"
+-            }
+           }
+         ],
+         "responses": {
+-          "202": {
++          "200": {
+             "content": {
+               "application/json": {
+                 "schema": {
+-                  "$ref": "#/components/schemas/MaintenanceTriggerBody"
+-                }
+-              }
+-            },
+-            "description": "Accepted",
+-            "headers": {
+-              "X-GC-Request-Id": {
+-                "$ref": "#/components/headers/X-GC-Request-Id"
+-              }
+-            }
+-          },
+-          "401": {
+-            "content": {
+-              "application/problem+json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/ErrorModel"
++                  "$ref": "#/components/schemas/MaintenanceStatusBody"
+                 }
+               }
+             },
+-            "description": "Unauthorized",
++            "description": "OK",
+             "headers": {
+-              "X-GC-Request-Id": {
+-                "$ref": "#/components/headers/X-GC-Request-Id"
+-              }
+-            }
+-          },
+-          "403": {
+-            "content": {
+-              "application/problem+json": {
++              "X-GC-Cache-Age-S": {
+                 "schema": {
+-                  "$ref": "#/components/schemas/ErrorModel"
++                  "format": "double",
++                  "type": "number"
+                 }
+-              }
+-            },
+-            "description": "Forbidden",
+-            "headers": {
++              },
+               "X-GC-Request-Id": {
+                 "$ref": "#/components/headers/X-GC-Request-Id"
+               }
+@@ -39338,21 +40038,6 @@
+               }
+             }
+           },
+-          "409": {
+-            "content": {
+-              "application/problem+json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/ErrorModel"
+-                }
+-              }
+-            },
+-            "description": "Conflict",
+-            "headers": {
+-              "X-GC-Request-Id": {
+-                "$ref": "#/components/headers/X-GC-Request-Id"
+-              }
+-            }
+-          },
+           "422": {
+             "content": {
+               "application/problem+json": {
+@@ -39399,12 +40084,12 @@
+             }
+           }
+         },
+-        "summary": "Trigger a Dolt store maintenance run"
++        "summary": "Get v0 city by city name maintenance status"
+       }
+     },
+-    "/v0/city/{cityName}/maintenance/status": {
++    "/v0/city/{cityName}/metadata-cas-capability": {
        "get": {
-         "operationId": "get-v0-city-by-city-name-order-history-by-bead-id",
+-        "operationId": "get-v0-city-by-city-name-maintenance-status",
++        "operationId": "get-v0-city-by-city-name-metadata-cas-capability",
+         "parameters": [
+           {
+             "description": "City name.",
+@@ -39417,6 +40102,15 @@
+               "pattern": "\\S",
+               "type": "string"
+             }
++          },
++          {
++            "explode": false,
++            "in": "query",
++            "name": "store_ref",
++            "required": true,
++            "schema": {
++              "type": "string"
++            }
+           }
+         ],
+         "responses": {
+@@ -39424,24 +40118,18 @@
+             "content": {
+               "application/json": {
+                 "schema": {
+-                  "$ref": "#/components/schemas/MaintenanceStatusBody"
++                  "$ref": "#/components/schemas/BeadMetadataCASCapabilityOutputBody"
+                 }
+               }
+             },
+             "description": "OK",
+             "headers": {
+-              "X-GC-Cache-Age-S": {
+-                "schema": {
+-                  "format": "double",
+-                  "type": "number"
+-                }
+-              },
+               "X-GC-Request-Id": {
+                 "$ref": "#/components/headers/X-GC-Request-Id"
+               }
+             }
+           },
+-          "404": {
++          "400": {
+             "content": {
+               "application/problem+json": {
+                 "schema": {
+@@ -39449,7 +40137,7 @@
+                 }
+               }
+             },
+-            "description": "Not Found",
++            "description": "Bad Request",
+             "headers": {
+               "X-GC-Request-Id": {
+                 "$ref": "#/components/headers/X-GC-Request-Id"
+@@ -39486,7 +40174,7 @@
+               }
+             }
+           },
+-          "503": {
++          "501": {
+             "content": {
+               "application/problem+json": {
+                 "schema": {
+@@ -39494,7 +40182,7 @@
+                 }
+               }
+             },
+-            "description": "Service Unavailable",
++            "description": "Not Implemented",
+             "headers": {
+               "X-GC-Request-Id": {
+                 "$ref": "#/components/headers/X-GC-Request-Id"
+@@ -39502,7 +40190,7 @@
+             }
+           }
+         },
+-        "summary": "Get v0 city by city name maintenance status"
++        "summary": "Get v0 city by city name metadata cas capability"
+       }
+     },
+     "/v0/city/{cityName}/order/history/{bead_id}": {
+@@ -45583,6 +46271,99 @@
+         "summary": "Get v0 city by city name runs by run ID steps"
+       }
+     },
++    "/v0/city/{cityName}/scoped-read-capability": {
++      "get": {
++        "operationId": "get-v0-city-by-city-name-scoped-read-capability",
++        "parameters": [
++          {
++            "description": "City name.",
++            "in": "path",
++            "name": "cityName",
++            "required": true,
++            "schema": {
++              "description": "City name.",
++              "minLength": 1,
++              "pattern": "\\S",
++              "type": "string"
++            }
++          },
++          {
++            "description": "Exact local rig locator (rig:name).",
++            "explode": false,
++            "in": "query",
++            "name": "store_ref",
++            "required": true,
++            "schema": {
++              "description": "Exact local rig locator (rig:name).",
++              "type": "string"
++            }
++          }
++        ],
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ScopedReadCapabilityOutputBody"
++                }
++              }
++            },
++            "description": "OK",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "400": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Bad Request",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "422": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Unprocessable Entity",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "500": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Internal Server Error",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          }
++        },
++        "summary": "Get v0 city by city name scoped read capability"
++      }
++    },
+     "/v0/city/{cityName}/service/{name}": {
+       "get": {
+         "operationId": "get-v0-city-by-city-name-service-by-name",
 diff --git a/go.mod b/go.mod
 index 645d082..d5a0fe4 100644
 --- a/go.mod
@@ -2866,79 +4496,116 @@ index c9e3606..b279110 100644
 +outside that set before accessing a store. Revision tokens remain signed int64;
 +a negative token is not evidence of overflow or a different storage authority.
 diff --git a/internal/api/BUILD.bazel b/internal/api/BUILD.bazel
-index 2dc084e..33fd54e 100644
+index 2dc084e..464cf08 100644
 --- a/internal/api/BUILD.bazel
 +++ b/internal/api/BUILD.bazel
-@@ -70,6 +70,7 @@ go_library(
+@@ -70,6 +70,8 @@ go_library(
          "huma_enums.go",
          "huma_handlers_agents.go",
          "huma_handlers_beads.go",
 +        "huma_metadata_cas.go",
++        "huma_scoped_read.go",
          "huma_handlers_city.go",
          "huma_handlers_config.go",
          "huma_handlers_convoys.go",
-@@ -311,6 +312,7 @@ go_test(
+@@ -311,6 +313,8 @@ go_test(
          "handler_beads_partial_prime_test.go",
          "handler_beads_partial_test.go",
          "handler_beads_test.go",
 +        "huma_metadata_cas_test.go",
++        "huma_scoped_read_test.go",
          "handler_city_test.go",
          "handler_config_test.go",
          "handler_convoy_dispatch_test.go",
 diff --git a/internal/api/genclient/client_gen.go b/internal/api/genclient/client_gen.go
-index 3f68b0fe11867e1ae491f4438e9411180864f322..21de0cb26f07260515790f583882c747c785b21a 100644
+index 3f68b0fe11867e1ae491f4438e9411180864f322..a2be10a94bf9387c5e86bc3f70a50879ef7b25c0 100644
 GIT binary patch
-delta 5409
-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
+delta 10669
+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
 
-delta 537
-zcmZqbu6g&NYQq-h&6?cn)-*5L-@a%+BM>tIF*6Xe05R+KMf=&}ou|v^2=Z(%XJO}#
-zn*P99Qe=8PlK|Uv&i`x@(*?G$3q!;{hp<Z_$#w>_^KEBMV1Jr6{X;Ro==6Y->}t~k
-zmPqimE1X~lVh$kY1Y#~A<_2P(?FuJ&3y*`WV%vUaBHs>IuwmQh-r&of1QE^4=ifB}
-zV#T=|e2b_3=U0R9{sakgwEt%k*#4hMP%VD?`wLPW)9nlRS*J^!649BSkk8N8J~vx%
-z``m1ymk+=?+S`JJfmmdFTaf7dV6f@a1y+jkO!xgNDhJlE9mv%W1}WB<uCP;76vR@P
-zp8rKuefl03$$8TYZt%%X-;lu0Hr>w+7$9IJ7b1nZL0q2c3m%A?OfRUDG@1Uv7sxGG
-zCBr}c!%;q|=>~b?Lem{QKtcFTR1D1B{@}mp&$S>&^G`ojC0;ZwP<;0E4U5G3r*Bv(
-zCJhqjo6e;yv26N-2yv0=8!k$TP0y?ss|AIn*!HR|V$ACxfv|6}3`hIyRPpVzQzh(7
-w5q{c!cD}@ch3!E1Z-3w{mDk)3G;#U+3(}{Nw7pv-)BbLe?Dlty<fbG609*CiT>t<8
+delta 799
+zcmY+CT}TvB7=|g`J?lEo&i>4q*>Tm)z~8`8gb?zF6oSau3%iK~u`GkY)d(cYw!|h(
+zLP~tmC6q|IkW5fIWe_Wv;zgktiNA>iK^rQB6&ctW7osj6IA@rb@BN;cFHf&;Y+W55
+zjT^~M%#a`G1=f+b8Mn}?O)_nA-)4!iDeULOapE}^j+Jc+Bp8paHiv*0A}KUaR_5~%
+zBY{0hCC3A((IgE$(<IkCd00V^Jj+I>NIVFINir^$69qE^ghHyPE>;&N_F{y(oK|cu
+z5DAev;zDGJxY60}5RHKa!m)7@ICf4VM_>aBNsUvn*{2?h$yOE^6d#txCVr2K{dv&0
+zy#nj<ImT;aul2S$)&+cwsuo-u6mPScE=Of+Ea1?j-m|el=MAau_wx>CVF7l#95$#S
+zcdnsNIGH}-njS)6!$*ysW;feu_Qd%R-1dsd3rQA~%(+xU3VWComKzSEY*E$F@=B(N
+zxQHF0B{d$^A7lY5iz-9^tf(QltmZ>%7ws5c5#1~@FE3lz@T#13Vy_hRn_dC$##I~B
+z579S8W<5Xj*Rl-%1?t6c5iLaUsB{1`=c&hR;z6HG(@n|zT9ul_^6F{BmF^Cw4MQ}U
+z;O-^$4D?#17-`k&ETldqAE9H4=Wj&;3zf>)KUePxZ8JZO4G}+Aob#EkC!#;9CcyiR
+zHlc(n87T9qQ%wIsU-p}FQt+!yX+q7Q63<$~%KV*JvEBFlVc@cAWuuwuxk1MDq>13m
+z$|$?%O#{!n(9_~A09S3tr&W0f`nsCa{gYbQT2!sN|G$$=bCwU$uRO8$lW|$2jRsf5
+z^li=QG?!+4=_6Ttb&au#WHwge8+l~#91Cou96TK>R$89oN5Js8O{p5nEUD?n+R0S5
+Jb~4Rw`vWULJdpqZ
 
 diff --git a/internal/api/huma_metadata_cas.go b/internal/api/huma_metadata_cas.go
 new file mode 100644
@@ -3452,8 +5119,365 @@ index 0000000..a82152b
 +		}
 +	}
 +}
+diff --git a/internal/api/huma_scoped_read.go b/internal/api/huma_scoped_read.go
+new file mode 100644
+index 0000000..26ca28c
+--- /dev/null
++++ b/internal/api/huma_scoped_read.go
+@@ -0,0 +1,118 @@
++package api
++
++import (
++	"context"
++	"errors"
++	"strconv"
++	"strings"
++
++	"github.com/gastownhall/gascity/internal/api/apierr"
++	"github.com/gastownhall/gascity/internal/beads"
++)
++
++// ScopedReadInput names an exact local rig. CITY logical residency is deliberately
++// outside this surface: a CITY shadow must not answer for a relocated class.
++type ScopedReadInput struct {
++	CityScope
++	StoreRef string `query:"store_ref" required:"true" doc:"Exact local rig locator (rig:name)."`
++}
++
++type ScopedBeadReadInput struct {
++	ScopedReadInput
++	ID string `path:"id" maxLength:"512" pattern:"^[A-Za-z0-9][A-Za-z0-9._-]*$"`
++}
++
++type ScopedBeadReadOutput struct {
++	Body struct {
++		SchemaVersion string     `json:"schema_version" enum:"1"`
++		OK            bool       `json:"ok"`
++		StoreRef      string     `json:"store_ref"`
++		Bead          beads.Bead `json:"bead"`
++		Revision      string     `json:"revision" pattern:"^-?[1-9][0-9]*$" doc:"Opaque signed row token from this same live observation; equality only."`
++	}
++}
++
++type ScopedBeadsReadOutput struct {
++	Body struct {
++		SchemaVersion string       `json:"schema_version" enum:"1"`
++		OK            bool         `json:"ok"`
++		StoreRef      string       `json:"store_ref"`
++		Beads         []beads.Bead `json:"beads"`
++	}
++}
++
++type ScopedReadCapabilityOutput struct {
++	Body struct {
++		SchemaVersion string `json:"schema_version" enum:"1"`
++		OK            bool   `json:"ok"`
++		StoreRef      string `json:"store_ref"`
++		Capability    string `json:"capability" enum:"exact-live-beads-v1"`
++		Supported     bool   `json:"supported"`
++	}
++}
++
++// Keep the held controller store and its Live reader. In particular, do not
++// follow ConditionalWritesResolveTarget: that is the write leaf, not the native
++// read authority. HandlesFor preserves policy wrappers and cache bypass.
++func (s *Server) scopedLiveReader(ref string) (beads.LiveReader, error) {
++	if !strings.HasPrefix(ref, "rig:") {
++		return nil, apierr.InvalidRequest.Msg("exact live reads require rig:<name>; CITY logical reads are not supported")
++	}
++	store, err := s.metadataCASStore(ref)
++	if err != nil {
++		return nil, err
++	}
++	return beads.HandlesFor(store).Live, nil
++}
++
++func (s *Server) humaHandleScopedBeadRead(_ context.Context, input *ScopedBeadReadInput) (*ScopedBeadReadOutput, error) {
++	reader, err := s.scopedLiveReader(input.StoreRef)
++	if err != nil {
++		return nil, err
++	}
++	row, err := reader.Get(input.ID)
++	if errors.Is(err, beads.ErrNotFound) {
++		return nil, apierr.BeadNotFound.Msg("bead " + input.ID + " not found in " + input.StoreRef)
++	}
++	if err != nil {
++		return nil, apierr.Internal.Msg(err.Error())
++	}
++	if row.ID != input.ID {
++		return nil, apierr.Internal.Msg("exact live store returned another bead")
++	}
++	if row.Revision == 0 {
++		return nil, apierr.Internal.Msg("exact live store returned no revision token")
++	}
++	out := &ScopedBeadReadOutput{}
++	out.Body.SchemaVersion, out.Body.OK, out.Body.StoreRef = "1", true, input.StoreRef
++	out.Body.Bead, out.Body.Revision = row, strconv.FormatInt(row.Revision, 10)
++	return out, nil
++}
++
++func (s *Server) humaHandleScopedBeadsRead(_ context.Context, input *ScopedReadInput) (*ScopedBeadsReadOutput, error) {
++	reader, err := s.scopedLiveReader(input.StoreRef)
++	if err != nil {
++		return nil, err
++	}
++	rows, err := reader.List(beads.ListQuery{IncludeClosed: true, Live: true, TierMode: beads.TierBoth, AllowScan: true})
++	if err != nil {
++		return nil, apierr.Internal.Msg(err.Error())
++	}
++	if rows == nil {
++		rows = []beads.Bead{}
++	}
++	out := &ScopedBeadsReadOutput{}
++	out.Body.SchemaVersion, out.Body.OK, out.Body.StoreRef = "1", true, input.StoreRef
++	out.Body.Beads = rows
++	return out, nil
++}
++
++func (s *Server) humaHandleScopedReadCapability(_ context.Context, input *ScopedReadInput) (*ScopedReadCapabilityOutput, error) {
++	if _, err := s.scopedLiveReader(input.StoreRef); err != nil {
++		return nil, err
++	}
++	out := &ScopedReadCapabilityOutput{}
++	out.Body.SchemaVersion, out.Body.OK, out.Body.StoreRef = "1", true, input.StoreRef
++	out.Body.Capability, out.Body.Supported = "exact-live-beads-v1", true
++	return out, nil
++}
+diff --git a/internal/api/huma_scoped_read_test.go b/internal/api/huma_scoped_read_test.go
+new file mode 100644
+index 0000000..b886c68
+--- /dev/null
++++ b/internal/api/huma_scoped_read_test.go
+@@ -0,0 +1,227 @@
++package api
++
++import (
++	"context"
++	"encoding/json"
++	"errors"
++	"fmt"
++	"net/http"
++	"net/http/httptest"
++	"testing"
++
++	"github.com/gastownhall/gascity/internal/beads"
++)
++
++func exactReadRequest(t *testing.T, h http.Handler, state State, path string) *httptest.ResponseRecorder {
++	t.Helper()
++	r := httptest.NewRecorder()
++	h.ServeHTTP(r, httptest.NewRequest(http.MethodGet, cityURL(state, path), nil))
++	return r
++}
++
++type scopedReadProbe struct {
++	beads.Store
++	row                 beads.Bead
++	rows                []beads.Bead
++	err                 error
++	gets, lists, closes int
++}
++
++func (s *scopedReadProbe) Get(string) (beads.Bead, error) { s.gets++; return s.row, s.err }
++func (s *scopedReadProbe) List(q beads.ListQuery) ([]beads.Bead, error) {
++	s.lists++
++	if !q.Live || !q.IncludeClosed || q.TierMode != beads.TierBoth || !q.AllowScan || q.Limit != 0 {
++		return nil, fmt.Errorf("incorrect live full-scope query: %+v", q)
++	}
++	return s.rows, s.err
++}
++func (s *scopedReadProbe) CloseStore() error { s.closes++; return nil }
++
++// Mirrors the policy wrapper's declared reader composition. Its conditional
++// target is a different authority and must never be consulted for live reads.
++type scopedReadPolicy struct{ beads.Store }
++
++func (s scopedReadPolicy) Handles() beads.StoreHandles { return beads.HandlesFor(s.Store) }
++func (s scopedReadPolicy) ConditionalWritesResolveTarget() beads.Store {
++	panic("live read traversed the conditional write leaf")
++}
++
++func TestScopedReadHTTPExactIdentityRevisionAndDependencies(t *testing.T) {
++	state := newFakeState(t)
++	row := beads.Bead{ID: "fi-one", Status: "closed", Type: "task", Revision: -7151513277199971023,
++		Metadata:     map[string]string{"gc.session_id": "session-exact"},
++		Dependencies: []beads.Dep{{IssueID: "fi-one", DependsOnID: "fi-dep", Type: "blocks"}}}
++	probe := &scopedReadProbe{Store: state.stores["myrig"], row: row}
++	state.stores["myrig"] = scopedReadPolicy{beads.NewCachingStore(probe, nil)}
++	state.cityBeadStore = &scopedReadProbe{Store: beads.NewMemStore(), row: beads.Bead{ID: row.ID, Title: "foreign"}}
++	h := newTestCityHandler(t, state)
++	r := exactReadRequest(t, h, state, "/bead/fi-one/read-exact?store_ref=rig:myrig")
++	if r.Code != 200 {
++		t.Fatalf("%d %s", r.Code, r.Body.String())
++	}
++	var got struct {
++		SchemaVersion string     `json:"schema_version"`
++		OK            bool       `json:"ok"`
++		StoreRef      string     `json:"store_ref"`
++		Bead          beads.Bead `json:"bead"`
++		Revision      string     `json:"revision"`
++	}
++	if err := json.Unmarshal(r.Body.Bytes(), &got); err != nil {
++		t.Fatal(err)
++	}
++	if got.SchemaVersion != "1" || !got.OK || got.StoreRef != "rig:myrig" || got.Revision != "-7151513277199971023" || got.Bead.ID != row.ID || got.Bead.Metadata["gc.session_id"] != "session-exact" || len(got.Bead.Dependencies) != 1 || got.Bead.Dependencies[0] != row.Dependencies[0] {
++		t.Fatalf("response %+v", got)
++	}
++	if probe.gets != 1 || probe.closes != 0 || state.cityBeadStore.(*scopedReadProbe).gets != 0 {
++		t.Fatal("wrong store or ownership")
++	}
++}
++
++func TestScopedReadHTTPBypassesStaleProjectionAndUsesReplacement(t *testing.T) {
++	state := newFakeState(t)
++	base := state.stores["myrig"]
++	row, err := base.Create(beads.Bead{Title: "task", Metadata: map[string]string{"gc.session_id": "old"}})
++	if err != nil {
++		t.Fatal(err)
++	}
++	cache := beads.NewCachingStore(base, nil)
++	if err := cache.Prime(context.Background()); err != nil {
++		t.Fatal(err)
++	}
++	state.stores["myrig"] = cache
++	if err := base.SetMetadata(row.ID, "gc.session_id", "new"); err != nil {
++		t.Fatal(err)
++	}
++	if err := base.Close(row.ID); err != nil {
++		t.Fatal(err)
++	}
++	stale, _ := cache.Get(row.ID)
++	if stale.Status == "closed" || stale.Metadata["gc.session_id"] != "old" {
++		t.Fatal("fixture is not stale")
++	}
++	h := newTestCityHandler(t, state)
++	r := exactReadRequest(t, h, state, "/bead/"+row.ID+"/read-exact?store_ref=rig:myrig")
++	var got struct {
++		Bead beads.Bead `json:"bead"`
++	}
++	if err := json.Unmarshal(r.Body.Bytes(), &got); err != nil {
++		t.Fatal(err)
++	}
++	if r.Code != 200 || got.Bead.Status != "closed" || got.Bead.Metadata["gc.session_id"] != "new" {
++		t.Fatalf("%d %s", r.Code, r.Body.String())
++	}
++	// A new held store, including its admission failure, must replace the old
++	// reader immediately. No API-level handle, row or response cache survives.
++	replacement := &scopedReadProbe{Store: base, err: errors.New("new generation admission refused")}
++	state.stores["myrig"] = replacement
++	r = exactReadRequest(t, h, state, "/bead/"+row.ID+"/read-exact?store_ref=rig:myrig")
++	if r.Code != 500 || replacement.gets != 1 {
++		t.Fatalf("%d %s", r.Code, r.Body.String())
++	}
++	replacement.err = nil
++	replacement.row = beads.Bead{ID: row.ID, Revision: 99, Status: "open"}
++	r = exactReadRequest(t, h, state, "/bead/"+row.ID+"/read-exact?store_ref=rig:myrig")
++	if r.Code != 200 || replacement.gets != 2 || replacement.closes != 0 {
++		t.Fatalf("%d %s", r.Code, r.Body.String())
++	}
++}
++
++func TestScopedReadHTTPListBothTiersAllStatesWithoutPaginationOrCache(t *testing.T) {
++	state := newFakeState(t)
++	rows := make([]beads.Bead, 1201)
++	for i := range rows {
++		rows[i] = beads.Bead{ID: fmt.Sprintf("fi-%d", i), Status: []string{"open", "in_progress", "closed"}[i%3], Ephemeral: i%2 == 0}
++	}
++	probe := &scopedReadProbe{Store: state.stores["myrig"], rows: rows}
++	state.stores["myrig"] = beads.NewCachingStore(probe, nil)
++	h := newTestCityHandler(t, state)
++	for n := 0; n < 2; n++ {
++		r := exactReadRequest(t, h, state, "/beads/read-exact?store_ref=rig:myrig")
++		var got struct {
++			SchemaVersion string       `json:"schema_version"`
++			OK            bool         `json:"ok"`
++			StoreRef      string       `json:"store_ref"`
++			Beads         []beads.Bead `json:"beads"`
++		}
++		if err := json.Unmarshal(r.Body.Bytes(), &got); err != nil {
++			t.Fatal(err)
++		}
++		if r.Code != 200 || !got.OK || got.SchemaVersion != "1" || got.StoreRef != "rig:myrig" || len(got.Beads) != len(probe.rows) {
++			t.Fatalf("%d count=%d", r.Code, len(got.Beads))
++		}
++		for i, row := range got.Beads {
++			if row.ID != probe.rows[i].ID || row.Status != probe.rows[i].Status || row.Ephemeral != probe.rows[i].Ephemeral {
++				t.Fatalf("changed row %d", i)
++			}
++		}
++		probe.rows = append(probe.rows, beads.Bead{ID: "fi-later", Status: "closed"})
++	}
++	if probe.lists != 2 || probe.closes != 0 {
++		t.Fatal("cached or closed held store")
++	}
++}
++
++func TestScopedReadHTTPRefusesForeignScopesMissingAndUnavailable(t *testing.T) {
++	state := newFakeState(t)
++	probe := &scopedReadProbe{Store: state.stores["myrig"], err: beads.ErrNotFound}
++	state.stores["myrig"] = probe
++	h := newTestCityHandler(t, state)
++	for _, ref := range []string{"city:test-city", "rig:foreign", "rig:../myrig", "remote:myrig", ""} {
++		for _, path := range []string{"/bead/fi-one/read-exact", "/beads/read-exact", "/scoped-read-capability"} {
++			r := exactReadRequest(t, h, state, path+"?store_ref="+ref)
++			if r.Code < 400 || r.Code >= 500 {
++				t.Fatalf("ref=%s status=%d", ref, r.Code)
++			}
++		}
++	}
++	if probe.gets != 0 || probe.lists != 0 {
++		t.Fatal("bad scope reached store")
++	}
++	r := exactReadRequest(t, h, state, "/bead/fi-one/read-exact?store_ref=rig:myrig")
++	if r.Code != 404 {
++		t.Fatalf("%d %s", r.Code, r.Body.String())
++	}
++	probe.err = errors.New("backend unavailable")
++	for _, path := range []string{"/bead/fi-one/read-exact", "/beads/read-exact"} {
++		r = exactReadRequest(t, h, state, path+"?store_ref=rig:myrig")
++		if r.Code != 500 {
++			t.Fatalf("%d %s", r.Code, r.Body.String())
++		}
++	}
++	probe.err = nil
++	for _, row := range []beads.Bead{{ID: "foreign", Revision: 1}, {ID: "fi-one"}} {
++		probe.row = row
++		r = exactReadRequest(t, h, state, "/bead/fi-one/read-exact?store_ref=rig:myrig")
++		if r.Code != 500 {
++			t.Fatal("invalid identity or missing revision accepted")
++		}
++	}
++	state.stores["myrig"] = nil
++	r = exactReadRequest(t, h, state, "/scoped-read-capability?store_ref=rig:myrig")
++	if r.Code != 500 {
++		t.Fatal("missing held store admitted")
++	}
++}
++
++func TestScopedReadHTTPCapabilityIsExactAndDoesNotReadOrClose(t *testing.T) {
++	state := newFakeState(t)
++	probe := &scopedReadProbe{Store: state.stores["myrig"]}
++	state.stores["myrig"] = probe
++	r := exactReadRequest(t, newTestCityHandler(t, state), state, "/scoped-read-capability?store_ref=rig:myrig")
++	var got struct {
++		SchemaVersion string `json:"schema_version"`
++		OK            bool   `json:"ok"`
++		StoreRef      string `json:"store_ref"`
++		Capability    string `json:"capability"`
++		Supported     bool   `json:"supported"`
++	}
++	if err := json.Unmarshal(r.Body.Bytes(), &got); err != nil {
++		t.Fatal(err)
++	}
++	if r.Code != 200 || got.SchemaVersion != "1" || !got.OK || got.StoreRef != "rig:myrig" || got.Capability != "exact-live-beads-v1" || !got.Supported {
++		t.Fatalf("%d %+v", r.Code, got)
++	}
++	if probe.gets != 0 || probe.lists != 0 || probe.closes != 0 {
++		t.Fatal("capability changed store lifetime or read domain state")
++	}
++}
 diff --git a/internal/api/openapi.json b/internal/api/openapi.json
-index cc64b6f..bb685dd 100644
+index cc64b6f..74f0096 100644
 --- a/internal/api/openapi.json
 +++ b/internal/api/openapi.json
 @@ -1217,6 +1217,104 @@
@@ -3561,7 +5585,114 @@ index cc64b6f..bb685dd 100644
        "BeadUpdateBody": {
          "additionalProperties": false,
          "properties": {
-@@ -30698,6 +30796,179 @@
+@@ -7560,6 +7658,106 @@
+         "additionalProperties": false,
+         "type": "object"
+       },
++      "ScopedBeadReadOutputBody": {
++        "additionalProperties": false,
++        "properties": {
++          "bead": {
++            "$ref": "#/components/schemas/Bead"
++          },
++          "ok": {
++            "type": "boolean"
++          },
++          "revision": {
++            "description": "Opaque signed row token from this same live observation; equality only.",
++            "pattern": "^-?[1-9][0-9]*$",
++            "type": "string"
++          },
++          "schema_version": {
++            "enum": [
++              "1"
++            ],
++            "type": "string"
++          },
++          "store_ref": {
++            "type": "string"
++          }
++        },
++        "required": [
++          "schema_version",
++          "ok",
++          "store_ref",
++          "bead",
++          "revision"
++        ],
++        "type": "object"
++      },
++      "ScopedBeadsReadOutputBody": {
++        "additionalProperties": false,
++        "properties": {
++          "beads": {
++            "items": {
++              "$ref": "#/components/schemas/Bead"
++            },
++            "type": [
++              "array",
++              "null"
++            ]
++          },
++          "ok": {
++            "type": "boolean"
++          },
++          "schema_version": {
++            "enum": [
++              "1"
++            ],
++            "type": "string"
++          },
++          "store_ref": {
++            "type": "string"
++          }
++        },
++        "required": [
++          "schema_version",
++          "ok",
++          "store_ref",
++          "beads"
++        ],
++        "type": "object"
++      },
++      "ScopedReadCapabilityOutputBody": {
++        "additionalProperties": false,
++        "properties": {
++          "capability": {
++            "enum": [
++              "exact-live-beads-v1"
++            ],
++            "type": "string"
++          },
++          "ok": {
++            "type": "boolean"
++          },
++          "schema_version": {
++            "enum": [
++              "1"
++            ],
++            "type": "string"
++          },
++          "store_ref": {
++            "type": "string"
++          },
++          "supported": {
++            "type": "boolean"
++          }
++        },
++        "required": [
++          "schema_version",
++          "ok",
++          "store_ref",
++          "capability",
++          "supported"
++        ],
++        "type": "object"
++      },
+       "ServiceRestartOutputBody": {
+         "additionalProperties": false,
+         "properties": {
+@@ -30698,6 +30896,297 @@
          "summary": "Get v0 city by city name bead by ID deps"
        }
      },
@@ -3738,16 +5869,9 @@ index cc64b6f..bb685dd 100644
 +        "summary": "Post v0 city by city name bead by ID metadata cas"
 +      }
 +    },
-     "/v0/city/{cityName}/bead/{id}/reopen": {
-       "post": {
-         "operationId": "post-v0-city-by-city-name-bead-by-id-reopen",
-@@ -39505,6 +39776,112 @@
-         "summary": "Get v0 city by city name maintenance status"
-       }
-     },
-+    "/v0/city/{cityName}/metadata-cas-capability": {
++    "/v0/city/{cityName}/bead/{id}/read-exact": {
 +      "get": {
-+        "operationId": "get-v0-city-by-city-name-metadata-cas-capability",
++        "operationId": "get-v0-city-by-city-name-bead-by-id-read-exact",
 +        "parameters": [
 +          {
 +            "description": "City name.",
@@ -3762,11 +5886,23 @@ index cc64b6f..bb685dd 100644
 +            }
 +          },
 +          {
++            "description": "Exact local rig locator (rig:name).",
 +            "explode": false,
 +            "in": "query",
 +            "name": "store_ref",
 +            "required": true,
 +            "schema": {
++              "description": "Exact local rig locator (rig:name).",
++              "type": "string"
++            }
++          },
++          {
++            "in": "path",
++            "name": "id",
++            "required": true,
++            "schema": {
++              "maxLength": 512,
++              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
 +              "type": "string"
 +            }
 +          }
@@ -3776,7 +5912,122 @@ index cc64b6f..bb685dd 100644
 +            "content": {
 +              "application/json": {
 +                "schema": {
-+                  "$ref": "#/components/schemas/BeadMetadataCASCapabilityOutputBody"
++                  "$ref": "#/components/schemas/ScopedBeadReadOutputBody"
++                }
++              }
++            },
++            "description": "OK",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "400": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Bad Request",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "404": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Not Found",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "422": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Unprocessable Entity",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "500": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Internal Server Error",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          }
++        },
++        "summary": "Get v0 city by city name bead by ID read exact"
++      }
++    },
+     "/v0/city/{cityName}/bead/{id}/reopen": {
+       "post": {
+         "operationId": "post-v0-city-by-city-name-bead-by-id-reopen",
+@@ -31543,6 +32032,99 @@
+         "summary": "Get v0 city by city name beads graph by root ID"
+       }
+     },
++    "/v0/city/{cityName}/beads/read-exact": {
++      "get": {
++        "operationId": "get-v0-city-by-city-name-beads-read-exact",
++        "parameters": [
++          {
++            "description": "City name.",
++            "in": "path",
++            "name": "cityName",
++            "required": true,
++            "schema": {
++              "description": "City name.",
++              "minLength": 1,
++              "pattern": "\\S",
++              "type": "string"
++            }
++          },
++          {
++            "description": "Exact local rig locator (rig:name).",
++            "explode": false,
++            "in": "query",
++            "name": "store_ref",
++            "required": true,
++            "schema": {
++              "description": "Exact local rig locator (rig:name).",
++              "type": "string"
++            }
++          }
++        ],
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ScopedBeadsReadOutputBody"
 +                }
 +              }
 +            },
@@ -3831,8 +6082,100 @@ index cc64b6f..bb685dd 100644
 +                "$ref": "#/components/headers/X-GC-Request-Id"
 +              }
 +            }
++          }
++        },
++        "summary": "Get v0 city by city name beads read exact"
++      }
++    },
+     "/v0/city/{cityName}/beads/ready": {
+       "get": {
+         "operationId": "get-v0-city-by-city-name-beads-ready",
+@@ -39074,71 +39656,220 @@
+             }
+           },
+           {
+-            "description": "Message ID.",
+-            "in": "path",
+-            "name": "id",
+-            "required": true,
+-            "schema": {
+-              "description": "Message ID.",
+-              "type": "string"
+-            }
+-          },
+-          {
+-            "description": "Rig hint.",
++            "description": "Message ID.",
++            "in": "path",
++            "name": "id",
++            "required": true,
++            "schema": {
++              "description": "Message ID.",
++              "type": "string"
++            }
 +          },
-+          "501": {
++          {
++            "description": "Rig hint.",
++            "explode": false,
++            "in": "query",
++            "name": "rig",
++            "schema": {
++              "description": "Rig hint.",
++              "type": "string"
++            }
++          },
++          {
++            "description": "Idempotency key for safe retries.",
++            "in": "header",
++            "name": "Idempotency-Key",
++            "schema": {
++              "description": "Idempotency key for safe retries.",
++              "type": "string"
++            }
++          }
++        ],
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/MailReplyInputBody"
++              }
++            }
++          },
++          "required": true
++        },
++        "responses": {
++          "201": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/Message"
++                }
++              }
++            },
++            "description": "Created",
++            "headers": {
++              "X-GC-Cache-Age-S": {
++                "schema": {
++                  "description": "Age in seconds of the CachingStore snapshot that served this response (0 if not applicable).",
++                  "format": "double",
++                  "type": "number"
++                }
++              },
++              "X-GC-Index": {
++                "schema": {
++                  "description": "Latest event sequence number.",
++                  "format": "int64",
++                  "minimum": 0,
++                  "type": "integer"
++                }
++              },
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "401": {
 +            "content": {
 +              "application/problem+json": {
 +                "schema": {
@@ -3840,7 +6183,82 @@ index cc64b6f..bb685dd 100644
 +                }
 +              }
 +            },
-+            "description": "Not Implemented",
++            "description": "Unauthorized",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "403": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Forbidden",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "404": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Not Found",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "409": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Conflict",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "422": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Unprocessable Entity",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "500": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Internal Server Error",
 +            "headers": {
 +              "X-GC-Request-Id": {
 +                "$ref": "#/components/headers/X-GC-Request-Id"
@@ -3848,17 +6266,445 @@ index cc64b6f..bb685dd 100644
 +            }
 +          }
 +        },
-+        "summary": "Get v0 city by city name metadata cas capability"
++        "summary": "Reply to a mail message"
 +      }
 +    },
-     "/v0/city/{cityName}/order/history/{bead_id}": {
++    "/v0/city/{cityName}/maintenance/dolt-gc": {
++      "post": {
++        "description": "Trigger a one-off maintenance cycle (dolt backup + CALL DOLT_GC + smoke test). Default async (202); ?wait=true blocks until completion (200). Returns 409 when a run is already in flight.",
++        "operationId": "trigger-maintenance-dolt-gc",
++        "parameters": [
++          {
++            "description": "Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.",
++            "in": "header",
++            "name": "X-GC-Request",
++            "required": true,
++            "schema": {
++              "description": "Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.",
++              "minLength": 1,
++              "type": "string"
++            }
++          },
++          {
++            "description": "City name.",
++            "in": "path",
++            "name": "cityName",
++            "required": true,
++            "schema": {
++              "description": "City name.",
++              "minLength": 1,
++              "pattern": "\\S",
++              "type": "string"
++            }
++          },
++          {
++            "description": "When true, the handler blocks until the run completes and returns 200 with the full Run. When false (default), the handler returns 202 Accepted immediately.",
+             "explode": false,
+             "in": "query",
+-            "name": "rig",
+-            "schema": {
+-              "description": "Rig hint.",
+-              "type": "string"
+-            }
+-          },
+-          {
+-            "description": "Idempotency key for safe retries.",
+-            "in": "header",
+-            "name": "Idempotency-Key",
++            "name": "wait",
+             "schema": {
+-              "description": "Idempotency key for safe retries.",
+-              "type": "string"
++              "description": "When true, the handler blocks until the run completes and returns 200 with the full Run. When false (default), the handler returns 202 Accepted immediately.",
++              "type": "boolean"
+             }
+           }
+         ],
+-        "requestBody": {
+-          "content": {
+-            "application/json": {
+-              "schema": {
+-                "$ref": "#/components/schemas/MailReplyInputBody"
+-              }
+-            }
+-          },
+-          "required": true
+-        },
+         "responses": {
+-          "201": {
++          "202": {
+             "content": {
+               "application/json": {
+                 "schema": {
+-                  "$ref": "#/components/schemas/Message"
++                  "$ref": "#/components/schemas/MaintenanceTriggerBody"
+                 }
+               }
+             },
+-            "description": "Created",
++            "description": "Accepted",
+             "headers": {
+-              "X-GC-Cache-Age-S": {
+-                "schema": {
+-                  "description": "Age in seconds of the CachingStore snapshot that served this response (0 if not applicable).",
+-                  "format": "double",
+-                  "type": "number"
+-                }
+-              },
+-              "X-GC-Index": {
+-                "schema": {
+-                  "description": "Latest event sequence number.",
+-                  "format": "int64",
+-                  "minimum": 0,
+-                  "type": "integer"
+-                }
+-              },
+               "X-GC-Request-Id": {
+                 "$ref": "#/components/headers/X-GC-Request-Id"
+               }
+@@ -39233,27 +39964,30 @@
+                 "$ref": "#/components/headers/X-GC-Request-Id"
+               }
+             }
++          },
++          "503": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Service Unavailable",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
+           }
+         },
+-        "summary": "Reply to a mail message"
++        "summary": "Trigger a Dolt store maintenance run"
+       }
+     },
+-    "/v0/city/{cityName}/maintenance/dolt-gc": {
+-      "post": {
+-        "description": "Trigger a one-off maintenance cycle (dolt backup + CALL DOLT_GC + smoke test). Default async (202); ?wait=true blocks until completion (200). Returns 409 when a run is already in flight.",
+-        "operationId": "trigger-maintenance-dolt-gc",
++    "/v0/city/{cityName}/maintenance/status": {
++      "get": {
++        "operationId": "get-v0-city-by-city-name-maintenance-status",
+         "parameters": [
+-          {
+-            "description": "Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.",
+-            "in": "header",
+-            "name": "X-GC-Request",
+-            "required": true,
+-            "schema": {
+-              "description": "Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.",
+-              "minLength": 1,
+-              "type": "string"
+-            }
+-          },
+           {
+             "description": "City name.",
+             "in": "path",
+@@ -39265,59 +39999,25 @@
+               "pattern": "\\S",
+               "type": "string"
+             }
+-          },
+-          {
+-            "description": "When true, the handler blocks until the run completes and returns 200 with the full Run. When false (default), the handler returns 202 Accepted immediately.",
+-            "explode": false,
+-            "in": "query",
+-            "name": "wait",
+-            "schema": {
+-              "description": "When true, the handler blocks until the run completes and returns 200 with the full Run. When false (default), the handler returns 202 Accepted immediately.",
+-              "type": "boolean"
+-            }
+           }
+         ],
+         "responses": {
+-          "202": {
++          "200": {
+             "content": {
+               "application/json": {
+                 "schema": {
+-                  "$ref": "#/components/schemas/MaintenanceTriggerBody"
+-                }
+-              }
+-            },
+-            "description": "Accepted",
+-            "headers": {
+-              "X-GC-Request-Id": {
+-                "$ref": "#/components/headers/X-GC-Request-Id"
+-              }
+-            }
+-          },
+-          "401": {
+-            "content": {
+-              "application/problem+json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/ErrorModel"
++                  "$ref": "#/components/schemas/MaintenanceStatusBody"
+                 }
+               }
+             },
+-            "description": "Unauthorized",
++            "description": "OK",
+             "headers": {
+-              "X-GC-Request-Id": {
+-                "$ref": "#/components/headers/X-GC-Request-Id"
+-              }
+-            }
+-          },
+-          "403": {
+-            "content": {
+-              "application/problem+json": {
++              "X-GC-Cache-Age-S": {
+                 "schema": {
+-                  "$ref": "#/components/schemas/ErrorModel"
++                  "format": "double",
++                  "type": "number"
+                 }
+-              }
+-            },
+-            "description": "Forbidden",
+-            "headers": {
++              },
+               "X-GC-Request-Id": {
+                 "$ref": "#/components/headers/X-GC-Request-Id"
+               }
+@@ -39338,21 +40038,6 @@
+               }
+             }
+           },
+-          "409": {
+-            "content": {
+-              "application/problem+json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/ErrorModel"
+-                }
+-              }
+-            },
+-            "description": "Conflict",
+-            "headers": {
+-              "X-GC-Request-Id": {
+-                "$ref": "#/components/headers/X-GC-Request-Id"
+-              }
+-            }
+-          },
+           "422": {
+             "content": {
+               "application/problem+json": {
+@@ -39399,12 +40084,12 @@
+             }
+           }
+         },
+-        "summary": "Trigger a Dolt store maintenance run"
++        "summary": "Get v0 city by city name maintenance status"
+       }
+     },
+-    "/v0/city/{cityName}/maintenance/status": {
++    "/v0/city/{cityName}/metadata-cas-capability": {
        "get": {
-         "operationId": "get-v0-city-by-city-name-order-history-by-bead-id",
+-        "operationId": "get-v0-city-by-city-name-maintenance-status",
++        "operationId": "get-v0-city-by-city-name-metadata-cas-capability",
+         "parameters": [
+           {
+             "description": "City name.",
+@@ -39417,6 +40102,15 @@
+               "pattern": "\\S",
+               "type": "string"
+             }
++          },
++          {
++            "explode": false,
++            "in": "query",
++            "name": "store_ref",
++            "required": true,
++            "schema": {
++              "type": "string"
++            }
+           }
+         ],
+         "responses": {
+@@ -39424,24 +40118,18 @@
+             "content": {
+               "application/json": {
+                 "schema": {
+-                  "$ref": "#/components/schemas/MaintenanceStatusBody"
++                  "$ref": "#/components/schemas/BeadMetadataCASCapabilityOutputBody"
+                 }
+               }
+             },
+             "description": "OK",
+             "headers": {
+-              "X-GC-Cache-Age-S": {
+-                "schema": {
+-                  "format": "double",
+-                  "type": "number"
+-                }
+-              },
+               "X-GC-Request-Id": {
+                 "$ref": "#/components/headers/X-GC-Request-Id"
+               }
+             }
+           },
+-          "404": {
++          "400": {
+             "content": {
+               "application/problem+json": {
+                 "schema": {
+@@ -39449,7 +40137,7 @@
+                 }
+               }
+             },
+-            "description": "Not Found",
++            "description": "Bad Request",
+             "headers": {
+               "X-GC-Request-Id": {
+                 "$ref": "#/components/headers/X-GC-Request-Id"
+@@ -39486,7 +40174,7 @@
+               }
+             }
+           },
+-          "503": {
++          "501": {
+             "content": {
+               "application/problem+json": {
+                 "schema": {
+@@ -39494,7 +40182,7 @@
+                 }
+               }
+             },
+-            "description": "Service Unavailable",
++            "description": "Not Implemented",
+             "headers": {
+               "X-GC-Request-Id": {
+                 "$ref": "#/components/headers/X-GC-Request-Id"
+@@ -39502,7 +40190,7 @@
+             }
+           }
+         },
+-        "summary": "Get v0 city by city name maintenance status"
++        "summary": "Get v0 city by city name metadata cas capability"
+       }
+     },
+     "/v0/city/{cityName}/order/history/{bead_id}": {
+@@ -45583,6 +46271,99 @@
+         "summary": "Get v0 city by city name runs by run ID steps"
+       }
+     },
++    "/v0/city/{cityName}/scoped-read-capability": {
++      "get": {
++        "operationId": "get-v0-city-by-city-name-scoped-read-capability",
++        "parameters": [
++          {
++            "description": "City name.",
++            "in": "path",
++            "name": "cityName",
++            "required": true,
++            "schema": {
++              "description": "City name.",
++              "minLength": 1,
++              "pattern": "\\S",
++              "type": "string"
++            }
++          },
++          {
++            "description": "Exact local rig locator (rig:name).",
++            "explode": false,
++            "in": "query",
++            "name": "store_ref",
++            "required": true,
++            "schema": {
++              "description": "Exact local rig locator (rig:name).",
++              "type": "string"
++            }
++          }
++        ],
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ScopedReadCapabilityOutputBody"
++                }
++              }
++            },
++            "description": "OK",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "400": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Bad Request",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "422": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Unprocessable Entity",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "500": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Internal Server Error",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          }
++        },
++        "summary": "Get v0 city by city name scoped read capability"
++      }
++    },
+     "/v0/city/{cityName}/service/{name}": {
+       "get": {
+         "operationId": "get-v0-city-by-city-name-service-by-name",
 diff --git a/internal/api/supervisor_city_routes.go b/internal/api/supervisor_city_routes.go
-index ed7c099..bfaebeb 100644
+index ed7c099..6880255 100644
 --- a/internal/api/supervisor_city_routes.go
 +++ b/internal/api/supervisor_city_routes.go
-@@ -212,6 +212,8 @@ func (sm *SupervisorMux) registerCityRoutes() {
+@@ -208,10 +208,15 @@ func (sm *SupervisorMux) registerCityRoutes() {
+ 		Errors:        []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict},
+ 	}, (*Server).humaHandleBeadCreate)
+ 	cityGet(sm, "/bead/{id}", (*Server).humaHandleBeadGet, errorStatuses(http.StatusNotFound, http.StatusServiceUnavailable))
++	cityGet(sm, "/bead/{id}/read-exact", (*Server).humaHandleScopedBeadRead, errorStatuses(http.StatusBadRequest, http.StatusNotFound))
++	cityGet(sm, "/beads/read-exact", (*Server).humaHandleScopedBeadsRead, errorStatuses(http.StatusBadRequest))
++	cityGet(sm, "/scoped-read-capability", (*Server).humaHandleScopedReadCapability, errorStatuses(http.StatusBadRequest))
+ 	cityGet(sm, "/bead/{id}/deps", (*Server).humaHandleBeadDeps, errorStatuses(http.StatusNotFound))
  	cityPost(sm, "/bead/{id}/close", (*Server).humaHandleBeadClose, errorStatuses(http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict))
  	cityPost(sm, "/bead/{id}/reopen", (*Server).humaHandleBeadReopen, errorStatuses(http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict))
  	cityPost(sm, "/bead/{id}/update", (*Server).humaHandleBeadUpdate, errorStatuses(http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict))

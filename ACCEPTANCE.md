@@ -1014,3 +1014,32 @@ Pack tests retain strict receipt ownership/schema validation and ambiguity
 reconciliation. Focused native evidence compares repeated --help subprocess
 counts for the same sequence of conditional writes. Full acceptance and the
 600-second deadline remain mandatory; no HTTP transport pass closes them.
+
+## Public exact live RIG reads (S9; qualification timing boundary)
+
+The native tracker starts with one configured local RIG and a live Gas City
+supervisor. Before task effects, preflight verifies the exact live-read
+capability for that RIG. A point read names both the explicit RIG locator and
+bead ID; a group read names the same RIG and includes persistent and ephemeral
+rows of every lifecycle state. The public server uses its existing admitted
+live reader, without the controller projection, response cache, federation,
+pagination or fallback to another store. The controller retains handle custody.
+A point result carries the opaque signed revision as a string from the same
+backend observation. Missing, unsupported and unavailable reads remain failures;
+foreign scope or identity cannot satisfy an observation. Restart/replacement
+re-admits the live reader through Gas City's existing generation checks.
+
+Mutable claim, task, candidate and stop observations retain their original
+chronology. This changes transport and process-launch overhead; it does not
+replace multiple observations with a cached snapshot or authorize mutation
+retry. Logical CITY sessions and their revision fences retain the existing
+public CLI/residency path; CITY relocation is therefore not reinterpreted by
+this RIG-only contract.
+
+Controlled acceptance covers stale projection with newer backend state,
+duplicate IDs in another RIG, persistent and ephemeral records, all lifecycle
+states without truncation, missing versus unavailable, exact signed revisions,
+foreign responses and capability refusal before task effects. Live acceptance
+compares the public exact read with the existing scoped CLI, checks mutations
+between reads and retains the native restart/delivery scenarios. The complete
+fast and full gates remain mandatory with their 60/600-second limits.

@@ -52,14 +52,15 @@ executables, starting with `bd`. Splitting the tools across directories that
 also contain older copies can shadow the GC selected during admission. The
 build instructions above install both into the same isolated directory.
 
-The patched CLI also supplies `gc beads show ID --store-ref=rig:NAME
---format=json`. The pack requires this public capability before preparing tasks
-and uses it for fresh reads from the configured RIG, retaining Gas City's
-normalized Bead output. CITY session observations retain ordinary logical
-routing, including migrated class bindings. An older candidate without this
-flag fails preflight before task launch. Exact reads close their owned store
-handle and do not scan neighboring stores. Legacy file-provider layouts retain
-their shared CITY backing; this flag does not migrate their storage layout.
+The pack requires the public scoped live-read and metadata-CAS capabilities
+before task effects. Exact RIG point/list reads use the supervisor's held
+`HandlesFor(store).Live` reader, bypassing projection and response caches. The
+point receipt carries its signed revision as a string. Closed work and both
+storage tiers remain visible; there is no pagination or cross-store fallback.
+Logical CITY session observations and revision fences retain the public CLI
+residency path, including migrated class bindings. The scoped CLI remains
+available for independent parity checks. HTTP handlers retain controller-owned
+handles; they never close them after a request.
 
 The candidate adds the existing admitted proxied reader to control readiness
 scans. Control mutations keep the guarded CLI write leaf. `native_transport =

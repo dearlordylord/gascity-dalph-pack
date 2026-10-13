@@ -100,7 +100,7 @@ export const makeNativeController = (
     }
   })
   const retainedResources = Effect.fn("Native.retainedResources")(function* (root: BeadId) {
-    const rows = yield* nativeRows(config, commands)
+    const rows = yield* nativeRows(config)
     const continuation = rows.find(
       (row) => row.metadata?.["gc.root_bead_id"] === root && row.metadata["dalph.product_root"]
     )

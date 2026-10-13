@@ -22,7 +22,7 @@ type Worktrees = ReturnType<typeof makeWorktrees>
 const implementationPrompt =
   "You own this exact isolated attempt. Implement the assigned task, add meaningful tests, run mise exec -- pnpm test, review against the requested behavior and code quality, fix findings and commit all owned changes. Do not push, merge, touch other worktrees, close tracker records, or launch other agents. Prerequisite delivery beads are closed. Use git -c user.name='Dalph Trial' -c user.email='dalph-trial@local' -c commit.gpgsign=false commit if needed."
 
-export const makeWorkflow = (
+export const makeWorkflow = <E = never, R = never>(
   config: RuntimeConfig,
   commands: Commands,
   tracker: Tracker,
@@ -34,11 +34,7 @@ export const makeWorkflow = (
     current: Bead,
     candidate: typeof Candidate.Type,
     ordinal: number
-  ) => Effect.Effect<
-    void,
-    Effect.Error<ReturnType<typeof integrationCustody>> | Effect.Error<ReturnType<Tracker["record"]>>,
-    Effect.Services<ReturnType<typeof integrationCustody>>
-  > = () => Effect.void
+  ) => Effect.Effect<void, E, R> = () => Effect.void
 ) => {
   const fetch = () => git.git(["fetch", "origin", `${git.target}:${git.remote}`])
   const commitAt = (ref: string, cwd = config.repo) =>

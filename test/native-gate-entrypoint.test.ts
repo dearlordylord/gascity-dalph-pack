@@ -76,11 +76,11 @@ for (const fault of ["read", "contract", "identity"]) {
       if (failure._tag === "CommandFailure") {
         expect(failure.exit).toBe(75)
         expect(`${failure.stdout}${failure.stderr}`).toContain(
-          fault === "read" ? "CommandRejected" : fault === "contract" ? "NotFound" : "ConfigError"
+          fault === "read" ? "HttpClientError: Transport error (GET" : fault === "contract" ? "NotFound" : "ConfigError"
         )
       }
-      if (fault === "read") expect(yield* fs.readFileString(join(root, "calls"))).toBe("read\n")
-      else expect(yield* fs.exists(join(root, "calls"))).toBe(false)
+      // The closed HTTP endpoint injects the native RIG read failure; CLI fallback is forbidden.
+      expect(yield* fs.exists(join(root, "calls"))).toBe(false)
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
 }

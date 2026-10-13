@@ -5,16 +5,14 @@ import * as Response from "effect/http/HttpClientResponse"
 import { type BeadId, BoundaryFailure } from "../domain/shared.ts"
 import type { RuntimeConfig } from "../delivery/config.ts"
 
-/** An exact local CITY/RIG locator, never a cross-store search request. */
-const StoreLocator = Schema.String.check(Schema.isPattern(/^(city|rig):[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/)).pipe(
-  Schema.brand("MetadataStoreLocator")
-)
+import { NativeLocalStoreLocator } from "./store-locator.ts"
+
 /** Native metadata keys follow the public Beads grammar. */
 const MetadataKey = Schema.String.check(Schema.isPattern(/^[A-Za-z][A-Za-z0-9_.]{0,255}$/)).pipe(
   Schema.brand("NativeMetadataKey")
 )
 export const MetadataCASRequest = Schema.Struct({
-  store_ref: StoreLocator,
+  store_ref: NativeLocalStoreLocator,
   key: MetadataKey,
   expected: Schema.String,
   next: Schema.String
@@ -27,7 +25,7 @@ export class NativeMetadataRequestFailed extends Schema.TaggedError<NativeMetada
 const Capability = Schema.Struct({
   schema_version: Schema.Literal("1"),
   ok: Schema.Literal(true),
-  store_ref: StoreLocator,
+  store_ref: NativeLocalStoreLocator,
   capability: Schema.Literal("metadata-value-cas-v1"),
   supported: Schema.Literal(true)
 })

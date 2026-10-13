@@ -41,21 +41,14 @@ export DALPH_TRIAL_ROOT=/absolute/path/to/dalph-trial
 mkdir -p "$DALPH_TRIAL_ROOT"/{bin,sources,evidence,worktrees,tmux,gc-home}
 ```
 
-Build the pinned sources into the trial's `bin/`:
+Build GC and `bd` from the same inputs with the commands in
+[matched candidate setup](NATIVE-CANDIDATE.md). The manifest owns the revision,
+complete patch hash and build identifier. Both executables must be installed
+in the same isolated `bin/` directory. The current native workflow requires its
+public scoped live-read and metadata-CAS HTTP routes; an older build without
+those capabilities fails preflight before task effects. The complete native
+suite remains under qualification until its evidence is recorded.
 
-```sh
-git clone https://github.com/gastownhall/gascity.git "$DALPH_TRIAL_ROOT/sources/gascity"
-git -C "$DALPH_TRIAL_ROOT/sources/gascity" checkout 8fd6aa25ce73b3e8cf0c1e092e8a14ab00b4c15a
-git -C "$DALPH_TRIAL_ROOT/sources/gascity" apply "$DALPH_PACK_ROOT/patches/gascity-native-workflow-boundaries.patch"
-(cd "$DALPH_TRIAL_ROOT/sources/gascity" && mise exec go@1.27.2 -- go build -ldflags '-X main.version=dev-dalph-native-v3' -o "$DALPH_TRIAL_ROOT/bin/gc" ./cmd/gc)
-git clone https://github.com/gastownhall/beads.git "$DALPH_TRIAL_ROOT/sources/beads"
-git -C "$DALPH_TRIAL_ROOT/sources/beads" checkout 1b7bf9b1910d8ecec3f461f70f478314b654eaa6
-(cd "$DALPH_TRIAL_ROOT/sources/beads" && CGO_ENABLED=0 mise exec go@1.27.2 -- go build -tags gms_pure_go -ldflags '-X main.Build=1b7bf9b1910d8ecec3f461f70f478314b654eaa6' -o "$DALPH_TRIAL_ROOT/bin/bd" ./cmd/bd)
-```
-
-The native review workflow requires the bundled patch and its public build
-identifier `dev-dalph-native-v3`. Stock compiled Ralph spends semantic
-iterations on infrastructure failures; its older check lane has separate handling.
 The patch repairs the active native dispatcher, keeping budgets and recovery in
 Gas City. It also makes the execution backstop honor finite public heartbeat
 holds and revalidate them before draining a quiet session. Pack preflight rejects an unqualified identifier before cooking a

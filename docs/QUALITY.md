@@ -219,3 +219,10 @@ expected and next values. Ambiguous transport/server failures permit one fresh
 exact-value observation, never an automatic second mutation. Unsupported and
 throttled writes remain refusals. Native acceptance separately checks replay,
 conflict, exact receipts and absence of repeated CLI capability probes.
+
+Exact RIG point and group reads use the public live-reader HTTP contract. Every
+call makes a fresh backend observation; mutable claim/custody reads are not
+removed or replaced by a cached snapshot. Logical CITY session and revision
+observations retain native CLI residency. SDK and client controls plus live
+CLI/HTTP parity qualify the adapter; the complete native suite still qualifies
+the combined workflow.

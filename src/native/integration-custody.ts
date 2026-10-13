@@ -10,7 +10,7 @@ export const integrationCustody = Effect.fn("Native.integrationCustody")(functio
   config: RuntimeConfig,
   commands: Commands
 ) {
-  const rows = yield* nativeRows(config, commands)
+  const rows = yield* nativeRows(config)
   for (const row of rows) {
     for (const field of ["dalph.candidate_plan", "dalph.native_attempt"]) {
       const raw = row.metadata?.[field]

@@ -64,7 +64,7 @@ export const makeNativeContinuation = (
         if (canonical(contract) !== canonical(facts.attempt.contract))
           return yield* new BoundaryFailure({ message: "continuation requires the original attempt contract" })
         const batch = continuationBatch(facts.attempt.root, key)
-        const rows = yield* nativeRows(config, commands)
+        const rows = yield* nativeRows(config)
         const existing = submittedBatch(rows, facts.attempt.root, batch)
         if (existing) {
           const root = yield* Schema.decodeUnknownEffect(BeadId)(existing.metadata?.["gc.root_bead_id"])

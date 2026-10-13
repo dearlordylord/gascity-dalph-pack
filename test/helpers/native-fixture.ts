@@ -6,6 +6,7 @@ import { BeadId, BoundaryFailure } from "../../src/domain/shared.ts"
 import { makeTracker } from "../../src/delivery/tracker.ts"
 import { makeNativeWorkflow } from "../../src/native/workflow.ts"
 import { NativeContract } from "../../src/native/contract.ts"
+import { nativeTrackerArgs } from "../../src/native/tracker-command.ts"
 import { MetadataCASRequest } from "../../src/native/metadata-http.ts"
 import type { Commands } from "../../src/delivery/tracker.ts"
 
@@ -249,6 +250,51 @@ export const nativeFixture = Effect.gen(function* () {
       })
   }
   const http = HttpClient.make((request) => {
+    if (request.method === "GET" && request.url.endsWith("/scoped-read-capability"))
+      return Effect.succeed(
+        HttpResponse.fromWeb(
+          request,
+          new Response(
+            JSON.stringify({
+              schema_version: "1",
+              ok: true,
+              store_ref: `rig:${config.rig}`,
+              capability: "exact-live-beads-v1",
+              supported: state.scopedPointReads
+            })
+          )
+        )
+      )
+    if (request.method === "GET" && request.url.endsWith("/read-exact"))
+      return Effect.gen(function* () {
+        const list = request.url.endsWith("/beads/read-exact")
+        const id = decodeURIComponent(request.url.split("/").at(-2) ?? "")
+        const read = yield* commands.execute(
+          config.root,
+          nativeTrackerArgs([
+            "env",
+            "GC_NO_API=1",
+            "gc",
+            "--city",
+            config.city,
+            "--rig",
+            config.rig,
+            "beads",
+            ...(list
+              ? ["list", "--all", "--format=json"]
+              : ["show", id, `--store-ref=rig:${config.rig}`, "--format=json"])
+          ])
+        )
+        const response = list
+          ? `{"schema_version":"1","ok":true,"store_ref":"rig:${config.rig}","beads":${read}}`
+          : `{"schema_version":"1","ok":true,"store_ref":"rig:${config.rig}","bead":${read},"revision":"1"}`
+        return HttpResponse.fromWeb(request, new Response(response))
+      }).pipe(
+        Effect.provideService(FileSystem.FileSystem, fixture.fs),
+        Effect.catch(() =>
+          Effect.succeed(HttpResponse.fromWeb(request, new Response("native read unavailable", { status: 500 })))
+        )
+      )
     if (request.method === "GET" && request.url.endsWith("/metadata-cas-capability"))
       return Effect.succeed(
         HttpResponse.fromWeb(

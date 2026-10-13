@@ -1,10 +1,10 @@
-import { nativeTrackerArgs } from "./tracker-command.ts"
+import { nativeLiveRows } from "./scoped-read.ts"
 import { randomUUID } from "node:crypto"
 import { join } from "node:path"
 import { Effect, Schema } from "effect"
 import { AttemptId, BoundaryFailure, CommitSha } from "../domain/shared.ts"
 import { Plan } from "../domain/attempt.ts"
-import { Bead, type makeTracker, type Commands } from "../delivery/tracker.ts"
+import { type Bead, type makeTracker, type Commands } from "../delivery/tracker.ts"
 import type { RuntimeConfig } from "../delivery/config.ts"
 import type { Git } from "../delivery/git.ts"
 import { canonical } from "../delivery/files.ts"
@@ -32,25 +32,7 @@ const admissionBase = Effect.fn("Native.admissionBase")(function* (git: Git) {
     return yield* new BoundaryFailure({ message: "native admission requires a clean target equal to the remote head" })
   return base
 })
-export const nativeRows = (config: RuntimeConfig, commands: Commands) =>
-  commands
-    .execute(
-      config.root,
-      nativeTrackerArgs([
-        "env",
-        "GC_NO_API=1",
-        "gc",
-        "--city",
-        config.city,
-        "--rig",
-        config.rig,
-        "beads",
-        "list",
-        "--all",
-        "--format=json"
-      ])
-    )
-    .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Bead)))))
+export const nativeRows = nativeLiveRows
 export const nativeGroup = Effect.fn("Native.group")(function* (config: RuntimeConfig, commands: Commands, bead: Bead) {
   const input = { ...bead.metadata }
   if (!input["dalph.product_root"]) delete input["dalph.product_root"]
@@ -66,7 +48,7 @@ export const nativeGroup = Effect.fn("Native.group")(function* (config: RuntimeC
   const root = metadata["dalph.product_root"] ?? workflowRoot
   const task = metadata["dalph.task"]
   const roots: ReadonlyArray<string> = [root, workflowRoot]
-  const rows = (yield* nativeRows(config, commands)).filter(
+  const rows = (yield* nativeRows(config)).filter(
     (row): row is Bead & { readonly metadata: NonNullable<Bead["metadata"]> } =>
       !!row.metadata && roots.includes(row.metadata["gc.root_bead_id"] ?? "")
   )
@@ -94,7 +76,7 @@ export const bindNativeAttempt = Effect.fn("Native.bindAttempt")(function* (
         yield* tracker.record(work.id, "work_plan", retained.plan)
         return retained
       }
-      const rows = yield* nativeRows(config, commands)
+      const rows = yield* nativeRows(config)
       if (rows.filter(occupiedPosition).length >= TASK_POSITIONS)
         return yield* new BoundaryFailure({ message: "both task-work positions remain occupied by retained attempts" })
       const base = yield* admissionBase(git)
