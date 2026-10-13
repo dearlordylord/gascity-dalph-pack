@@ -1,11 +1,12 @@
 import { parse } from "smol-toml"
 import { createServer } from "node:net"
 import { dirname, join } from "node:path"
-import { Duration, Effect, FileSystem, Result, Schema } from "effect"
+import { Duration, Effect, FileSystem, Schema } from "effect"
 import { makeCommands } from "../../src/delivery/command.ts"
 import { BoundaryFailure } from "../../src/domain/shared.ts"
 import { Bead } from "../../src/delivery/tracker.ts"
 import { runCommand } from "../../src/quality/command.ts"
+import { cleanupNativeFixture } from "./native-city-cleanup.ts"
 import { nativeTransportEnvironment } from "../../src/native/transport-environment.ts"
 
 const port = Effect.tryPromise({
@@ -216,6 +217,7 @@ export const makeNativeCity = (fault: boolean | string = false) =>
     yield* fs.makeDirectory(env.DOLT_ROOT_PATH, { recursive: true })
     yield* execute(["dolt", "config", "--global", "--add", "user.name", "Native Acceptance"])
     yield* execute(["dolt", "config", "--global", "--add", "user.email", "native@local"])
+    yield* Effect.acquireRelease(Effect.void, () => cleanupNativeFixture(execute, city).pipe(Effect.orDie))
     yield* execute([
       "gc",
       "init",
@@ -228,35 +230,6 @@ export const makeNativeCity = (fault: boolean | string = false) =>
       "--skip-provider-readiness",
       "--json"
     ])
-    yield* Effect.acquireRelease(Effect.void, () =>
-      Effect.gen(function* () {
-        yield* execute(["gc", "--city", city, "stop"], undefined, 15)
-        yield* execute(["gc", "supervisor", "stop", "--wait"], undefined, 15)
-        // SQL transactions are already durable. Flush deferred version history
-        // only after writers stop, before history-based export or disposal.
-        yield* execute(["gc", "--city", city, "--rig", "fixture", "bd", "dolt", "commit"], undefined, 10).pipe(
-          Effect.ensuring(
-            Effect.gen(function* () {
-              // A failed history flush still stops its owned provider services.
-              // Idle timeout zero does not authorize leaked fixture processes.
-              const stops = yield* Effect.all(
-                [
-                  execute(["gc", "--city", city, "--rig", "fixture", "bd", "dolt", "stop"], undefined, 10).pipe(
-                    Effect.result
-                  ),
-                  execute(["gc", "--city", city, "bd", "dolt", "stop"], undefined, 10).pipe(Effect.result)
-                ],
-                { concurrency: 2 }
-              )
-              const failures = stops.filter(Result.isFailure)
-              if (failures.length > 0) {
-                return yield* new BoundaryFailure({ message: failures.map((stop) => stop.failure.message).join("; ") })
-              }
-            }).pipe(Effect.orDie)
-          )
-        )
-      }).pipe(Effect.orDie)
-    )
     yield* execute(["gc", "start", city, "--json"], undefined, 120)
     // Native startup bootstraps the RIG store. Configure its version history
     // before cooking any task workflow; SQL transaction durability is unchanged.

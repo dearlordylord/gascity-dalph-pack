@@ -65,6 +65,14 @@ Fixture scope closure waits for supervisor shutdown and stops its exact city
 and rig provider backend through Gas City. Backend idle timeout zero does not
 authorize leaked services across cases. Files and evidence remain available;
 a failed shutdown fails the case rather than silently accepting cleanup.
+Fixture cleanup is enrolled before `gc init`, which can start its provider.
+Both owned provider stops run even when city shutdown, supervisor shutdown or
+version-history flush fails. The original failure remains a failure; stopping
+providers does not prove task-writer custody or authorize deleting resources.
+Controlled fault cases cover every shutdown stage and both provider failures.
+The three CLI gate refusal cases share one freshly compiled immutable artifact
+inside a scoped test layer; each case still uses its own environment and files.
+The layer uses the live clock and disposes its artifact after all cases finish.
 Before task writers start, an owned fixture selects public
 `dolt.auto-commit=batch` in its RIG. SQL transaction durability remains active;
 versioned tables are explicitly committed after writers stop and before
