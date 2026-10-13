@@ -917,3 +917,9 @@ The fence is never replaced or accumulated per revision; process custody remains
 separate. `test/native-session-revision.test.ts` covers stable reuse, both ABA
 windows, tokens beyond numeric precision and unavailable/invalid projections.
 Existing stop-observation controls retain all refusal and lost-response scenarios.
+
+Retained recovery reads the exact terminal ephemeral pool row and its reverse
+task binding once before revision reuse or stock close. No write occurs between
+the removed duplicate observation and this remaining stronger observation.
+Completed-work disposition still requires a closed task; recovery may retain an
+unfinished task. Post-close fresh checks remain mandatory.

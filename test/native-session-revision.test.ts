@@ -8,6 +8,43 @@ import { BeadId, BoundaryFailure } from "../src/domain/shared.ts"
 const sessionId = BeadId.make("session")
 const workId = BeadId.make("work")
 
+it.effect("retained recovery checks one fresh terminal pool row and the subsequent reverse binding", () =>
+  Effect.gen(function* () {
+    for (const changeBinding of [false, true]) {
+      const f = yield* nativeFixture
+      yield* Effect.gen(function* () {
+        f.raw("session").status = "closed"
+        f.raw("work").status = "in_progress"
+        const before = yield* nativeSession(f.config, f.commands, sessionId)
+        let sessionReads = 0
+        let readsAtClose = 0
+        const original = f.commands.execute
+        f.commands.execute = (...args: Parameters<typeof original>) =>
+          original(...args).pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                if (args[1].includes("beads") && args[1].includes("show") && args[1].includes(sessionId)) {
+                  sessionReads++
+                  if (changeBinding) f.raw("work").metadata["gc.session_id"] = "foreign"
+                }
+                if (args[1].includes("close")) readsAtClose = sessionReads
+              })
+            )
+          )
+        const stop = stopNativeWriter(f.config, f.commands, f.tracker, before, workId, { _tag: "RetainedRecovery" })
+        if (changeBinding) {
+          yield* Effect.flip(stop)
+          expect(f.events.filter((event) => event === "native-close:session")).toHaveLength(0)
+        } else {
+          yield* stop
+          expect(readsAtClose).toBe(1)
+          expect(f.raw("work").status).toBe("in_progress")
+        }
+      }).pipe(Effect.provide(f.layer))
+    }
+  })
+)
+
 it.effect("stable native revision reuses close, while ABA and unavailable fences require stock close", () =>
   Effect.gen(function* () {
     for (const fault of [
