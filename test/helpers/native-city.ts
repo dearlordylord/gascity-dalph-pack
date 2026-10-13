@@ -86,12 +86,13 @@ export const makeNativeCity = (fault: boolean | string = false) =>
     yield* execute(
       [
         `${pack}/node_modules/.bin/esbuild`,
-        qualificationCut ? "test/helpers/native-qualification-entry.ts" : "scripts/native.ts",
+        `native=${qualificationCut ? "test/helpers/native-qualification-entry.ts" : "scripts/native.ts"}`,
+        "native-work-query=scripts/native-work-query.ts",
         "--bundle",
         "--platform=node",
         "--format=esm",
         '--banner:js=import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);',
-        `--outfile=${pack}/dist/native.js`
+        `--outdir=${pack}/dist`
       ],
       sourcePack
     )

@@ -1,5 +1,16 @@
 # Dalph pack on Gas City: accepted trial contract
 
+Native worker/reviewer work-query reads preserve the existing public `gc ready`
+tiers, workspace filter, assignee identities, blocked rows and twenty-row limit
+per query. Starting from the native query environment, they execute at most four
+independent read commands concurrently and join results in the original tier
+order. Missing actor workspace, any command failure or malformed JSON refuses
+without a partial successful answer. Gas City's hook still owns fresh identity,
+dependency and claim checks; no candidate state is persisted. Interruption stops
+owned read children through the existing command scope. Controller probes still
+need neither actor identity nor workspace. This maps to native-work-query.test.ts
+and native-work-query-parallel.test.ts; original native acceptance remains required.
+
 Native review/recovery validates unique session identities through at most four
 concurrent public boundary calls. Each session keeps its exact task reverse-link,
 template/workspace, terminal-status and fresh close-result checks. The whole

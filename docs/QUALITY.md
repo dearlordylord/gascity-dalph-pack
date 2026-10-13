@@ -47,6 +47,12 @@ Fixture scope closure waits for supervisor shutdown and stops its exact city
 and rig provider backend through Gas City. Backend idle timeout zero does not
 authorize leaked services across cases. Files and evidence remain available;
 a failed shutdown fails the case rather than silently accepting cleanup.
+Worker/reviewer query artifacts execute the original public ready tiers with
+at most four read children concurrently. Tier output order, workspace and
+assignee filters, blocked rows and fail-closed errors remain unchanged. Query
+interruption awaits read finalizers; claim and admission remain native Gas City
+boundaries. The fixture builds this artifact from current source alongside the
+native entry, including focused runs outside the broad gate.
 Native scenarios remain
 unchanged in `vitest.native.config.ts`; they are not part of routine fast runs.
 Native city fixtures enable Gas City's `GC_BD_TRACE_JSON` in their own retained
