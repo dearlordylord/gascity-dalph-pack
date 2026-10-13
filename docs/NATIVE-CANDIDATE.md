@@ -46,6 +46,12 @@ Keep the executable physically named `gc`: native control-agent liveness matches
 that process name. A symlink to an executable with another basename changes
 that observation.
 
+Keep the qualified `bd` and `gc` together in that tool directory. Gas City's
+clean condition environment selects tool directories from its resolved
+executables, starting with `bd`. Splitting the tools across directories that
+also contain older copies can shadow the GC selected during admission. The
+build instructions above install both into the same isolated directory.
+
 The patched CLI also supplies `gc beads show ID --store-ref=rig:NAME
 --format=json`. The pack requires this public capability before preparing tasks
 and uses it for fresh reads from the configured RIG, retaining Gas City's

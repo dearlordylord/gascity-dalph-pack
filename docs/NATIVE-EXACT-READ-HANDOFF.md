@@ -38,3 +38,27 @@ evaluated a supported existing parent-order declaration with one classifier
 request; the changed Effect wrapper was unsupported and skipped. That skip does
 not qualify the wrapper. The full installation/recovery/maintenance composition
 and graph acceptance remain open.
+
+## Gate bootstrap repair
+
+Gas City's clean condition environment resolves tool directories starting with
+`bd`. A split diagnostic toolchain selected an older `gc` from that directory,
+which refused the exact-store flag. The initial tracker read was outside the
+gate error handler, so that infrastructure failure exited 1 without publishing
+a verdict. Subsequent review preparation correctly refused missing evidence.
+The isolated installation now keeps its qualified `gc` and `bd` together, as
+the copyable build instructions already do.
+
+The review-gate error boundary now includes typed bootstrap, identity and first
+read failures. Only a validated `ReviewBlocking` returns 1; other typed failures
+return 75 for Gas City's existing finite infrastructure retry policy. Other
+CLI modes retain their error behavior. Three real CLI controls cover unavailable
+read, missing contract and invalid identity, including refusal before any read
+for bootstrap failures. A retained real verdict through the rebuilt entrypoint
+in a controlled clean environment still returned `ReviewBlocking` and exit 1.
+That diagnostic does not resume or qualify the original workflow.
+
+The repair's fast gate passed 297 tests and the existing static/example checks
+within its 60-second deadline, with the same coverage above. Astra closed the
+expanded typed error boundary without blockers. Original full native acceptance
+remains required.

@@ -762,3 +762,18 @@ ID, client, metadata, conflict and lost-response checks. GC controls own missing
 collision, cache, remote, class migration and owned-close refusal. A small live
 persistent/ephemeral comparison owns equal ordinary/scoped JSON in each backend
 mode and unchanged DB HEAD; it cannot qualify a complete workflow or full gate.
+# Initial review-gate infrastructure read
+
+For S3/S4, the native control has a completed review subject and invokes its
+configured gate. If the gate's first fresh tracker read fails, no semantic gate
+evaluation or verdict publication is authorized. The CLI reports infrastructure
+exit 75, never semantic blocking exit 1 or success 0. Gas City's existing finite
+infrastructure retry policy retains the same semantic iteration; store recovery
+must restore a fresh read before evaluation. No new task attempt is authorized.
+`test/native-gate-entrypoint.test.ts` executes the real CLI with a failing native
+reader and proves one read, the visible refusal and exit 75. Additional controls
+prove missing contract and invalid identity refuse before any tracker read.
+These bootstrap failures likewise produce no semantic verdict and exit 75.
+The error boundary applies only to the recognized `review-gate` command; other
+CLI modes keep their existing handling. Existing bundled
+Ralph controls cover the finite infrastructure retry classification.

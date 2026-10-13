@@ -12,14 +12,14 @@ import { makeNativeController } from "../src/native/controller.ts"
 import { makeNativeWorkflow } from "../src/native/workflow.ts"
 import { makeNativeContinuation } from "../src/native/continuation.ts"
 import { makeNativeReview } from "../src/native/review.ts"
-import { NativeReviewVerdict } from "../src/native/review-contract.ts"
+import { NativeReviewVerdict, ReviewBlocking } from "../src/native/review-contract.ts"
 import { acknowledgeActorRetirement, acknowledgeCompletedActor } from "../src/native/actor-retirement.ts"
 import { runtimeHeartbeat } from "../src/native/runtime-heartbeat.ts"
 import { nativePreflight } from "../src/native/preflight.ts"
 
 const INFRASTRUCTURE_EXIT = 75
 
-const main = Effect.gen(function* () {
+const execution = Effect.gen(function* () {
   const mode = yield* Schema.decodeUnknownEffect(
     Schema.Literals([
       "launch",
@@ -92,15 +92,7 @@ const main = Effect.gen(function* () {
   if (mode === "check" || mode === "review-gate") {
     const id = yield* Config.schema(BeadId, "GC_BEAD_ID")
     if (mode === "check") yield* workflow.check(yield* tracker.bead(id))
-    else
-      yield* review.gate(yield* tracker.bead(id)).pipe(
-        Effect.catch((error) =>
-          Effect.gen(function* () {
-            yield* Console.error(String(error))
-            process.exitCode = error._tag === "ReviewBlocking" ? 1 : INFRASTRUCTURE_EXIT
-          })
-        )
-      )
+    else yield* tracker.bead(id).pipe(Effect.flatMap(review.gate))
     return
   }
   const claim = yield* workflow.claim()
@@ -168,6 +160,17 @@ const main = Effect.gen(function* () {
   if (mode === "prepare" || mode === "integrate")
     yield* acknowledgeCompletedActor(config, commands, tracker, current.id)
 })
+// A launched review gate must not grade failed bootstrap or reads as a verdict.
+const main = execution.pipe(
+  Effect.catchIf(
+    () => process.argv[2] === "review-gate",
+    (error) =>
+      Effect.gen(function* () {
+        yield* Console.error(String(error))
+        process.exitCode = Schema.is(ReviewBlocking)(error) ? 1 : INFRASTRUCTURE_EXIT
+      })
+  )
+)
 NodeRuntime.runMain(
   main.pipe(
     Effect.tapError((error) =>
