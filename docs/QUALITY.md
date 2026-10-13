@@ -34,11 +34,14 @@ Short verification CLIs compile their current TypeScript entry with esbuild
 before execution, avoiding repeated tsx module-loading overhead. Their ignored
 JavaScript bundles are build outputs; every invocation executes the verifier.
 Full adds the real Gas City
-acceptance suite, with at most two file workers. Every test owns its city,
+acceptance suite, with at most four file workers. Every test owns its city,
 supervisor home, tracker database, tmux socket
-directory, API port, target Git repository and retained evidence. Each worker admits at most two concurrent cases, so at most four isolated
-cities run across the two workers. This replaces serial scheduling within a
-file; the scenario bodies and assertions are unchanged. This limit governs
+directory, API port, target Git repository and retained evidence. Each worker admits one case, so at most four isolated cities run. Independent
+review/restart cases have separate files; the native sequencer starts measured
+critical paths first, without using cached results. This removes the observed
+284/487-second file-worker queue for review/restart in the incomplete 2026-10-13
+run. The bodies and assertions are unchanged, including all dependent human
+continuation batches in the original case. This limit governs
 qualification fixtures; application concurrency is unchanged.
 Fixture scope closure waits for supervisor shutdown and stops its exact city
 and rig provider backend through Gas City. Backend idle timeout zero does not

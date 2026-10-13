@@ -11,10 +11,12 @@ refuse before writer actions. This maps to native-session-parallel.test.ts and
 the existing native-review-safety/session-stop/workflow tests. The original
 live review/recovery scenarios remain mandatory.
 
-Native acceptance scheduling admits at most two isolated cases per worker
-and two workers, for at most four cities. Every existing scenario body and
-assertion executes; the gate retains its single 600-second deadline and
-incomplete custody fence. Only fixture scheduling changes.
+Native acceptance scheduling admits one isolated case per worker and four
+workers, for at most four cities. Independent review/restart cases use separate
+files; measured critical paths start first instead of waiting behind file-size
+ordering. Every existing scenario body and assertion executes; the gate retains
+its single 600-second deadline and incomplete custody fence. Only fixture
+scheduling changes; dependent continuation batches stay in one chronological case.
 
 Native CLI packaging includes its pinned dependencies in the Node ESM artifact.
 An operator invokes the artifact from a directory without node_modules; an
