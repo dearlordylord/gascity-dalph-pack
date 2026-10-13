@@ -22,12 +22,12 @@ it.effect("a failed static check interrupts its concurrent sibling before covera
     const gate = makeQualityGate((command) => {
       const stage = command.args[0] ?? ""
       calls.push(stage)
-      if (stage === "typecheck")
+      if (stage === "verify:schema-boundaries")
         return Deferred.succeed(started, undefined).pipe(
           Effect.andThen(Effect.never),
           Effect.ensuring(Ref.set(stopped, true))
         )
-      if (stage === "verify:schema-boundaries")
+      if (stage === "circular")
         return Deferred.await(started).pipe(
           Effect.andThen(Effect.fail(new CommandFailure({ command: stage, message: "controlled rejection" })))
         )
@@ -35,7 +35,7 @@ it.effect("a failed static check interrupts its concurrent sibling before covera
     }, directory)
     expect((yield* Effect.flip(gate("fast", output)))._tag).toBe("CommandFailure")
     expect(yield* Ref.get(stopped)).toBe(true)
-    expect(calls.slice(0, 2)).toEqual(["verify:effect-cohort", "build"])
+    expect(calls.slice(0, 3)).toEqual(["verify:effect-cohort", "build", "typecheck"])
     expect(calls).not.toContain("test:coverage")
   }).pipe(Effect.provide(NodeServices.layer), Effect.scoped)
 )

@@ -7,7 +7,7 @@ const FAST_SECONDS = 60
 const FULL_SECONDS = 600
 const DISPLAY_DECIMALS = 2
 const STATIC_CONCURRENCY = 2
-const STATIC_START = 2
+const STATIC_START = 3
 const STATIC_END = 7
 const CONTROLLED_END = 11
 const CONTROLLED_CONCURRENCY = 2
@@ -61,7 +61,7 @@ export const makeQualityGate =
         yield* Console.log(`Passed ${stage} in ${(elapsed / MILLISECONDS_PER_SECOND).toFixed(DISPLAY_DECIMALS)}s`)
       })
       for (const stage of selected.slice(0, STATIC_START)) yield* runStage(stage)
-      // Build owns generated bundles; subsequent static checks only observe the candidate.
+      // Build owns bundles; typecheck runs alone to avoid competing compiler processes.
       yield* Effect.forEach(selected.slice(STATIC_START, STATIC_END), runStage, {
         concurrency: STATIC_CONCURRENCY,
         discard: true

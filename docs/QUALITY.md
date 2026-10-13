@@ -14,14 +14,15 @@ mise exec node@24.20.0 -- pnpm install --frozen-lockfile
 mise exec node@24.20.0 -- pnpm check:fast
 ```
 
-Both gates qualify dependencies and build first, then run independent static
-checks with concurrency two. Coverage and independent example checks then share a bounded two-process lane.
+Both gates qualify dependencies, build and typecheck first, then run the remaining independent static
+checks with concurrency two. Typecheck runs alone: the measured parallel phase took 22 seconds, while the same check alone took 10.1 seconds. Coverage and independent example checks then share a bounded two-process lane.
 Native acceptance starts only after every preceding check succeeds. These
 checks use separate output paths; this scheduling changes no Dalph runtime
 behavior, gate requirement, coverage threshold or custody boundary. A failure interrupts sibling checks. One deadline covers
 the entire cycle: 60 seconds for fast, 600 seconds for full. Expiry interrupts
 the owned child process group; it never counts as a pass. Stage output streams
 live and each completed stage reports its elapsed time.
+The public commands invoke their deadline wrapper directly, without nested pnpm launches.
 The CLI compiles its current TypeScript entry before execution. The outer Linux
 `timeout` includes that compilation in the same budget; no stale compiled gate
 or cached check result is executed. This avoids the unbounded module-loading
@@ -41,13 +42,12 @@ the original source URL for template lookup. Both rendering calls and the
 configuration and filesystem assertions still execute. Their ignored
 JavaScript bundles are build outputs; every invocation executes the verifier.
 Full adds the real Gas City
-acceptance suite, with at most four file workers. Every test owns its city,
+acceptance suite, with at most two file workers. Every test owns its city,
 supervisor home, tracker database, tmux socket
-directory, API port, target Git repository and retained evidence. Each worker admits one case, so at most four isolated cities run. Independent
+directory, API port, target Git repository and retained evidence. Each worker admits one case, so at most two isolated cities run. The four-city run exhausted a 120-second restart boundary: CITY priming reads took 36.1 seconds, while the same reads after stopping other fixtures took 0.68 seconds and a public restart completed in 11.4 seconds. The lower fixture admission limit reduces this measured contention; a successful complete run remains required. Independent
 review/restart cases have separate files; the native sequencer starts measured
-critical paths first, without using cached results. This removes the observed
-284/487-second file-worker queue for review/restart in the incomplete 2026-10-13
-run. The bodies and assertions are unchanged, including all dependent human
+critical paths first, without using cached results. The critical-path ordering avoids placing review/restart behind short compatibility fixtures.
+The bodies and assertions are unchanged, including all dependent human
 continuation batches in the original case. This limit governs
 qualification fixtures; application concurrency is unchanged.
 Fixture scope closure waits for supervisor shutdown and stops its exact city
