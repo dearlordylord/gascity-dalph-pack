@@ -900,3 +900,20 @@ remain unread. Attachments and reverse-source roots keep their separate graph
 authority. Failed root reads defer completion/close; a fresh recovery can finish
 the same responsibility. Controlled SDK owner cases cover these differences;
 fresh native acceptance and the complete 600-second cycle remain mandatory.
+
+## Stable native close revision
+
+A completed or retained-recovery writer first passes the existing fresh terminal,
+ephemeral-pool and reverse-binding checks. Public `gc bd show ID --json` may
+provide one exact closed session row and a nonzero opaque revision. After stock
+close acknowledges that exact session, a fresh matching row with the same
+revision permits one immutable compact fence alongside the close observation.
+Reconciliation may omit another close only with the original intent, observation,
+fresh custody checks and the identical current revision. A reopen/reclose between
+close and its post-read or before replay changes the token and forbids reuse.
+Missing/zero tokens, ambiguous rows, foreign identity/bindings or read failure
+fall back to stock close. Existing versionless observations remain compatible.
+The fence is never replaced or accumulated per revision; process custody remains
+separate. `test/native-session-revision.test.ts` covers stable reuse, both ABA
+windows, tokens beyond numeric precision and unavailable/invalid projections.
+Existing stop-observation controls retain all refusal and lost-response scenarios.

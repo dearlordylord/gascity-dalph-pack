@@ -8,6 +8,7 @@ import { canonical } from "../delivery/files.ts"
 import type { NativeSession } from "./contract.ts"
 import { nativeSession } from "./session-observation.ts"
 import { retiredPoolSession } from "./retirement.ts"
+import { SessionRevision, sessionRevision } from "./session-revision.ts"
 
 /** The workflow repeats native close only after observing exact terminal pool custody. */
 export const NativeStopIntent = Schema.Struct({
@@ -17,6 +18,8 @@ export const NativeStopIntent = Schema.Struct({
   path: AbsolutePath,
   template: Schema.String
 })
+/** One immutable stable-close fence per session; changed tokens fall back to native close. */
+const StableClose = Schema.Struct({ intent: NativeStopIntent, revision: SessionRevision })
 const CloseResponse = Schema.Struct({
   schema_version: Schema.Literal("1"),
   ok: Schema.Literal(true),
@@ -119,6 +122,9 @@ export const stopNativeWriter = Effect.fn("Native.stopWriter")(function* (
     return yield* new BoundaryFailure({ message: "native writer has unfinished work; external stop is not authorized" })
   const retired = yield* retiredPoolSession(config, commands, session.id)
   yield* confirmStoppedSession(retired, intent, tracker)
+  const fence = yield* retainedFact(writer, `${key}_stable`, StableClose)
+  const beforeRevision = yield* sessionRevision(config, commands, retired)
+  if (reusableClose(retained, observed, fence, intent, beforeRevision)) return
   if (!retained) yield* tracker.record(intent.node, key, intent)
   // Closed rows can be reopened through the public bead API. Without a fresh
   // incarnation fence, historical outcomes cannot replace the idempotent close.
@@ -143,4 +149,34 @@ export const stopNativeWriter = Effect.fn("Native.stopWriter")(function* (
   yield* confirmStoppedSession(stopped, intent, tracker)
   const observation = { version: 1, intent, response } as const
   yield* retainCloseObservation(tracker, intent.node, key, observed, observation)
+  const afterRevision = yield* sessionRevision(config, commands, stopped)
+  yield* retainStableClose(tracker, key, fence, intent, beforeRevision, afterRevision)
+})
+
+function reusableClose(
+  retained: typeof NativeStopIntent.Type | null,
+  observed: typeof NativeStopObservation.Type | null,
+  fence: typeof StableClose.Type | null,
+  intent: typeof NativeStopIntent.Type,
+  revision: typeof SessionRevision.Type | null
+) {
+  return (
+    !!retained &&
+    !!observed &&
+    !!fence &&
+    revision !== null &&
+    canonical(fence.intent) === canonical(intent) &&
+    fence.revision === revision
+  )
+}
+const retainStableClose = Effect.fn("Native.retainStableClose")(function* (
+  tracker: ReturnType<typeof makeTracker>,
+  key: string,
+  fence: typeof StableClose.Type | null,
+  intent: typeof NativeStopIntent.Type,
+  before: typeof SessionRevision.Type | null,
+  after: typeof SessionRevision.Type | null
+) {
+  if (!fence && before !== null && before === after)
+    yield* tracker.record(intent.node, `${key}_stable`, { intent, revision: before })
 })

@@ -1,3 +1,13 @@
+const SESSION_DETAIL_ARGUMENTS = 4
+function exactSessionDetail(args: ReadonlyArray<string>): boolean {
+  return (
+    args.length === SESSION_DETAIL_ARGUMENTS &&
+    args[1] === "show" &&
+    !!args[2] &&
+    !args[2]?.startsWith("-") &&
+    args[3] === "--json"
+  )
+}
 const OPTION_PAIR = 2
 function gitRead(args: ReadonlyArray<string>): boolean {
   const operation = args[1] === "-C" ? args[3] : args[1]
@@ -22,7 +32,8 @@ function nativeRead(args: ReadonlyArray<string>): boolean {
   let index = args.indexOf("gc") + 1
   while (args[index] === "--city" || args[index] === "--rig") index += OPTION_PAIR
   const command = args[index] ?? ""
-  if (command === "ready" || command === "version") return true
+  if (command === "bd") return exactSessionDetail(args.slice(index))
+  if (["ready", "version"].includes(command)) return true
   return (nativeOperations.get(command) ?? []).includes(args[index + 1] ?? "")
 }
 function versionRead(args: ReadonlyArray<string>): boolean {
