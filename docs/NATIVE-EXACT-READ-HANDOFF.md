@@ -62,3 +62,28 @@ The repair's fast gate passed 297 tests and the existing static/example checks
 within its 60-second deadline, with the same coverage above. Astra closed the
 expanded typed error boundary without blockers. Original full native acceptance
 remains required.
+
+## Native provider recovery
+
+Gas City's public JSON health command may recover its backend services. Preflight
+now delegates that exact operation separately from read-only observations,
+removing attempt and session markers before invocation. It accepts only a
+versioned healthy `bd` response naming the configured city. Malformed, foreign,
+unhealthy and failed observations refuse launch without adapter retries.
+FileSystem owns unique diagnostic allocation; failures retain their logs.
+
+Controlled and property checks cover the exact delegation predicate and refusal
+boundaries. The fast gate passed 309 pack tests, 47 example tests and static
+checks within 60 seconds. Coverage is 99.50% statements, 99.08% branches,
+99.54% functions and 99.61% lines. A cold-service native preflight passed;
+the health invocation took 1.06 seconds. Both backend scopes were stopped
+afterward and the supervisor reported stopped.
+
+Astra closed the scoped recovery and explicit FileSystem requirement review
+without blockers. Hapsland skipped the Effect wrapper, so that invocation is not
+review evidence. Earlier ambiguous health custody was reconciled only after
+public backend shutdown; this repair does not rewrite historical custody.
+
+The original blocking/human/clean scenario still exceeded its deadline after
+four initial reviews and entry into human continuation. That incomplete run
+does not qualify the full suite. Transition delays remain under investigation.

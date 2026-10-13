@@ -12,6 +12,7 @@ import { nativeSessionClose } from "../native/session-close-command.ts"
 import { nativeActorRetirement } from "../native/actor-retirement.ts"
 import { nativeRuntimeHeartbeat } from "../native/runtime-heartbeat.ts"
 import { nativeHookCommand } from "../native/hook-command.ts"
+import { nativeProviderRecovery } from "../native/provider-health.ts"
 
 const MILLISECONDS_PER_SECOND = 1000
 const DEFAULT_COMMAND_SECONDS = 30
@@ -24,7 +25,8 @@ const delegatedBoundary = (native: boolean, args: ReadonlyArray<string>) =>
     nativeSessionClose(args) ||
     nativeHookCommand(args) ||
     nativeRuntimeHeartbeat(args) ||
-    nativeActorRetirement(args))
+    nativeActorRetirement(args) ||
+    nativeProviderRecovery(args))
 export class CommandRejected extends Schema.TaggedError<CommandRejected>()("CommandRejected", {
   message: Schema.String,
   receipt: Schema.String,

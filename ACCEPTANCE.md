@@ -272,7 +272,9 @@ Native preflight reads `gc version --json` and `gc config explain --provider`
 through that same observation boundary. Their successful output remains usable
 when unrelated host process observations are unavailable; no project-writer
 receipt is created. `gc beads health` can perform provider recovery and remains
-outside this read classification. `test/operational-read.test.ts` distinguishes
+outside this read classification. The exact scrubbed JSON recovery boundary
+below supersedes project-writer custody for that invocation only.
+`test/operational-read.test.ts` distinguishes
 these calls from config writes, health recovery, and project commands.
 
 S3/S4 shared review workspace: an implementation attempt owns one native-verified
@@ -777,3 +779,27 @@ These bootstrap failures likewise produce no semantic verdict and exit 75.
 The error boundary applies only to the recognized `review-gate` command; other
 CLI modes keep their existing handling. Existing bundled
 Ralph controls cover the finite infrastructure retry classification.
+
+## S11 native provider recovery ownership
+
+After validating the installed native roles and required bd capabilities, the
+pack invokes one exact public `gc --city CITY beads health --json`. Gas City
+checks its provider-owned CITY and configured RIG scopes and may recover failed
+backend services. A successful call may leave those native services alive; it
+does not create a project writer or prove stopped custody. The invocation clears
+project boundary/attempt and actor session markers before starting GC.
+
+The pack accepts only schema version 1, `ok=true`, the exact configured city
+path, provider `bd` and status `healthy`. Error, timeout, malformed response or
+foreign city/provider refuses further admission without an adapter retry. Raw
+command diagnostics remain available on refusal. Other lifecycle operations,
+shell wrappers and invocation-level environment overrides do not receive this
+delegation. Project/Git mutations retain their existing custody checks. Existing
+incomplete receipts require stopped-writer reconciliation; this change cannot
+retroactively reclassify them.
+
+`test/native-provider-health.test.ts` covers response and failure boundaries;
+`test/native-provider-health.property.test.ts` covers delegation confinement.
+The owned native cold-service probe verifies successful health without waiting
+for native backend termination, followed by exact public backend stop and
+receipt reconciliation. This proof does not qualify the full native workflow.

@@ -5,6 +5,7 @@ import type { Commands } from "../delivery/tracker.ts"
 import { NativeAgents, NativeBuild, NativeConfig, NativeProvider, type NativeContract } from "./contract.ts"
 import { validateRetiringPools } from "./pool-policy.ts"
 import { validateInstalledRoles } from "./installation.ts"
+import { nativeProviderHealth } from "./provider-health.ts"
 
 const reject = (message: string) => Effect.fail(new BoundaryFailure({ message }))
 const READINESS_SECONDS = 30
@@ -129,7 +130,7 @@ export const nativePreflight = Effect.fn("Native.preflight")(function* (
   ])
   if (version !== contract.harnessVersion) return yield* reject("native harness version differs from qualification")
   yield* commands.execute(config.root, contract.readiness, config.repo, Duration.seconds(READINESS_SECONDS))
-  yield* commands.execute(config.root, [...gc, "beads", "health"])
+  yield* nativeProviderHealth(config, commands)
   // Check executable lookup only; project qualification is run against the exact Base/candidate later.
   yield* commands.execute(config.root, ["sh", "-c", 'command -v "$1"', "native-preflight", contract.check.command[0]])
 })

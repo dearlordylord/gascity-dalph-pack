@@ -233,7 +233,15 @@ export const nativeFixture = Effect.gen(function* () {
           if (!state.readiness) return yield* new BoundaryFailure({ message: "harness not ready" })
           return "ready"
         }
-        if (args[0] === "sh" || args.includes("health")) return "capable"
+        if (args.includes("health"))
+          return JSON.stringify({
+            schema_version: "1",
+            ok: true,
+            city_path: config.city,
+            provider: "bd",
+            status: "healthy"
+          })
+        if (args[0] === "sh") return "capable"
         if (args[0] === "node")
           return yield* fixture.commands.execute(root, ["mise", ...args.slice(1)], cwd, timeout, logs)
         return yield* fixture.commands.execute(root, args, cwd, timeout, logs)
@@ -264,9 +272,16 @@ export const nativeFixture = Effect.gen(function* () {
   const tracker = makeTracker(config, commands, http)
   const workflow = makeNativeWorkflow(config, contract, commands, tracker, fixture.git)
   const files = new Map<string, string>()
+  let diagnosticDirectory = 0
   const fs = {
     ...fixture.fs,
     exists: (path: string) => Effect.succeed(files.has(path) || fixture.paths.has(path)),
+    makeTempDirectory: (options?: Parameters<typeof fixture.fs.makeTempDirectory>[0]) =>
+      Effect.sync(() => `${options?.directory ?? "/fixture"}/${options?.prefix ?? "tmp-"}${diagnosticDirectory++}`),
+    remove: (path: string) =>
+      Effect.sync(() => {
+        for (const key of files.keys()) if (key === path || key.startsWith(`${path}/`)) files.delete(key)
+      }),
     writeFileString: (path: string, source: string) =>
       Effect.sync(() => {
         files.set(path, source)
