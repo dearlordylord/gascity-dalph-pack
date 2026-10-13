@@ -52,6 +52,14 @@ Fixture scope closure waits for supervisor shutdown and stops its exact city
 and rig provider backend through Gas City. Backend idle timeout zero does not
 authorize leaked services across cases. Files and evidence remain available;
 a failed shutdown fails the case rather than silently accepting cleanup.
+Before task writers start, an owned fixture selects public
+`dolt.auto-commit=batch` in its RIG. SQL transaction durability remains active;
+versioned tables are explicitly committed after writers stop and before
+history-based export or disposal. Ignored ephemeral tables are excluded from
+that commit; history is not their backup. CITY and production defaults are unchanged. The proxied reader
+case tests persistent and ephemeral value/revision survival through public
+process-kill stop/restart, idempotent replay and conflict refusal. Fixture Go
+processes use two scheduler threads; application admission limits are unchanged.
 Worker/reviewer query artifacts execute the original public ready tiers with
 at most four read children concurrently. Tier output order, workspace and
 assignee filters, blocked rows and fail-closed errors remain unchanged. Query

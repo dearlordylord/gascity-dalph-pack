@@ -931,3 +931,30 @@ failed read refuses that responsibility; unrelated active writers still fence
 the whole workspace. No listing snapshot substitutes for correlation. The
 parallel-session tests retain duplicate, concurrency and finalizer controls;
 review safety tests retain incomplete inventory and shared-workspace refusal.
+
+## Owned native fixture transaction policy (S11)
+
+An isolated fixture starts with the pinned proxied CITY and RIG stores and no
+task writers. After scope bootstrap, before launching tasks, it selects `dolt.auto-commit=batch` in
+its exact RIG through public `gc bd config set`. CITY policy and production
+setup defaults remain unchanged. SQL transactions still commit; only Dolt
+version-history commits are deferred. Fixture Go processes use two scheduler
+threads; product task, reviewer and integration limits do not change.
+
+After exact persistent and ephemeral metadata-CAS acknowledgement, the fixture
+observes a managed running proxied backend and calls public `bd dolt stop`.
+For this pinned backend that operation kills its verified owned processes
+without flushing the working set. A fresh native request starts the proxy on
+demand and must observe the same values and revisions. Identical replay must
+return `already_next`, contradiction `conflict`, with neither changing revision.
+This tests process-kill recovery, not power loss or an operating-system crash.
+
+After stopping fixture writers and supervisor, cleanup explicitly commits the
+versioned RIG tables before stopping its backend. This commit excludes ignored
+ephemeral tables; version history is not a backup of ephemeral working data.
+History-based export or restore of versioned tables must follow an explicit
+commit. Ephemeral durability is proved separately by the process-kill case. Existing maintenance, review budgets,
+continuations, delivery and cleanup assertions remain mandatory. The policy
+changes fixture storage/scheduling only, not pack runtime behavior. Acceptance:
+the expanded `test/native-proxied-city.test.ts` and the complete native suite
+within the same 600-second whole-cycle deadline.

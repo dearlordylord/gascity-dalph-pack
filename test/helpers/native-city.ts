@@ -1,7 +1,7 @@
 import { parse } from "smol-toml"
 import { createServer } from "node:net"
 import { dirname, join } from "node:path"
-import { Duration, Effect, FileSystem, Schema } from "effect"
+import { Duration, Effect, FileSystem, Result, Schema } from "effect"
 import { makeCommands } from "../../src/delivery/command.ts"
 import { BoundaryFailure } from "../../src/domain/shared.ts"
 import { Bead } from "../../src/delivery/tracker.ts"
@@ -56,6 +56,7 @@ export const makeNativeCity = (fault: boolean | string = false) =>
       GC_BEADS: "bd",
       GC_BD_TRACE_JSON: join(root, "native-beads-trace.jsonl"),
       BD_DISABLE_METRICS: "1",
+      GOMAXPROCS: "2",
       DALPH_NATIVE_FIXTURE_DISTINCT: String(deliveryFaults),
       DALPH_NATIVE_REVIEW_FIXTURE: reviewFault,
       DOLT_ROOT_PATH: join(root, "dolt"),
@@ -228,13 +229,35 @@ export const makeNativeCity = (fault: boolean | string = false) =>
       Effect.gen(function* () {
         yield* execute(["gc", "--city", city, "stop"], undefined, 15)
         yield* execute(["gc", "supervisor", "stop", "--wait"], undefined, 15)
-        // Idle timeout zero retains recovery data, not a licence to leave
-        // every isolated fixture's provider services running after its test.
-        yield* execute(["gc", "--city", city, "--rig", "fixture", "bd", "dolt", "stop"], undefined, 10)
-        yield* execute(["gc", "--city", city, "bd", "dolt", "stop"], undefined, 10)
+        // SQL transactions are already durable. Flush deferred version history
+        // only after writers stop, before history-based export or disposal.
+        yield* execute(["gc", "--city", city, "--rig", "fixture", "bd", "dolt", "commit"], undefined, 10).pipe(
+          Effect.ensuring(
+            Effect.gen(function* () {
+              // A failed history flush still stops its owned provider services.
+              // Idle timeout zero does not authorize leaked fixture processes.
+              const stops = yield* Effect.all(
+                [
+                  execute(["gc", "--city", city, "--rig", "fixture", "bd", "dolt", "stop"], undefined, 10).pipe(
+                    Effect.result
+                  ),
+                  execute(["gc", "--city", city, "bd", "dolt", "stop"], undefined, 10).pipe(Effect.result)
+                ],
+                { concurrency: 2 }
+              )
+              const failures = stops.filter(Result.isFailure)
+              if (failures.length > 0) {
+                return yield* new BoundaryFailure({ message: failures.map((stop) => stop.failure.message).join("; ") })
+              }
+            }).pipe(Effect.orDie)
+          )
+        )
       }).pipe(Effect.orDie)
     )
     yield* execute(["gc", "start", city, "--json"], undefined, 120)
+    // Native startup bootstraps the RIG store. Configure its version history
+    // before cooking any task workflow; SQL transaction durability is unchanged.
+    yield* gc("bd", "config", "set", "dolt.auto-commit", "batch")
     // Tracker bootstrap is installation; qualify a clean project only after it completes.
     yield* git("rm", "--cached", "-r", "--ignore-unmatch", ".beads", ".gc")
     yield* fs.writeFileString(join(repo, ".gitignore"), ".beads*\n.gc/\n")

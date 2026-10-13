@@ -6,6 +6,17 @@ import { Bead } from "../src/delivery/tracker.ts"
 import { BeadId } from "../src/domain/shared.ts"
 
 const Created = Schema.Struct({ id: BeadId })
+/** Opaque native row revisions are compared for equality across backend restart. */
+const RawRows = Schema.Array(
+  Schema.Struct({ id: BeadId, revision: Schema.NonEmptyString, ephemeral: Schema.optionalKey(Schema.Boolean) })
+)
+const ManagedBackend = Schema.Struct({
+  mode: Schema.Literal("proxied-server"),
+  backend_managed: Schema.Literal(true),
+  backend_running: Schema.Literal(true),
+  running: Schema.Literal(true),
+  root: Schema.String
+})
 const Receipt = Schema.Struct({
   schema_version: Schema.Literal("1"),
   ok: Schema.Literal(true),
@@ -84,6 +95,11 @@ it.live(
             `--next=${next}`,
             "--json"
           )
+        const raw = () =>
+          city
+            .gc("bd", "show", created.id, "--json")
+            .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(RawRows))))
+        let acknowledgedRevision: string | undefined
         for (const [value, outcome] of [
           ["retained", "swapped"],
           ["retained", "already_next"],
@@ -100,6 +116,24 @@ it.live(
             key: "dalph.native_read_probe",
             outcome
           })
+          const snapshot = yield* raw()
+          expect(snapshot).toHaveLength(1)
+          expect(snapshot[0]?.id).toBe(created.id)
+          expect(snapshot[0]?.ephemeral ?? false).toBe(ephemeral)
+          if (outcome === "swapped") {
+            acknowledgedRevision = snapshot[0]?.revision
+            const backend = yield* city
+              .gc("bd", "dolt", "status", "--json")
+              .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(ManagedBackend))))
+            expect(backend.root).toBe(`${city.env.DALPH_TARGET_REPO}/.beads/dolt`)
+            // Pinned proxied stop verifies owned processes and SIGKILLs them
+            // without a working-set flush. The next request starts it on demand.
+            yield* city.gc("bd", "dolt", "stop")
+            expect((yield* read()).metadata?.["dalph.native_read_probe"]).toBe("retained")
+            expect((yield* raw())[0]?.revision).toBe(acknowledgedRevision)
+          } else {
+            expect(snapshot[0]?.revision).toBe(acknowledgedRevision)
+          }
         }
         expect((yield* read()).metadata?.["dalph.native_read_probe"]).toBe("retained")
         yield* city.gc("bd", "close", created.id, "--json")
