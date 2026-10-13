@@ -1,5 +1,21 @@
 # Dalph pack on Gas City: accepted trial contract
 
+Native session stop first retains the exact intent, calls public stock close,
+validates its exact successful response, then freshly confirms terminal pool
+session/task/template/workspace/claim bindings before retaining a compact close
+observation. A later gate/recovery may reuse that observation only alongside
+the matching original intent and fresh terminal bindings and disposition checks.
+Malformed/conflicting observations refuse without overwrite. An observation
+without its intent does not authorize replay. Missing/lost responses or an
+interruption before observation require idempotent close reconciliation; a
+lost observation-write response is reconciled through exact tracker readback.
+Reopened, foreign, named/manual and unfinished CompletedWork writers remain
+refusals. Neither command exit nor a bare closed status substitutes for the
+known native close outcome. Pack-owned command custody is unchanged.
+Acceptance: native-session-stop.test.ts, native-stop-observation.test.ts and the
+existing native review/recovery/cleanup scenarios. The complete native suite
+and its 600-second whole-cycle requirement remain mandatory.
+
 The controlled provider claims and validates its exact native workspace before
 its implementation observation window. Only an initial `work` phase waits three
 seconds to expose overlap/recovery; reviewer/fix and empty claims add no model
