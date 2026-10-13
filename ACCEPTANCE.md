@@ -923,3 +923,11 @@ task binding once before revision reuse or stock close. No write occurs between
 the removed duplicate observation and this remaining stronger observation.
 Completed-work disposition still requires a closed task; recovery may retain an
 unfinished task. Post-close fresh checks remain mandatory.
+
+Stock inventory may omit required closed sessions. The inventory returns an
+explicit missing-required identity; each bounded consumer resolves it once by
+exact fresh public read at correlation time. An omitted open row, foreign ID or
+failed read refuses that responsibility; unrelated active writers still fence
+the whole workspace. No listing snapshot substitutes for correlation. The
+parallel-session tests retain duplicate, concurrency and finalizer controls;
+review safety tests retain incomplete inventory and shared-workspace refusal.

@@ -5,8 +5,7 @@ import type { Bead, Commands, makeTracker } from "../delivery/tracker.ts"
 import type { RuntimeConfig } from "../delivery/config.ts"
 import type { NativeSession } from "./contract.ts"
 import { ephemeralPoolSession } from "./pool-policy.ts"
-import { nativeWriterInventory } from "./session-inventory.ts"
-import { nativeSession } from "./session-observation.ts"
+import { nativeWriterInventory, resolveNativeWriter } from "./session-inventory.ts"
 import { nodeWorkspaceMatches } from "./node-workspace.ts"
 
 /** Historical native node ownership remains distinct from a pool session's current owner. */
@@ -63,7 +62,7 @@ export const completedReassignedWork = Effect.fn("Native.completedReassignedWork
     return yield* new BoundaryFailure({ message: "native pool reassignment is unproven" })
   const inventory = yield* nativeWriterInventory(config, commands, [session.id])
   for (const entry of inventory) {
-    const current = yield* nativeSession(config, commands, entry.id)
+    const current = yield* resolveNativeWriter(config, commands, entry)
     if (occupiesWorkspace(current, binding.path))
       return yield* new BoundaryFailure({ message: "current native writer occupies completed producer workspace" })
   }

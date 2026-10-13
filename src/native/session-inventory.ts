@@ -7,6 +7,10 @@ import { nativeSession } from "./session-observation.ts"
 const Inventory = Schema.Struct({
   sessions: Schema.Array(Schema.Struct({ id: BeadId, template: Schema.String, closed: Schema.Boolean }))
 })
+/** Listing membership and omitted required identity are distinct observations, not custody proof. */
+export type NativeWriterCandidate =
+  | ((typeof Inventory.Type)["sessions"][number] & { readonly _tag: "Listed" })
+  | { readonly _tag: "RequiredMissing"; readonly id: typeof BeadId.Type }
 
 /** Bounds independent native observations/reconciliation, never project attempts. */
 export const NativeSessionBoundaryConcurrency = 4
@@ -26,17 +30,23 @@ export const nativeWriterInventory = Effect.fn("Native.writerInventory")(functio
       return yield* new BoundaryFailure({ message: "native writer inventory has contradictory duplicate identities" })
     entries.set(entry.id, entry)
   }
-  // Stock listing omits closed sessions. Read known writers by exact public ID.
-  const missing = yield* Effect.forEach(
-    [...new Set(required)].filter((id) => !entries.has(id)),
-    (id) =>
-      Effect.gen(function* () {
-        const session = yield* nativeSession(config, commands, id)
-        if (session.status !== "closed")
-          return yield* new BoundaryFailure({ message: "native writer inventory is incomplete; open writer omitted" })
-        return { id, template: session.metadata.template ?? "", closed: true }
-      }),
-    { concurrency: NativeSessionBoundaryConcurrency }
-  )
-  return [...entries.values(), ...missing]
+  // Stock listing omits closed sessions. The consumer resolves each exact ID
+  // once at its correlation boundary, including the omitted-open refusal.
+  const missing = [...new Set(required)].filter((id) => !entries.has(id))
+  return [
+    ...[...entries.values()].map((entry) => ({ ...entry, _tag: "Listed" as const })),
+    ...missing.map((id) => ({ id, _tag: "RequiredMissing" as const }))
+  ]
+})
+
+/** Fresh exact resolution, never a retained listing snapshot. */
+export const resolveNativeWriter = Effect.fn("Native.resolveWriter")(function* (
+  config: RuntimeConfig,
+  commands: Commands,
+  entry: NativeWriterCandidate
+) {
+  const session = yield* nativeSession(config, commands, entry.id)
+  if (entry._tag === "RequiredMissing" && session.status !== "closed")
+    return yield* new BoundaryFailure({ message: "native writer inventory is incomplete; open writer omitted" })
+  return session
 })

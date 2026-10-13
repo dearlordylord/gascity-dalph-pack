@@ -3,9 +3,8 @@ import { type BeadId, BoundaryFailure } from "../domain/shared.ts"
 import type { RuntimeConfig } from "../delivery/config.ts"
 import type { Bead, Commands, makeTracker } from "../delivery/tracker.ts"
 import { stopNativeWriter } from "./session-stop.ts"
-import { nativeSession } from "./session.ts"
 import { nativeWriterNode, reviewSessionMatches } from "./review-correlation.ts"
-import { nativeWriterInventory, NativeSessionBoundaryConcurrency } from "./session-inventory.ts"
+import { nativeWriterInventory, NativeSessionBoundaryConcurrency, resolveNativeWriter } from "./session-inventory.ts"
 import { historicalWritersStopped } from "./historical-writers.ts"
 import { waitForNativeRetirement } from "./retirement.ts"
 
@@ -22,7 +21,7 @@ const observeReviewWritersStopped = Effect.fn("NativeReview.observeWritersStoppe
     entries,
     (entry) =>
       Effect.gen(function* () {
-        const session = yield* nativeSession(config, commands, entry.id)
+        const session = yield* resolveNativeWriter(config, commands, entry)
         const node = nativeWriterNode(rows, session, ["work", "fix", "review"])
         if (!node) {
           if (yield* historicalWritersStopped(config, commands, tracker, rows, path, session)) {

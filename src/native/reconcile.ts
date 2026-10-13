@@ -4,10 +4,9 @@ import type { Bead, Commands, makeTracker } from "../delivery/tracker.ts"
 import type { RuntimeConfig } from "../delivery/config.ts"
 import type { NativeSession, NativeAttempt, NativeProposal } from "./contract.ts"
 import { stopNativeWriter } from "./session-stop.ts"
-import { nativeSession } from "./session.ts"
 import { nativeWriterNode, reviewSessionMatches } from "./review-correlation.ts"
 import { isExecutionMetadata } from "./nodes.ts"
-import { nativeWriterInventory, NativeSessionBoundaryConcurrency } from "./session-inventory.ts"
+import { nativeWriterInventory, NativeSessionBoundaryConcurrency, resolveNativeWriter } from "./session-inventory.ts"
 import { historicalWritersStopped } from "./historical-writers.ts"
 import { completedReassignedProducer } from "./completed-producer.ts"
 
@@ -66,10 +65,10 @@ export const reconcileNativeAttempt = Effect.fn("Native.reconcileAttempt")(funct
 ) {
   const inventory = yield* nativeWriterInventory(config, commands, proposalSessions(proposal))
   const observed = yield* Effect.forEach(
-    inventory.filter((row) => row.template === attempt.contract.agent),
+    inventory.filter((row) => row._tag === "RequiredMissing" || row.template === attempt.contract.agent),
     (row) =>
       Effect.gen(function* () {
-        const session = yield* nativeSession(config, commands, row.id)
+        const session = yield* resolveNativeWriter(config, commands, row)
         if (!(yield* producerSessionMatches(tracker, attempt, session))) {
           const historical = reassignedProposal(proposal, session)
           if (historical) {
@@ -147,7 +146,7 @@ export const reconcileNativeReviews = Effect.fn("Native.reconcileReviews")(funct
     inventory,
     (entry) =>
       Effect.gen(function* () {
-        const session = yield* nativeSession(config, commands, entry.id)
+        const session = yield* resolveNativeWriter(config, commands, entry)
         const node = nativeWriterNode(owned, session, ["review", "fix"])
         if (!node) {
           if (yield* observeHistoricalReview(config, commands, tracker, owned, attempt, session))

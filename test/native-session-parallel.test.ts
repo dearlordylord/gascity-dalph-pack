@@ -3,7 +3,11 @@ import { expect, it } from "@effect/vitest"
 import { nativeFixture } from "./helpers/native-fixture.ts"
 import { nativeReviewFixture } from "./helpers/native-review-fixture.ts"
 import { BeadId, BoundaryFailure } from "../src/domain/shared.ts"
-import { nativeWriterInventory } from "../src/native/session-inventory.ts"
+import {
+  nativeWriterInventory,
+  resolveNativeWriter,
+  NativeSessionBoundaryConcurrency
+} from "../src/native/session-inventory.ts"
 import { nativeStopKey } from "../src/native/session-stop.ts"
 import { makeNativeController } from "../src/native/controller.ts"
 
@@ -40,7 +44,14 @@ it.effect("missing terminal sessions overlap within four boundaries, deduplicate
       )
     }
     yield* Effect.gen(function* () {
-      const running = yield* nativeWriterInventory(f.config, f.commands, [...ids, ...ids]).pipe(Effect.forkScoped)
+      const running = yield* nativeWriterInventory(f.config, f.commands, [...ids, ...ids]).pipe(
+        Effect.flatMap((entries) =>
+          Effect.forEach(entries, (entry) => resolveNativeWriter(f.config, f.commands, entry), {
+            concurrency: NativeSessionBoundaryConcurrency
+          })
+        ),
+        Effect.forkScoped
+      )
       yield* Deferred.await(entered)
       expect(active).toBe(4)
       expect(reads).toHaveLength(4)
@@ -50,6 +61,37 @@ it.effect("missing terminal sessions overlap within four boundaries, deduplicate
       expect(active).toBe(0)
       expect(reads).toEqual(ids)
     }).pipe(Effect.provide(f.layer), Effect.scoped)
+  })
+)
+
+it.effect("omitted required identity refuses an open, foreign or unavailable exact row before writer effects", () =>
+  Effect.gen(function* () {
+    for (const fault of ["open", "foreign", "unavailable"]) {
+      const f = yield* nativeFixture
+      const original = f.commands.execute
+      f.commands.execute = (...args: Parameters<typeof original>) => {
+        if (args[1].includes("session") && args[1].includes("list")) return Effect.succeed('{"sessions":[]}')
+        if (args[1].includes("beads") && args[1].includes("show")) {
+          if (fault === "unavailable") return Effect.fail(new BoundaryFailure({ message: "exact read unavailable" }))
+          return Effect.succeed(
+            JSON.stringify({
+              ...f.raw("session"),
+              id: fault === "foreign" ? "foreign" : "session",
+              status: fault === "open" ? "open" : "closed"
+            })
+          )
+        }
+        return original(...args)
+      }
+      yield* Effect.gen(function* () {
+        const entries = yield* nativeWriterInventory(f.config, f.commands, [BeadId.make("session")])
+        expect(entries).toEqual([{ _tag: "RequiredMissing", id: "session" }])
+        const entry = entries[0]
+        if (!entry) throw new Error("required missing identity absent")
+        yield* Effect.flip(resolveNativeWriter(f.config, f.commands, entry))
+        expect(f.events.some((event) => event.startsWith("native-close:"))).toBe(false)
+      }).pipe(Effect.provide(f.layer))
+    }
   })
 )
 
@@ -76,7 +118,7 @@ it.effect("inventory collapses identical duplicates and refuses contradictory du
           : execute(root, args, cwd, timeout, logs)
       yield* Effect.gen(function* () {
         const read = nativeWriterInventory(f.config, f.commands, [])
-        if (fault === "same") expect(yield* read).toEqual([entry])
+        if (fault === "same") expect(yield* read).toEqual([{ ...entry, _tag: "Listed" }])
         else expect(String(yield* Effect.flip(read))).toContain("contradictory duplicate")
         expect(f.events.some((event) => event.startsWith("native-close:"))).toBe(false)
       }).pipe(Effect.provide(f.layer))
