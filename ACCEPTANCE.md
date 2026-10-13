@@ -1,5 +1,13 @@
 # Dalph pack on Gas City: accepted trial contract
 
+The controlled provider claims and validates its exact native workspace before
+its implementation observation window. Only an initial `work` phase waits three
+seconds to expose overlap/recovery; reviewer/fix and empty claims add no model
+latency. Existing explicit hold and qualification-cut barriers remain. Every
+review round, verdict, retry budget, retirement, delivery and cleanup assertion
+is unchanged. This changes controlled fixture timing only, not production
+providers or Dalph runtime. Acceptance remains the complete native scenario set.
+
 Native preflight reads the exact configured runtime and harness versions through
 `tmux -V` and `node`, `codex` or `claude --version`. These exact two-argument
 observations retain exit/error handling but create no project-writer custody

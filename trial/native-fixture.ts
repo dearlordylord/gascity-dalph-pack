@@ -64,7 +64,6 @@ const main = Effect.gen(function* () {
   const git = makeGit(config, commands)
   const workflow = makeNativeWorkflow(config, contract, commands, tracker, git)
   const review = makeNativeReview(config, commands, tracker, git)
-  yield* Effect.sleep("3 seconds")
   yield* trace({ boundary: "claim-start", milliseconds: 0 })
   const claim = yield* workflow.claim()
   yield* trace({ boundary: "claim-end", milliseconds: 0 })
@@ -81,6 +80,8 @@ const main = Effect.gen(function* () {
     })
   yield* fs.writeFileString(`${config.root}/native-started-${work.id}`, JSON.stringify({ session, attempt }))
   yield* trace({ boundary: "workspace-validated", milliseconds: 0 })
+  // Keep the implementation observation window; review/fix and empty claims need no simulated latency.
+  if (work.metadata?.["dalph.phase"] === "work") yield* Effect.sleep("3 seconds")
   const fault = yield* Config.String("DALPH_NATIVE_FIXTURE_FAULT").pipe(Config.withDefault("none"))
   const reviewFault = yield* Config.String("DALPH_NATIVE_REVIEW_FIXTURE").pipe(Config.withDefault("clean"))
   if (work.metadata?.["dalph.phase"] === "review") {
