@@ -76,7 +76,7 @@ This packaging check maps to test/native-bundle.test.ts; native workflow
 scenarios and boundary calls remain unchanged.
 
 S11 dependency candidate qualification: the Operator explicitly selects an
-isolated GC build `dev-dalph-native-v4-candidate` linked to Beads revision
+isolated GC build `dev-dalph-native-v5-scope-candidate` linked to Beads revision
 `1b7bf9b1910d8ecec3f461f70f478314b654eaa6`, with the same CLI revision.
 Preflight accepts only the existing v3 or this exact candidate identifier;
 unknown builds still refuse before cook or task writers. A fresh disposable
@@ -892,3 +892,11 @@ retroactively reclassify them.
 The owned native cold-service probe verifies successful health without waiting
 for native backend termination, followed by exact public backend stop and
 receipt reconciliation. This proof does not qualify the full native workflow.
+
+SDK close-side completion and molecule autoclose retain the owning event scope.
+A logical RIG root ref resolves through existing controller-owned residency,
+including relocated graph bindings and same-ID shadows. Suspended target rigs
+remain unread. Attachments and reverse-source roots keep their separate graph
+authority. Failed root reads defer completion/close; a fresh recovery can finish
+the same responsibility. Controlled SDK owner cases cover these differences;
+fresh native acceptance and the complete 600-second cycle remain mandatory.

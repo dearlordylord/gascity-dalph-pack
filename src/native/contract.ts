@@ -8,7 +8,11 @@ const MAXIMUM_CHECK_SECONDS = 600
 export const NativeBuild = Schema.Struct({
   schema_version: Schema.Literal("1"),
   ok: Schema.Literal(true),
-  version: Schema.Literals(["dev-dalph-native-v3", "dev-dalph-native-v4-candidate"])
+  version: Schema.Literals([
+    "dev-dalph-native-v3",
+    "dev-dalph-native-v4-candidate",
+    "dev-dalph-native-v5-scope-candidate"
+  ])
 })
 /** Public fresh formula cook response; the workflow root is not routed to a worker. */
 export const NativeCookResponse = Schema.Struct({

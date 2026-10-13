@@ -1,5 +1,5 @@
 diff --git a/AGENTS.md b/AGENTS.md
-index d50f5fb..afc5605 100644
+index d50f5fb..c21ebfb 100644
 --- a/AGENTS.md
 +++ b/AGENTS.md
 @@ -35,6 +35,10 @@ next to that code; read the matching file before changing it.
@@ -13,6 +13,18 @@ index d50f5fb..afc5605 100644
  | Worktree isolation or worker cleanup | `engdocs/archive/backlogs/worktree-roadmap.md` (lifecycle analysis and cleanup-bug lessons) |
  | A `release-gates/*.md` deploy gate | `engdocs/contributors/release-gate-criteria-conventions.md` |
  | Bazel builds | `engdocs/bazel-quickstart.md` |
+@@ -117,6 +121,11 @@ six primitives, plus the progressive capability levels — is
+ 
+ ### Layering invariants
+ 
++- Close-side completion and autoclose retain the event owning store and scope.
++  A workflow root ref names logical scope; use controller-owned residency
++  handles to resolve its physical owner. Preserve attachment and reverse-source
++  graph authority separately, and do not read suspended target rigs.
++
+ 1. **No upward dependencies.** Layer N never imports Layer N+1.
+ 2. **Beads is the universal persistence substrate** for domain state.
+ 3. **Events are the universal outbound-notification mechanism** — fired by
 diff --git a/BUILD.bazel b/BUILD.bazel
 index 7be1791..513e487 100644
 --- a/BUILD.bazel
@@ -53,6 +65,539 @@ index afaf576..dcbca69 100644
          "dispatch_control_ready_test.go",
          "dispatch_control_ready_wal_test.go",
          "dispatch_ep8_recovery_hold_label_test.go",
+diff --git a/cmd/gc/api_state.go b/cmd/gc/api_state.go
+index 9176159..b9d094b 100644
+--- a/cmd/gc/api_state.go
++++ b/cmd/gc/api_state.go
+@@ -1021,7 +1021,7 @@ func (cs *controllerState) applyCommittedClose(evt events.Event, store beads.Sto
+ 		return
+ 	}
+ 	if step, ok := beads.DecodeBeadEventPayload(evt.Payload); ok {
+-		cs.emitCompletedFact(step, evt.Actor)
++		cs.emitCompletedFact(step, evt.Actor, store, storeRef)
+ 	}
+ 	cs.runBeadCloseAutoclose(evt.Subject, store, storeRef)
+ }
+@@ -1039,7 +1039,7 @@ func (cs *controllerState) applyInferredClose(evt events.Event, stores []beads.S
+ 	store, live, err := liveReadOwner(stores, evt.Subject)
+ 	switch confirmInferredClose(live, err) {
+ 	case closeConfirmed:
+-		cs.emitCompletedFact(live, evt.Actor)
++		cs.emitCompletedFact(live, evt.Actor, store, storeRef)
+ 		finished := cs.beadCloseAutoclose(evt.Subject, store, storeRef)()
+ 		cs.autocloseSweepOf().settle(evt.Subject, finished, time.Now())
+ 	case closeUnconfirmed:
+@@ -1076,8 +1076,13 @@ func liveReadOwner(stores []beads.Store, id string) (beads.Store, beads.Bead, er
+ // emitCompletedFact records step's execution.step_completed once per fact,
+ // through the delta pass's idempotency record, so a replayed or re-inferred
+ // close is not a second fact.
+-func (cs *controllerState) emitCompletedFact(step beads.Bead, actor string) {
+-	cs.completionsDeltaIndex.EmitCompleted(cs.closeRecorder(), cs.GraphBeadStore().Store, step, actor)
++func (cs *controllerState) emitCompletedFact(step beads.Bead, actor string, owner beads.Store, ownerRef string) {
++	graph, err := cs.closedStepGraphStore(step, owner, ownerRef)
++	if err != nil {
++		log.Printf("completion graph scope: %v", err)
++		return
++	}
++	cs.completionsDeltaIndex.EmitCompleted(cs.closeRecorder(), graph.Store, step, actor)
+ }
+ 
+ func (cs *controllerState) closeRecorder() events.Recorder {
+@@ -1152,17 +1157,27 @@ func (cs *controllerState) beadCloseAutoclose(beadID string, store beads.Store,
+ 	if cs.eventProv != nil {
+ 		rec = cs.eventProv
+ 	}
+-	// The just-closed bead is read from its owning store (store), but its
+-	// molecule and wisp GRAPH parents live in the graph-class store, so the
+-	// graph-root walks resolve through graphBeadStore() rather than assuming
+-	// co-residence with the closed bead. On a single-store city GraphBeadStore()
+-	// returns the same store, so this is identity today.
+-	graphStore := cs.GraphBeadStore()
++	// The own workflow root follows scoped residency; attachments and reverse
++	// source roots keep the city graph-class authority. These can be distinct
++	// stores even when the step and its own root are co-resident in a rig.
+ 	return func() bool {
+ 		for attempt := 1; ; attempt++ {
++			step, err := beads.HandlesFor(store).Live.Get(beadID)
++			if err != nil || step.Status != "closed" {
++				return false
++			}
++			graphStore, err := cs.closedStepGraphStore(step, store, storeRef)
++			if err != nil {
++				log.Printf("autoclose graph scope: %v", err)
++				return false
++			}
+ 			run := doConvoyAutocloseWith(store, rec, beadID, os.Stderr, os.Stderr)
+-			run.merge(doWispAutocloseWith(store, beadID, os.Stderr, graphStore))
++			attachmentGraph := cs.GraphBeadStore()
++			run.merge(doWispAutocloseWith(store, beadID, os.Stderr, attachmentGraph))
+ 			run.merge(doMoleculeAutocloseWith(store, storeRef, rec, beadID, os.Stderr, graphStore))
++			if graphStore.Store != attachmentGraph.Store {
++				autocloseRootsForSourceBead(attachmentGraph.Store, storeRef, rec, beadID, os.Stderr, &run)
++			}
+ 			if !run.refused || attempt >= autocloseRefusalAttempts {
+ 				return run.finished()
+ 			}
+diff --git a/cmd/gc/api_state_test.go b/cmd/gc/api_state_test.go
+index 907c1fe..8a93d26 100644
+--- a/cmd/gc/api_state_test.go
++++ b/cmd/gc/api_state_test.go
+@@ -19,6 +19,7 @@ import (
+ 	"github.com/gastownhall/gascity/internal/beads"
+ 	"github.com/gastownhall/gascity/internal/config"
+ 	"github.com/gastownhall/gascity/internal/configedit"
++	"github.com/gastownhall/gascity/internal/coordclass"
+ 	"github.com/gastownhall/gascity/internal/events"
+ 	"github.com/gastownhall/gascity/internal/fsys"
+ 	"github.com/gastownhall/gascity/internal/rollout/gate"
+@@ -4860,3 +4861,290 @@ func TestControllerStateUpdateRigPathDetachesProviderOwnershipBeforeConfigWrite(
+ 		t.Fatalf("ownership after prefix-only update = (%q, %t, %v), want attached rig label", key, owned, err)
+ 	}
+ }
++
++// A rig-scoped cook stores the root and its steps together. A controller close
++// already knows this owning scope; it must not ask the city store for that root.
++type rigCompletionRootReadCounter struct {
++	beads.Store
++	root    string
++	reads   int
++	failure error
++}
++
++func (s *rigCompletionRootReadCounter) Get(id string) (beads.Bead, error) {
++	if id == s.root {
++		s.reads++
++		if s.failure != nil {
++			return beads.Bead{}, s.failure
++		}
++	}
++	return s.Store.Get(id)
++}
++
++func TestControllerCommittedCloseKeepsCoResidentRigGraphAuthority(t *testing.T) {
++	previous := beadCloseAutocloseDispatch
++	beadCloseAutocloseDispatch = func(fn func()) { fn() }
++	t.Cleanup(func() { beadCloseAutocloseDispatch = previous })
++	rig := beads.NewMemStore()
++	rig.HonorExplicitIDs = true
++	root, err := rig.Create(beads.Bead{ID: "fi-root", Type: "molecule", Metadata: map[string]string{
++		"gc.kind": "workflow", "gc.formula_contract": "graph.v2", "gc.root_store_ref": "rig:fixture",
++	}})
++	if err != nil {
++		t.Fatal(err)
++	}
++	step, err := rig.Create(beads.Bead{ID: "fi-step", Type: "step", ParentID: root.ID, Metadata: map[string]string{
++		"gc.root_bead_id": root.ID, "gc.root_store_ref": "rig:fixture", "gc.step_id": "build", "gc.session_id": "na-wisp-worker",
++	}})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if err := rig.Close(step.ID); err != nil {
++		t.Fatal(err)
++	}
++	step, err = rig.Get(step.ID)
++	if err != nil {
++		t.Fatal(err)
++	}
++	payload, err := beads.EncodeBeadEventPayload(step)
++	if err != nil {
++		t.Fatal(err)
++	}
++	city := &rigCompletionRootReadCounter{Store: beads.NewMemStore(), root: root.ID}
++	journal := events.NewFake()
++	cs := &controllerState{cityBeadStore: city, beadStores: map[string]beads.Store{"fixture": rig}, eventProv: journal}
++	event := events.Event{Type: events.BeadClosed, Subject: step.ID, Actor: "bd-hook", Payload: payload}
++	cs.applyCommittedClose(event, rig, "rig:fixture")
++	cs.applyCommittedClose(event, rig, "rig:fixture")
++	completed, err := journal.List(events.Filter{Type: events.ExecutionStepCompleted, Subject: step.ID})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if len(completed) != 1 {
++		t.Fatalf("completed facts = %d, want one for retained rig root", len(completed))
++	}
++	current, err := rig.Get(root.ID)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if current.Status != "closed" {
++		t.Fatalf("rig molecule = %q, want closed", current.Status)
++	}
++	if city.reads != 0 {
++		t.Fatalf("city root reads = %d, want zero for exact rig graph scope", city.reads)
++	}
++}
++
++func TestControllerCommittedCloseKeepsBindingResidentLogicalRigGraphAuthority(t *testing.T) {
++	previous := beadCloseAutocloseDispatch
++	beadCloseAutocloseDispatch = func(fn func()) { fn() }
++	t.Cleanup(func() { beadCloseAutocloseDispatch = previous })
++	binding := beads.NewMemStore()
++	binding.HonorExplicitIDs = true
++	rig := beads.NewMemStore()
++	rig.HonorExplicitIDs = true
++	root, err := binding.Create(beads.Bead{ID: "fi-root", Type: "molecule", Metadata: map[string]string{
++		"gc.kind": "workflow", "gc.formula_contract": "graph.v2", "gc.root_store_ref": "rig:fixture",
++	}})
++	if err != nil {
++		t.Fatal(err)
++	}
++	step, err := binding.Create(beads.Bead{ID: "fi-step", Type: "step", ParentID: root.ID, Metadata: map[string]string{
++		"gc.root_bead_id": root.ID, "gc.root_store_ref": "rig:fixture", "gc.step_id": "build", "gc.session_id": "na-wisp-worker",
++	}})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if err := binding.Close(step.ID); err != nil {
++		t.Fatal(err)
++	}
++	step, err = binding.Get(step.ID)
++	if err != nil {
++		t.Fatal(err)
++	}
++	payload, err := beads.EncodeBeadEventPayload(step)
++	if err != nil {
++		t.Fatal(err)
++	}
++	city := &rigCompletionRootReadCounter{Store: beads.NewMemStore(), root: root.ID}
++	journal := events.NewFake()
++	if _, err := rig.Create(beads.Bead{ID: root.ID, Type: "molecule"}); err != nil {
++		t.Fatal(err)
++	}
++	cs := &controllerState{storageRoutes: &storageRoutes{stores: map[coordclass.Class]beads.Store{coordclass.ClassGraph: binding}}, cityBeadStore: city, beadStores: map[string]beads.Store{"fixture": rig}, eventProv: journal}
++	event := events.Event{Type: events.BeadClosed, Subject: step.ID, Actor: "bd-hook", Payload: payload}
++	cs.applyCommittedClose(event, binding, "class:g")
++	cs.applyCommittedClose(event, binding, "class:g")
++	completed, err := journal.List(events.Filter{Type: events.ExecutionStepCompleted, Subject: step.ID})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if len(completed) != 1 {
++		t.Fatalf("completed facts = %d, want one for retained rig root", len(completed))
++	}
++	current, err := binding.Get(root.ID)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if current.Status != "closed" {
++		t.Fatalf("rig molecule = %q, want closed", current.Status)
++	}
++	if city.reads != 0 {
++		t.Fatalf("city root reads = %d, want zero for exact rig graph scope", city.reads)
++	}
++	shadow, err := rig.Get(root.ID)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if shadow.Status != "open" {
++		t.Fatal("same-id rig shadow was closed")
++	}
++}
++
++func TestControllerCommittedClosePreservesCrossStoreAttachmentAuthority(t *testing.T) {
++	previous := beadCloseAutocloseDispatch
++	beadCloseAutocloseDispatch = func(fn func()) { fn() }
++	t.Cleanup(func() { beadCloseAutocloseDispatch = previous })
++	rig := beads.NewMemStore()
++	rig.HonorExplicitIDs = true
++	root, err := rig.Create(beads.Bead{ID: "fi-root", Type: "molecule", Metadata: map[string]string{
++		"gc.kind": "workflow", "gc.formula_contract": "graph.v2", "gc.root_store_ref": "rig:fixture",
++	}})
++	if err != nil {
++		t.Fatal(err)
++	}
++	step, err := rig.Create(beads.Bead{ID: "fi-step", Type: "step", ParentID: root.ID, Metadata: map[string]string{
++		"gc.root_bead_id": root.ID, "gc.root_store_ref": "rig:fixture", "gc.step_id": "build", "gc.session_id": "na-wisp-worker",
++	}})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if err := rig.Close(step.ID); err != nil {
++		t.Fatal(err)
++	}
++	step, err = rig.Get(step.ID)
++	if err != nil {
++		t.Fatal(err)
++	}
++	payload, err := beads.EncodeBeadEventPayload(step)
++	if err != nil {
++		t.Fatal(err)
++	}
++	city := &rigCompletionRootReadCounter{Store: beads.NewMemStore(), root: root.ID}
++	attachment, err := city.Create(beads.Bead{Type: "molecule", ParentID: step.ID})
++	if err != nil {
++		t.Fatal(err)
++	}
++	journal := events.NewFake()
++	cs := &controllerState{cityBeadStore: city, beadStores: map[string]beads.Store{"fixture": rig}, eventProv: journal}
++	event := events.Event{Type: events.BeadClosed, Subject: step.ID, Actor: "bd-hook", Payload: payload}
++	cs.applyCommittedClose(event, rig, "rig:fixture")
++	cs.applyCommittedClose(event, rig, "rig:fixture")
++	completed, err := journal.List(events.Filter{Type: events.ExecutionStepCompleted, Subject: step.ID})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if len(completed) != 1 {
++		t.Fatalf("completed facts = %d, want one for retained rig root", len(completed))
++	}
++	current, err := rig.Get(root.ID)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if current.Status != "closed" {
++		t.Fatalf("rig molecule = %q, want closed", current.Status)
++	}
++	if city.reads != 0 {
++		t.Fatalf("city root reads = %d, want zero for exact rig graph scope", city.reads)
++	}
++	attached, err := city.Get(attachment.ID)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if attached.Status != "closed" {
++		t.Fatalf("cross-store attachment = %q, want closed", attached.Status)
++	}
++}
++
++func TestControllerRootReadFailureRetainsResponsibilityUntilFreshRecovery(t *testing.T) {
++	previous := beadCloseAutocloseDispatch
++	beadCloseAutocloseDispatch = func(fn func()) { fn() }
++	t.Cleanup(func() { beadCloseAutocloseDispatch = previous })
++	binding := beads.NewMemStore()
++	binding.HonorExplicitIDs = true
++	rig := beads.NewMemStore()
++	rig.HonorExplicitIDs = true
++	root, err := binding.Create(beads.Bead{ID: "fi-root", Type: "molecule", Metadata: map[string]string{
++		"gc.kind": "workflow", "gc.formula_contract": "graph.v2", "gc.root_store_ref": "rig:fixture",
++	}})
++	if err != nil {
++		t.Fatal(err)
++	}
++	step, err := binding.Create(beads.Bead{ID: "fi-step", Type: "step", ParentID: root.ID, Metadata: map[string]string{
++		"gc.root_bead_id": root.ID, "gc.root_store_ref": "rig:fixture", "gc.step_id": "build", "gc.session_id": "na-wisp-worker",
++	}})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if err := binding.Close(step.ID); err != nil {
++		t.Fatal(err)
++	}
++	step, err = binding.Get(step.ID)
++	if err != nil {
++		t.Fatal(err)
++	}
++	payload, err := beads.EncodeBeadEventPayload(step)
++	if err != nil {
++		t.Fatal(err)
++	}
++	city := &rigCompletionRootReadCounter{Store: beads.NewMemStore(), root: root.ID}
++	journal := events.NewFake()
++	if _, err := rig.Create(beads.Bead{ID: root.ID, Type: "molecule"}); err != nil {
++		t.Fatal(err)
++	}
++	protected := &rigCompletionRootReadCounter{Store: binding, root: root.ID, failure: errors.New("binding root unavailable")}
++	cs := &controllerState{storageRoutes: &storageRoutes{stores: map[coordclass.Class]beads.Store{coordclass.ClassGraph: protected}}, cityBeadStore: city, beadStores: map[string]beads.Store{"fixture": rig}, eventProv: journal}
++	event := events.Event{Type: events.BeadClosed, Subject: step.ID, Actor: "bd-hook", Payload: payload}
++	cs.applyCommittedClose(event, protected, "class:g")
++	before, err := journal.List(events.Filter{Type: events.ExecutionStepCompleted, Subject: step.ID})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if len(before) != 0 {
++		t.Fatal("unavailable root emitted completion")
++	}
++	still, err := binding.Get(root.ID)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if still.Status != "open" {
++		t.Fatal("unavailable root was closed")
++	}
++	protected.failure = nil
++	cs.storageRoutes.stores[coordclass.ClassGraph] = binding
++	cs.applyInferredClose(event, []beads.Store{binding}, "class:g")
++	completed, err := journal.List(events.Filter{Type: events.ExecutionStepCompleted, Subject: step.ID})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if len(completed) != 1 {
++		t.Fatalf("completed facts = %d, want one for retained rig root", len(completed))
++	}
++	current, err := binding.Get(root.ID)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if current.Status != "closed" {
++		t.Fatalf("rig molecule = %q, want closed", current.Status)
++	}
++	if city.reads != 0 {
++		t.Fatalf("city root reads = %d, want zero for exact rig graph scope", city.reads)
++	}
++	shadow, err := rig.Get(root.ID)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if shadow.Status != "open" {
++		t.Fatal("same-id rig shadow was closed")
++	}
++}
+diff --git a/cmd/gc/autoclose_sweep.go b/cmd/gc/autoclose_sweep.go
+index c486984..d913186 100644
+--- a/cmd/gc/autoclose_sweep.go
++++ b/cmd/gc/autoclose_sweep.go
+@@ -312,7 +312,7 @@ func (cs *controllerState) runAutocloseSweepPass(now time.Time) autocloseSweepRe
+ 		store, live, err := liveReadOwner(stores, id)
+ 		switch confirmInferredClose(live, err) {
+ 		case closeConfirmed:
+-			cs.emitCompletedFact(live, autocloseSweepActor)
++			cs.emitCompletedFact(live, autocloseSweepActor, store, storeRef)
+ 			if cs.beadCloseAutoclose(id, store, storeRef)() {
+ 				res.Ran++
+ 			} else {
+diff --git a/cmd/gc/class_store.go b/cmd/gc/class_store.go
+index be69ae3..72245cc 100644
+--- a/cmd/gc/class_store.go
++++ b/cmd/gc/class_store.go
+@@ -5,6 +5,9 @@ import (
+ 	"fmt"
+ 	"io"
+ 	"os"
++	"strings"
++
++	"github.com/gastownhall/gascity/internal/beadmeta"
+ 
+ 	"github.com/gastownhall/gascity/internal/beads"
+ 	"github.com/gastownhall/gascity/internal/config"
+@@ -593,3 +596,63 @@ func warnFederationBlindOverrides(stderr io.Writer, a *config.Agent, topo config
+ 			a.QualifiedName(), key, "gc ready")
+ 	}
+ }
++
++// closedStepGraphStore resolves the root's logical scope through residency using
++// controller-owned handles. Malformed/unserved scopes and failed probes refuse
++// without reading a same-id shadow. Legacy rows keep the graph-class route.
++func (cs *controllerState) closedStepGraphStore(step beads.Bead, owner beads.Store, ownerRef string) (beads.GraphStore, error) {
++	ref := strings.TrimSpace(step.Metadata[beadmeta.RootStoreRefMetadataKey])
++	if ref == "" {
++		return cs.GraphBeadStore(), nil
++	}
++	rig, valid := storeref.ScopeRigContext(ref)
++	if !valid {
++		return beads.GraphStore{}, fmt.Errorf("graph root has invalid store ref %q", ref)
++	}
++
++	cs.mu.RLock()
++	cityWork := cs.cityBeadStore
++	name := cs.cityName
++	if name == "" && cs.cfg != nil {
++		name = loadedCityName(cs.cfg, cs.cityPath)
++	}
++	bindings, refusal := residencyBindingsFromRoutes(cs.storageRoutes)
++	cs.mu.RUnlock()
++	var work beads.Store
++	if rig != "" {
++		if cs.rigSuspended(rig) {
++			return beads.GraphStore{}, fmt.Errorf("graph root scope %q is suspended", ref)
++		}
++		if ref == ownerRef {
++			work = owner
++		} else {
++			work = cs.BeadStore(rig)
++		}
++	} else if ref == "city:"+name && name != "" {
++		work = cityWork
++	}
++	if work != nil {
++		rootID := strings.TrimSpace(step.Metadata[beadmeta.RootBeadIDMetadataKey])
++		if rootID == "" {
++			rootID = step.ParentID
++		}
++		if rootID == "" {
++			return cs.GraphBeadStore(), nil
++		}
++		topology := assembleResidencyTopology(nil, work, nil, bindings, refusal)
++		resolved, err := byIDOwnerForTopology(topology, rootID, work)
++		if err != nil {
++			return beads.GraphStore{}, err
++		}
++		return beads.GraphStore{Store: resolved.Store}, nil
++	}
++	if refusal != nil {
++		return beads.GraphStore{}, refusal
++	}
++	for _, binding := range bindings {
++		if string(binding.Leg.Ref) == ref {
++			return beads.GraphStore{Store: binding.Leg.Store}, nil
++		}
++	}
++	return beads.GraphStore{}, fmt.Errorf("graph root store %q is not served by this city", ref)
++}
+diff --git a/cmd/gc/class_store_agreement_test.go b/cmd/gc/class_store_agreement_test.go
+index ccee42f..733b092 100644
+--- a/cmd/gc/class_store_agreement_test.go
++++ b/cmd/gc/class_store_agreement_test.go
+@@ -151,3 +151,61 @@ func TestRefusedCityNeverPlacesAClassOnTheWorkLedger(t *testing.T) {
+ 		}
+ 	}
+ }
++
++func TestClosedStepGraphStoreHonorsDeclaredScope(t *testing.T) {
++	city := beads.NewMemStore()
++	rig := beads.NewMemStore()
++	other := beads.NewMemStore()
++	binding := beads.NewMemStore()
++	cs := &controllerState{cityName: "test-city", cityBeadStore: city,
++		beadStores:    map[string]beads.Store{"fixture": rig, "other": other},
++		storageRoutes: &storageRoutes{stores: map[coordclass.Class]beads.Store{coordclass.ClassGraph: binding}},
++	}
++	for _, test := range []struct {
++		name, ref string
++		want      beads.Store
++		fail      bool
++	}{
++		{"co-resident rig", "rig:fixture", rig, false},
++		{"other declared rig", "rig:other", other, false},
++		{"city graph binding", "city:test-city", city, false},
++		{"explicit graph binding", "class:g", binding, false},
++		{"legacy class route", "", binding, false},
++		{"missing rig", "rig:missing", nil, true},
++		{"foreign city", "city:foreign", nil, true},
++		{"foreign binding", "class:s", nil, true},
++		{"malformed scope", "rig:", nil, true},
++	} {
++		t.Run(test.name, func(t *testing.T) {
++			step := beads.Bead{Metadata: map[string]string{"gc.root_store_ref": test.ref, "gc.root_bead_id": "fi-root"}}
++			got, err := cs.closedStepGraphStore(step, rig, "rig:fixture")
++			if (err != nil) != test.fail {
++				t.Fatalf("graph scope error = %v, failure wanted %v", err, test.fail)
++			}
++			if got.Store != test.want {
++				t.Fatalf("graph authority = %v, want declared store %v", got.Store, test.want)
++			}
++		})
++	}
++}
++
++func TestClosedStepGraphStoreDoesNotReadSuspendedRig(t *testing.T) {
++	target := &rigCompletionRootReadCounter{Store: beads.NewMemStore(), root: "fi-root"}
++	cs := &controllerState{beadStores: map[string]beads.Store{"other": target}}
++	cs.setSuspendedRigs(map[string]bool{"other": true})
++	step := beads.Bead{Metadata: map[string]string{"gc.root_store_ref": "rig:other", "gc.root_bead_id": "fi-root"}}
++	if _, err := cs.closedStepGraphStore(step, beads.NewMemStore(), "rig:fixture"); err == nil {
++		t.Fatal("suspended root scope was accepted")
++	}
++	if target.reads != 0 {
++		t.Fatal("suspended root was read")
++	}
++	cs.setSuspendedRigs(map[string]bool{})
++	graph, err := cs.closedStepGraphStore(step, beads.NewMemStore(), "rig:fixture")
++	if err != nil {
++		t.Fatal(err)
++	}
++	if graph.Store != target {
++		t.Fatal("resumed graph authority was lost")
++	}
++}
 diff --git a/cmd/gc/cmd_beads.go b/cmd/gc/cmd_beads.go
 index 72e8e9f..65a4df3 100644
 --- a/cmd/gc/cmd_beads.go
@@ -1706,25 +2251,6 @@ index 39dd658..a26f34b 100644
  func TestProcessRetryControlPass(t *testing.T) {
  	t.Parallel()
  	store := beads.NewMemStore()
-diff --git a/schemas/runtime/heartbeat/result.schema.json b/schemas/runtime/heartbeat/result.schema.json
-new file mode 100644
-index 0000000..e49d94a
---- /dev/null
-+++ b/schemas/runtime/heartbeat/result.schema.json
-@@ -0,0 +1,13 @@
-+{
-+  "$schema": "https://json-schema.org/draft/2020-12/schema",
-+  "type": "object",
-+  "required": ["schema_version", "ok", "command", "session", "held_until"],
-+  "properties": {
-+    "schema_version": { "const": "1" },
-+    "ok": { "const": true },
-+    "command": { "const": "runtime heartbeat" },
-+    "session": { "type": "string", "minLength": 1 },
-+    "held_until": { "type": "string", "format": "date-time" }
-+  },
-+  "additionalProperties": true
-+}
 diff --git a/internal/molecule/attach_conditional_test.go b/internal/molecule/attach_conditional_test.go
 index 06e4b4d..d3c30ca 100644
 --- a/internal/molecule/attach_conditional_test.go
@@ -2111,3 +2637,22 @@ index abefb11..b261800 100644
  func TestInstantiate_DeferredStepsStayGate(t *testing.T) {
  	store := beads.NewMemStore()
  	recipe := &formula.Recipe{
+diff --git a/schemas/runtime/heartbeat/result.schema.json b/schemas/runtime/heartbeat/result.schema.json
+new file mode 100644
+index 0000000..e49d94a
+--- /dev/null
++++ b/schemas/runtime/heartbeat/result.schema.json
+@@ -0,0 +1,13 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "type": "object",
++  "required": ["schema_version", "ok", "command", "session", "held_until"],
++  "properties": {
++    "schema_version": { "const": "1" },
++    "ok": { "const": true },
++    "command": { "const": "runtime heartbeat" },
++    "session": { "type": "string", "minLength": 1 },
++    "held_until": { "type": "string", "format": "date-time" }
++  },
++  "additionalProperties": true
++}
