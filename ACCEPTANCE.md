@@ -958,3 +958,30 @@ continuations, delivery and cleanup assertions remain mandatory. The policy
 changes fixture storage/scheduling only, not pack runtime behavior. Acceptance:
 the expanded `test/native-proxied-city.test.ts` and the complete native suite
 within the same 600-second whole-cycle deadline.
+
+## Native definition-marker transport (S11)
+
+Gas City has created a graph and its definition events have not yet all been
+marked on their owning graph beads. Formula cook or recovery projects the graph,
+records definition events in the original order, and collects only IDs whose
+journal append was acknowledged. Through the owning store wrapper it issues
+public multi-ID `bd update` for their common emitted marker. Unknown, dropped or
+failed acknowledgements must never authorize a marker. It does not mark the
+workflow root as a substitute for per-node observations.
+
+The public update may partially apply or lose its response. Gas City does not
+retry that ambiguous mutation: a later projection observes marked nodes and
+re-emits only unmarked definitions. Duplicate definitions remain permitted;
+missing definitions do not. Unrelated metadata and store ownership remain
+unchanged. Unsupported stores retain individual writes, attempting later IDs
+even after an earlier failure. Invalid or oversized arguments refuse before
+mutation. No change to graph creation, task routing, claims or completion occurs.
+
+The matched SDK owns acceptance through `TestEmitCurrent*`,
+`TestBdStoreMetadataMany*`, `TestMetadataManyFallback*`,
+`TestProxiedStoreMetadataManyUsesWriteLeaf` and
+`TestBeadPolicyStoreForwardsMetadataManyWithoutBypassingOwner`. Native acceptance
+also observes one marker-update subprocess for the cooked graph and a returned
+cook response within the existing 30-second command budget. The complete pack
+still requires the whole 600-second qualification; these focused controls do
+not substitute for it.

@@ -200,3 +200,12 @@ graft remain owned by Gas City and the historical live trials. Controlled
 TypeScript tests do not establish a new Luna provider run or autonomous cold
 replay. [Trial results](TRIAL-RESULTS.md) retain the prior implementation's live
 observations; the language migration does not relabel them as new live evidence.
+
+The worktree owner invokes the real public Gas City CLI and Git through the
+scoped, timed subprocess port. It retains all dirty/foreign/stale/unmerged and
+lost-cleanup-response assertions. It does not repeat workflow receipt/census
+qualification on every setup Git invocation; `native-command.test.ts` owns that
+custody boundary, including escaped writers and missing exits. Its escaped-child
+fixture records the child's own PID after exec and protects it with IPC until
+custody transfer; disconnect before transfer must stop the child. These are
+fixture-only changes and cannot change pack runtime behavior.

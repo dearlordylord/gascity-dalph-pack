@@ -14,6 +14,11 @@ const fixture = Effect.gen(function* () {
   const commands = yield* makeCommands
   return { commands, fs, root }
 })
+// Before ownership transfer, losing the parent must stop the detached child.
+// Its own PID file is written after exec, before it acknowledges readiness.
+const guardedChild = `const fs=require('node:fs');let armed=false;process.on('disconnect',()=>{if(!armed)process.exit(0)});process.on('message',message=>{if(message==='armed')armed=true});fs.writeFileSync(process.argv[1],String(process.pid));process.send('ready',error=>{if(error&&!armed)process.exit(0)});setInterval(()=>{},1000)`
+const childLauncher = (pidFile: string) =>
+  `const{spawn}=require('node:child_process');const child=spawn(process.execPath,['-e',${JSON.stringify(guardedChild)},${JSON.stringify(pidFile)}],{detached:true,stdio:['ignore','ignore','ignore','ipc']});`
 it.live(
   "records intent and actual process output before observation; successful receipts are reconciled idempotently",
   () =>
@@ -108,6 +113,42 @@ it.live("reconciles stopped orphan custody without creating a success receipt, a
     })
   )
 )
+it.live("an escaped fixture child stops if IPC is lost before custody transfer", () =>
+  provide(
+    Effect.gen(function* () {
+      const { fs, root } = yield* fixture
+      const pidFile = join(root, "unarmed-child.pid")
+      const scopedFs = {
+        ...fs,
+        readDirectory: (path: string) =>
+          path === "/proc" ? fs.readFileString(pidFile).pipe(Effect.map((pid) => [pid])) : fs.readDirectory(path)
+      }
+      const commands = yield* makeCommands.pipe(Effect.provideService(FileSystem.FileSystem, scopedFs))
+      yield* Effect.acquireRelease(Effect.void, () =>
+        fs.readFileString(pidFile).pipe(
+          Effect.flatMap((pid) => Schema.decodeUnknownEffect(ProcessId)(Number(pid))),
+          Effect.flatMap((pid) =>
+            Effect.sync(() => {
+              try {
+                process.kill(pid, "SIGKILL")
+              } catch (error) {
+                if (!(error instanceof Error && "code" in error && error.code === "ESRCH")) throw error
+              }
+            })
+          ),
+          Effect.ignore
+        )
+      )
+      const program = `${childLauncher(pidFile)}child.once('message',()=>child.disconnect());child.once('exit',code=>process.exit(code??1));setInterval(()=>{},1000)`
+      expect(yield* commands.execute(root, [process.execPath, "-e", program], root, Duration.seconds(3))).toBe("")
+      const directory = join(root, "evidence/boundaries")
+      const name = (yield* fs.readDirectory(directory)).find((entry) => entry.endsWith(".json"))
+      const receipt = JSON.parse(yield* fs.readFileString(join(directory, name ?? "missing")))
+      expect(receipt.observation.stopped_writers).toBe(true)
+      expect(receipt.observation.exit).toBe(0)
+    })
+  )
+)
 it.live(
   "escaped descendants retain custody until a fresh stopped proof; reconciliation preserves observations",
   () =>
@@ -116,13 +157,14 @@ it.live(
         const { fs, root } = yield* fixture
         const attempt = AttemptId.make("escaped-attempt")
         const stdout = join(root, "escaped.stdout")
+        const pidFile = join(root, "escaped-child.pid")
         // Exercise real liveness for the child this fixture spawned. Other host
         // processes are outside this test; unreadable census cases have controlled tests.
         const scopedFs = {
           ...fs,
           readDirectory: (path: string) =>
             path === "/proc"
-              ? fs.readFileString(stdout).pipe(
+              ? fs.readFileString(pidFile).pipe(
                   Effect.flatMap((pid) => Schema.decodeUnknownEffect(ProcessId)(Number(pid))),
                   Effect.map((pid) => [String(pid)])
                 )
@@ -130,11 +172,12 @@ it.live(
         }
         const commands = yield* makeCommands.pipe(Effect.provideService(FileSystem.FileSystem, scopedFs))
         yield* Ref.set(commands.current, attempt)
-        const program =
-          "const{spawn}=require('node:child_process');const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true,stdio:'ignore'});process.stdout.write(String(child.pid));setInterval(()=>{},1000)"
+        // Publish the owned PID only after the child has crossed exec and can
+        // acknowledge its environment. A forked PID is not readiness evidence.
+        const program = `${childLauncher(pidFile)}child.once('message',()=>process.stdout.write(String(child.pid),()=>child.send('armed',()=>{})));setInterval(()=>{},1000)`
         yield* Effect.acquireRelease(Effect.void, () =>
           Effect.gen(function* () {
-            const pid = yield* Schema.decodeUnknownEffect(ProcessId)(Number(yield* fs.readFileString(stdout)))
+            const pid = yield* Schema.decodeUnknownEffect(ProcessId)(Number(yield* fs.readFileString(pidFile)))
             yield* Effect.sync(() => {
               try {
                 process.kill(pid, "SIGKILL")

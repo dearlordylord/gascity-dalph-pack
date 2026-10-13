@@ -2,7 +2,7 @@ import { Duration, Effect, FileSystem, Schema } from "effect"
 import { NodeServices } from "@effect/platform-node"
 import { expect, it } from "@effect/vitest"
 import { join } from "node:path"
-import { makeCommands } from "../src/delivery/command.ts"
+import { runCommand } from "../src/quality/command.ts"
 
 const Report = Schema.Struct({
   provenance: Schema.optionalKey(Schema.Struct({ attempt_id: Schema.String, base_sha: Schema.String })),
@@ -16,10 +16,14 @@ const provide = <A, E, R>(effect: Effect.Effect<A, E, R | FileSystem.FileSystem>
 const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem
   const root = yield* fs.makeTempDirectoryScoped()
-  const commands = yield* makeCommands
   const repo = join(root, "repo")
   yield* fs.makeDirectory(repo)
-  const call = (args: ReadonlyArray<string>) => commands.execute(root, args, undefined, Duration.seconds(20))
+  // This owner verifies the real public worktree CLI and Git resources.
+  // Workflow receipt/census custody is qualified by native-command.test.ts.
+  const call = (args: ReadonlyArray<string>) =>
+    runCommand({ executable: args[0] ?? "", args: args.slice(1), timeout: Duration.seconds(20) }).pipe(
+      Effect.map((result) => result.stdout.trim())
+    )
   const git = (args: ReadonlyArray<string>, path = repo) => call(["git", "-C", path, ...args])
   yield* git(["init", "-b", "master"])
   yield* git(["config", "user.name", "Fixture"])
@@ -56,7 +60,7 @@ const fixture = Effect.gen(function* () {
   ]
   const report = (action: string, extra: ReadonlyArray<string> = [], selected = args) =>
     call(["gc", "worktree", action, ...selected, ...extra]).pipe(
-      Effect.catchTag("CommandRejected", (error) => fs.readFileString(error.receipt.replace(/\.json$/, ".stdout"))),
+      Effect.catchTag("CommandFailure", (error) => Effect.succeed(error.stdout ?? "")),
       Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Report)))
     )
   const prepared = yield* report("ensure")
@@ -128,8 +132,8 @@ it.live(
         const failure = yield* Effect.flip(
           f.call([process.execPath, "-e", program, "gc", "worktree", "cleanup", ...f.args, "--attempt-id", attempt])
         )
-        expect(failure._tag).toBe("CommandRejected")
-        if (failure._tag === "CommandRejected") expect(failure.exit).toBe(91)
+        expect(failure._tag).toBe("CommandFailure")
+        if (failure._tag === "CommandFailure") expect(failure.exit).toBe(91)
         expect(yield* f.fs.exists(f.path)).toBe(false)
         expect((yield* f.cleanup()).already_absent).toBe(true)
       })

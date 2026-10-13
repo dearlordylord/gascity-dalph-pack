@@ -38,7 +38,7 @@ index 7be1791..513e487 100644
          "schemas/service/doctor/result.schema.json",
          "schemas/service/list/result.schema.json",
 diff --git a/cmd/gc/BUILD.bazel b/cmd/gc/BUILD.bazel
-index afaf576..dcbca69 100644
+index afaf576..45cc438 100644
 --- a/cmd/gc/BUILD.bazel
 +++ b/cmd/gc/BUILD.bazel
 @@ -138,6 +138,7 @@ go_library(
@@ -49,7 +49,15 @@ index afaf576..dcbca69 100644
          "cmd_build_image.go",
          "cmd_citystatus.go",
          "cmd_commands.go",
-@@ -1006,6 +1007,7 @@ go_test(
+@@ -884,6 +885,7 @@ go_test(
+         "bead_policy_store_conditional_test.go",
+         "bead_policy_store_conformance_test.go",
+         "bead_policy_store_graph_ready_test.go",
++        "bead_policy_metadata_many_test.go",
+         "bead_policy_store_test.go",
+         "bead_worktree_liveness_discovery_test.go",
+         "bead_worktree_liveness_fallback_test.go",
+@@ -1006,6 +1008,7 @@ go_test(
          "cmd_beads_city_migrate_proxied_test.go",
          "cmd_beads_city_test.go",
          "cmd_beads_metadata_cas_test.go",
@@ -57,7 +65,7 @@ index afaf576..dcbca69 100644
          "cmd_beads_test.go",
          "cmd_build_image_test.go",
          "cmd_citystatus_test.go",
-@@ -1219,6 +1221,7 @@ go_test(
+@@ -1219,6 +1222,7 @@ go_test(
          "dispatch_control_ready_freshness_test.go",
          "dispatch_control_ready_hold_label_test.go",
          "dispatch_control_ready_leak_test.go",
@@ -454,6 +462,62 @@ index c486984..d913186 100644
  			if cs.beadCloseAutoclose(id, store, storeRef)() {
  				res.Ran++
  			} else {
+diff --git a/cmd/gc/bead_policy_metadata_many_test.go b/cmd/gc/bead_policy_metadata_many_test.go
+new file mode 100644
+index 0000000..2489560
+--- /dev/null
++++ b/cmd/gc/bead_policy_metadata_many_test.go
+@@ -0,0 +1,32 @@
++package main
++
++import (
++	"fmt"
++	"strings"
++	"testing"
++
++	"github.com/gastownhall/gascity/internal/beads"
++	"github.com/gastownhall/gascity/internal/config"
++)
++
++type captureMetadataManyStore struct {
++	beads.Store
++	ids []string
++}
++
++func (s *captureMetadataManyStore) SetMetadataMany(ids []string, key, value string) error {
++	s.ids = append([]string(nil), ids...)
++	if key != "gc.step_defined_emitted" || value != "ack" {
++		return fmt.Errorf("unexpected metadata %s=%s", key, value)
++	}
++	return fmt.Errorf("partial application")
++}
++
++func TestBeadPolicyStoreForwardsMetadataManyWithoutBypassingOwner(t *testing.T) {
++	leaf := &captureMetadataManyStore{Store: beads.NewMemStore()}
++	store := wrapStoreWithBeadPolicies(leaf, &config.City{})
++	err := beads.SetMetadataMany(store, []string{"fi-a", "fi-b"}, "gc.step_defined_emitted", "ack")
++	if err == nil || err.Error() != "partial application" || strings.Join(leaf.ids, ",") != "fi-a,fi-b" {
++		t.Fatalf("forwarding err=%v ids=%v", err, leaf.ids)
++	}
++}
+diff --git a/cmd/gc/bead_policy_store.go b/cmd/gc/bead_policy_store.go
+index 805f2b0..2dc61db 100644
+--- a/cmd/gc/bead_policy_store.go
++++ b/cmd/gc/bead_policy_store.go
+@@ -50,6 +50,13 @@ var (
+ // *beadPolicyStore.
+ func (s *beadPolicyStore) ConditionalWritesResolveTarget() beads.Store { return s.Store }
+ 
++// SetMetadataMany forwards the same metadata writes that SetMetadata already
++// delegates. Keep the owning wrapper chain intact, including proxied generation
++// checks; creation policies are unaffected by edits of existing rows.
++func (s *beadPolicyStore) SetMetadataMany(ids []string, key, value string) error {
++	return beads.SetMetadataMany(s.Store, ids, key, value)
++}
++
+ var (
+ 	_ beads.BatchDeleter      = (*beadPolicyStore)(nil)
+ 	_ beads.BatchDeleter      = (*beadPolicyGraphStore)(nil)
 diff --git a/cmd/gc/class_store.go b/cmd/gc/class_store.go
 index be69ae3..72245cc 100644
 --- a/cmd/gc/class_store.go
@@ -1975,6 +2039,18 @@ index 8559f96..9cbdbd5 100644
  gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
  gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
  gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+diff --git a/internal/beads/BUILD.bazel b/internal/beads/BUILD.bazel
+index 90959d5..4a8187b 100644
+--- a/internal/beads/BUILD.bazel
++++ b/internal/beads/BUILD.bazel
+@@ -154,6 +154,7 @@ go_test(
+         "memstore_test.go",
+         "metadata_cas_operation_test.go",
+         "metadata_empty_clear_conformance_test.go",
++        "metadata_many_test.go",
+         "namespace_census_test.go",
+         "native_dolt_events_journal_test.go",
+         "native_dolt_proxied_open_test.go",
 diff --git a/internal/beads/bdstore_conditional_integration_test.go b/internal/beads/bdstore_conditional_integration_test.go
 index 0bff391..3c54dfd 100644
 --- a/internal/beads/bdstore_conditional_integration_test.go
@@ -2093,6 +2169,200 @@ index 0bff391..3c54dfd 100644
 +		return beads.ExecCommandRunnerWithExactEnvContext(ctx, beadstest.BdSubprocessEnv(env))(dir, name, args...)
 +	}
  }
+diff --git a/internal/beads/metadata_many.go b/internal/beads/metadata_many.go
+new file mode 100644
+index 0000000..386795e
+--- /dev/null
++++ b/internal/beads/metadata_many.go
+@@ -0,0 +1,74 @@
++package beads
++
++import (
++	"errors"
++	"fmt"
++	"strings"
++)
++
++// MetadataManySetter optionally amortizes transport for the same metadata edit
++// on several existing beads. It is NOT atomic: an error may follow partial or
++// complete application. Callers must tolerate replay and cannot infer which
++// rows changed from the error. Implementations must preserve unrelated metadata.
++type MetadataManySetter interface {
++	SetMetadataMany(ids []string, key, value string) error
++}
++
++// SetMetadataMany uses the owning store's optional transport, without unwrapping
++// routing or policy layers. Unsupported stores retain individual writes; every
++// requested marker is attempted even if an earlier one fails.
++func SetMetadataMany(store Store, ids []string, key, value string) error {
++	if len(ids) == 0 {
++		return nil
++	}
++	if setter, ok := store.(MetadataManySetter); ok {
++		return setter.SetMetadataMany(ids, key, value)
++	}
++	var errs []error
++	for _, id := range ids {
++		if err := store.SetMetadata(id, key, value); err != nil {
++			errs = append(errs, err)
++		}
++	}
++	return errors.Join(errs...)
++}
++
++// SetMetadataMany uses bd's public multi-ID update. Unlike ordinary transient
++// writes it makes no retry: a failed command may already have marked some rows.
++// The argument bound is checked BEFORE effects; oversized callers retain their
++// unmarked rows for recovery rather than issuing an unbounded OS argument list.
++func (s *BdStore) SetMetadataMany(ids []string, key, value string) error {
++	if len(ids) == 0 {
++		return nil
++	}
++	const maxArgumentBytes = 64 * 1024
++	if key == "" || strings.ContainsAny(key, "=\x00") || strings.ContainsRune(value, '\x00') {
++		return fmt.Errorf("setting metadata on multiple beads: invalid metadata key or value")
++	}
++	size := len(key) + len(value) + 64
++	for _, id := range ids {
++		if id == "" || strings.TrimSpace(id) != id || strings.HasPrefix(id, "-") || strings.ContainsAny(id, "=\x00") {
++			return fmt.Errorf("setting metadata on multiple beads: invalid bead ID %q", id)
++		}
++		size += len(id) + 1
++	}
++	if size > maxArgumentBytes {
++		return fmt.Errorf("setting metadata on multiple beads: arguments exceed %d bytes", maxArgumentBytes)
++	}
++	for _, id := range ids {
++		noteSessionKeysByID(s.Get, id, map[string]string{key: value})
++	}
++	args := append([]string{"update", "--json"}, ids...)
++	args = append(args, "--set-metadata", key+"="+value)
++	if _, err := s.runner(s.dir, "bd", s.bdTransientWriteArgs(args)...); err != nil {
++		return fmt.Errorf("setting metadata on multiple beads (application may be partial): %w", err)
++	}
++	return nil
++}
++
++// SetMetadataMany preserves the proxied write leaf and its generation bracket.
++func (s *ProxiedStore) SetMetadataMany(ids []string, key, value string) error {
++	return s.withMutation("set-metadata-many", func(leaf Store) error {
++		return SetMetadataMany(leaf, ids, key, value)
++	})
++}
+diff --git a/internal/beads/metadata_many_test.go b/internal/beads/metadata_many_test.go
+new file mode 100644
+index 0000000..93bf8c2
+--- /dev/null
++++ b/internal/beads/metadata_many_test.go
+@@ -0,0 +1,108 @@
++package beads
++
++import (
++	"errors"
++	"reflect"
++	"strings"
++	"testing"
++)
++
++func TestBdStoreMetadataManyOneCommandAndNoRetry(t *testing.T) {
++	for _, writeErr := range []error{nil, errors.New("connection reset by peer after partial update")} {
++		calls := 0
++		store := NewBdStore("/owned-rig", func(dir, name string, args ...string) ([]byte, error) {
++			calls++
++			want := []string{"update", "--json", "fi-one", "fi-wisp-two", "--set-metadata", "gc.step_defined_emitted=ack-time"}
++			if dir != "/owned-rig" || name != "bd" || !reflect.DeepEqual(args, want) {
++				t.Fatalf("command %s %s %v", dir, name, args)
++			}
++			return []byte(`[{"id":"fi-one"}]`), writeErr
++		})
++		err := SetMetadataMany(store, []string{"fi-one", "fi-wisp-two"}, "gc.step_defined_emitted", "ack-time")
++		if !errors.Is(err, writeErr) || calls != 1 {
++			t.Fatalf("err=%v calls=%d", err, calls)
++		}
++	}
++}
++
++func TestBdStoreMetadataManyRefusesInvalidOrOversizedBeforeEffects(t *testing.T) {
++	store := NewBdStore("/owned-rig", func(string, string, ...string) ([]byte, error) { t.Fatal("unexpected command"); return nil, nil })
++	for _, ids := range [][]string{{""}, {"fi-one", "--claim"}, {"fi-one", "bad=value"}, {strings.Repeat("x", 64*1024)}} {
++		if err := SetMetadataMany(store, ids, "marker", "1"); err == nil {
++			t.Fatalf("accepted %v", ids)
++		}
++	}
++	if err := SetMetadataMany(store, nil, "marker", "1"); err != nil {
++		t.Fatal(err)
++	}
++}
++
++type metadataManyFallback struct {
++	Store
++	seen []string
++}
++
++func (s *metadataManyFallback) SetMetadata(id, key, value string) error {
++	s.seen = append(s.seen, id)
++	if id == "missing" {
++		return ErrNotFound
++	}
++	return s.Store.SetMetadata(id, key, value)
++}
++
++func TestMetadataManyFallbackContinuesAfterFailureAndPreservesOtherKeys(t *testing.T) {
++	base := NewMemStore()
++	row, err := base.Create(Bead{Title: "task", Metadata: map[string]string{"retained": "exact"}})
++	if err != nil {
++		t.Fatal(err)
++	}
++	store := &metadataManyFallback{Store: base}
++	if err := SetMetadataMany(store, []string{"missing", row.ID}, "marker", "1"); !errors.Is(err, ErrNotFound) {
++		t.Fatal(err)
++	}
++	if !reflect.DeepEqual(store.seen, []string{"missing", row.ID}) {
++		t.Fatal(store.seen)
++	}
++	fresh, _ := base.Get(row.ID)
++	if fresh.Metadata["retained"] != "exact" || fresh.Metadata["marker"] != "1" {
++		t.Fatal(fresh.Metadata)
++	}
++}
++
++func TestProxiedStoreMetadataManyUsesWriteLeaf(t *testing.T) {
++	store, _, leaf := newSplitFixture(t)
++	row, err := store.Create(Bead{Title: "task", Metadata: map[string]string{"retained": "exact"}})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if err := SetMetadataMany(store, []string{row.ID}, "marker", "1"); err != nil {
++		t.Fatal(err)
++	}
++	fresh, err := leaf.Get(row.ID)
++	if err != nil || fresh.Metadata["retained"] != "exact" || fresh.Metadata["marker"] != "1" {
++		t.Fatalf("row=%+v err=%v", fresh, err)
++	}
++}
++
++func TestProxiedStoreMetadataManyPreservesBulkCommandFailure(t *testing.T) {
++	native := newNativeDoltStoreForTest(newNativeDoltMemStorage(), WithProxiedReadOnly())
++	calls := 0
++	lost := errors.New("response lost after commit")
++	leaf := NewBdStore("/owned-rig", func(_ string, _ string, args ...string) ([]byte, error) {
++		calls++
++		if !reflect.DeepEqual(args, []string{"update", "--json", "fi-a", "fi-b", "--set-metadata", "marker=1"}) {
++			t.Fatal(args)
++		}
++		return nil, lost
++	})
++	store, err := NewProxiedStore(native, leaf, PinForTest("/scope", "", "beads"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	if err := SetMetadataMany(store, []string{"fi-a", "fi-b"}, "marker", "1"); !errors.Is(err, lost) {
++		t.Fatal(err)
++	}
++	if calls != 1 {
++		t.Fatalf("calls=%d, want one public bulk command", calls)
++	}
++}
 diff --git a/internal/beads/schema_cursor.go b/internal/beads/schema_cursor.go
 index 36181cf..e20185c 100644
 --- a/internal/beads/schema_cursor.go
@@ -2901,6 +3171,122 @@ index 39dd658..9892d9f 100644
 +		t.Fatalf("race closed control: %+v", fresh)
 +	}
 +}
+diff --git a/internal/executionevent/projector.go b/internal/executionevent/projector.go
+index 5ad95c1..4d5596e 100644
+--- a/internal/executionevent/projector.go
++++ b/internal/executionevent/projector.go
+@@ -107,6 +107,7 @@ func EmitCurrent(recorder events.Recorder, graphStore beads.GraphStore, convoySt
+ 	for _, event := range projection.workAndAnchorEvents(actor) {
+ 		recorder.Record(event)
+ 	}
++	var acknowledged []string
+ 	for _, step := range projection.Steps {
+ 		if step.DefinedEmitted {
+ 			continue
+@@ -118,12 +119,13 @@ func EmitCurrent(recorder events.Recorder, graphStore beads.GraphStore, convoySt
+ 			// durably mark the step, or a dropped emit becomes a permanent miss.
+ 			continue
+ 		}
+-		if graphStore.Store != nil {
+-			// The fact is durable; record that the step was emitted. A failed mark
+-			// leaves the step unmarked, so the next tick re-emits it — the same
+-			// at-least-once tolerance the snapshot facts already carry.
+-			_ = graphStore.SetMetadata(step.BeadID, beadmeta.StepDefinedEmittedMetadataKey, time.Now().UTC().Format(time.RFC3339))
+-		}
++		acknowledged = append(acknowledged, step.BeadID)
++	}
++	if graphStore.Store != nil {
++		// Only acknowledged definitions are eligible. A partial/lost mark leaves
++		// unmarked rows for at-least-once replay; never retry or infer success for
++		// the whole set. All definitions retain their original journal order.
++		_ = beads.SetMetadataMany(graphStore.Store, acknowledged, beadmeta.StepDefinedEmittedMetadataKey, time.Now().UTC().Format(time.RFC3339))
+ 	}
+ 	return nil
+ }
+diff --git a/internal/executionevent/projector_test.go b/internal/executionevent/projector_test.go
+index 776045a..aff67f7 100644
+--- a/internal/executionevent/projector_test.go
++++ b/internal/executionevent/projector_test.go
+@@ -2,6 +2,7 @@ package executionevent
+ 
+ import (
+ 	"errors"
++	"fmt"
+ 	"reflect"
+ 	"sort"
+ 	"testing"
+@@ -530,6 +531,71 @@ func TestEmitCurrentDoesNotMarkOnDroppedOrDiscardEmit(t *testing.T) {
+ 	}
+ }
+ 
++type definitionBatchStore struct {
++	beads.Store
++	mark func([]string, string, string) error
++}
++
++func (s *definitionBatchStore) SetMetadataMany(ids []string, key, value string) error {
++	return s.mark(ids, key, value)
++}
++
++type selectiveDefinitionRecorder struct {
++	*events.Fake
++	drop string
++}
++
++func (r *selectiveDefinitionRecorder) RecordAck(event events.Event) error {
++	if event.Subject == r.drop {
++		return errors.New("append unavailable")
++	}
++	return r.Fake.RecordAck(event)
++}
++
++func TestEmitCurrentBatchesOnlyAcknowledgedDefinitionsAndRecoversPartialMark(t *testing.T) {
++	for _, applied := range []int{0, 1, 2} {
++		t.Run(fmt.Sprintf("applied-%d", applied), func(t *testing.T) {
++			graph := beads.NewMemStore()
++			root := mustCreateProjectionRoot(t, graph, "")
++			a := mustCreateProjectionStep(t, graph, "gcg-a", root.ID, "a", "[]")
++			b := mustCreateProjectionStep(t, graph, "gcg-b", root.ID, "b", `["a"]`)
++			c := mustCreateProjectionStep(t, graph, "gcg-c", root.ID, "c", `["b"]`)
++			recorder := &selectiveDefinitionRecorder{Fake: events.NewFake(), drop: b.ID}
++			calls := 0
++			store := &definitionBatchStore{Store: graph}
++			store.mark = func(ids []string, key, value string) error {
++				calls++
++				if !reflect.DeepEqual(ids, []string{a.ID, c.ID}) || countStepDefined(recorder.Events, root.ID) != 2 {
++					t.Fatalf("mark before exact acknowledged definitions: ids=%v events=%v", ids, recorder.Events)
++				}
++				for _, id := range ids[:applied] {
++					if err := graph.SetMetadata(id, key, value); err != nil {
++						t.Fatal(err)
++					}
++				}
++				return errors.New("response lost after partial or complete application")
++			}
++			if err := EmitCurrent(recorder, beads.GraphStore{Store: store}, beads.WorkStore{}, root.ID, "cook"); err != nil {
++				t.Fatal(err)
++			}
++			if calls != 1 {
++				t.Fatalf("batch calls=%d, want 1 without retry", calls)
++			}
++			dropped, _ := graph.Get(b.ID)
++			if dropped.Metadata[beadmeta.StepDefinedEmittedMetadataKey] != "" {
++				t.Fatal("unacknowledged step marked")
++			}
++			healthy := events.NewFake()
++			if err := EmitCurrent(healthy, beads.GraphStore{Store: graph}, beads.WorkStore{}, root.ID, "restart"); err != nil {
++				t.Fatal(err)
++			}
++			if got := countStepDefined(healthy.Events, root.ID); got != 3-applied {
++				t.Fatalf("recovery definitions=%d, want %d", got, 3-applied)
++			}
++		})
++	}
++}
++
+ func countStepDefined(recorded []events.Event, rootID string) int {
+ 	count := 0
+ 	for _, event := range recorded {
 diff --git a/internal/molecule/attach_conditional_test.go b/internal/molecule/attach_conditional_test.go
 index 06e4b4d..d3c30ca 100644
 --- a/internal/molecule/attach_conditional_test.go
