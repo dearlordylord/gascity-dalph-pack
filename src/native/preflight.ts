@@ -6,6 +6,7 @@ import { NativeAgents, NativeBuild, NativeConfig, NativeProvider, type NativeCon
 import { validateRetiringPools } from "./pool-policy.ts"
 import { validateInstalledRoles } from "./installation.ts"
 import { nativeProviderHealth } from "./provider-health.ts"
+import { nativeMetadataCapability } from "./metadata-http.ts"
 
 const reject = (message: string) => Effect.fail(new BoundaryFailure({ message }))
 const READINESS_SECONDS = 30
@@ -102,6 +103,7 @@ export const nativePreflight = Effect.fn("Native.preflight")(function* (
     Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(NativeBuild))),
     Effect.mapError(() => new BoundaryFailure({ message: "native Ralph infrastructure build is not qualified" }))
   )
+  yield* nativeMetadataCapability(config)
   const pointReadHelp = yield* commands.execute(config.root, [...gc, "beads", "show", "--help"])
   if (!pointReadHelp.includes("--store-ref"))
     return yield* reject("native exact-store read capability is unavailable; no task launch authorized")

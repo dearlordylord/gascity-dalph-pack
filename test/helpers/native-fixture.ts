@@ -6,6 +6,7 @@ import { BeadId, BoundaryFailure } from "../../src/domain/shared.ts"
 import { makeTracker } from "../../src/delivery/tracker.ts"
 import { makeNativeWorkflow } from "../../src/native/workflow.ts"
 import { NativeContract } from "../../src/native/contract.ts"
+import { MetadataCASRequest } from "../../src/native/metadata-http.ts"
 import type { Commands } from "../../src/delivery/tracker.ts"
 
 export const nativeFixture = Effect.gen(function* () {
@@ -248,6 +249,53 @@ export const nativeFixture = Effect.gen(function* () {
       })
   }
   const http = HttpClient.make((request) => {
+    if (request.method === "GET" && request.url.endsWith("/metadata-cas-capability"))
+      return Effect.succeed(
+        HttpResponse.fromWeb(
+          request,
+          new Response(
+            JSON.stringify({
+              schema_version: "1",
+              ok: true,
+              store_ref: `rig:${config.rig}`,
+              capability: "metadata-value-cas-v1",
+              supported: true
+            })
+          )
+        )
+      )
+    if (request.method === "POST" && request.url.endsWith("/metadata-cas"))
+      return Effect.gen(function* () {
+        if (request.body._tag !== "Uint8Array")
+          return HttpResponse.fromWeb(request, new Response("invalid body", { status: 400 }))
+        const body = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(MetadataCASRequest))(
+          new TextDecoder().decode(request.body.body)
+        )
+        if (body.store_ref !== `rig:${config.rig}`)
+          return HttpResponse.fromWeb(request, new Response("foreign store", { status: 400 }))
+        const id = decodeURIComponent(request.url.split("/").at(-2) ?? "")
+        const receipt = yield* commands.execute(config.root, [
+          "gc",
+          "--city",
+          config.city,
+          "--rig",
+          config.rig,
+          "beads",
+          "metadata-cas",
+          id,
+          `--store-ref=${body.store_ref}`,
+          `--key=${body.key}`,
+          `--expected=${body.expected}`,
+          `--next=${body.next}`,
+          "--json"
+        ])
+        return HttpResponse.fromWeb(request, new Response(receipt))
+      }).pipe(
+        Effect.provideService(FileSystem.FileSystem, fixture.fs),
+        Effect.catch(() =>
+          Effect.succeed(HttpResponse.fromWeb(request, new Response("metadata CAS unavailable", { status: 500 })))
+        )
+      )
     if (request.method !== "GET")
       return fixture.http.execute(request).pipe(
         Effect.tap(() =>

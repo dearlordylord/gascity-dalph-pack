@@ -6,6 +6,7 @@ import { type BeadId, BoundaryFailure } from "../domain/shared.ts"
 import type { RuntimeConfig } from "./config.ts"
 import { nativeTrackerArgs } from "../native/tracker-command.ts"
 import { acknowledgeNativeMetadata } from "../native/metadata-acknowledgement.ts"
+import { nativeMetadataCAS } from "../native/metadata-http.ts"
 import { canonical } from "./files.ts"
 import { Bead, Claim, verifyCity } from "./tracker-observation.ts"
 import type { makeCommands } from "./command.ts"
@@ -20,8 +21,16 @@ export const makeTracker = (config: RuntimeConfig, commands: Commands, nativeCli
   const gc = ["gc", "--city", config.city, "--rig", config.rig]
   const trackerArgs = (args: ReadonlyArray<string>) =>
     config.executionVersion === "native-v1" ? nativeTrackerArgs(args) : args
-  const nativeBead = Effect.fn("Tracker.readNativeBead")(function* (id: BeadId) {
+  const scopedNativeClient = Effect.fn("Tracker.scopedNativeClient")(function* () {
     if (!nativeClient) return yield* new BoundaryFailure({ message: "native tracker requires its scoped HTTP client" })
+    return nativeClient
+  })
+  const nativeWrite = Effect.fn("Tracker.nativeWrite")(function* (id: BeadId, key: string, value: string) {
+    const client = yield* scopedNativeClient()
+    return yield* nativeMetadataCAS(config, client, id, key, value)
+  })
+  const nativeBead = Effect.fn("Tracker.readNativeBead")(function* (id: BeadId) {
+    yield* scopedNativeClient()
     // Bypass the native supervisor's derived cache for immutable custody and acceptance facts.
     const current = yield* commands
       .execute(
@@ -69,20 +78,22 @@ export const makeTracker = (config: RuntimeConfig, commands: Commands, nativeCli
     const current = (yield* bead(id)).metadata?.[key]
     if (current === value) return
     if (current !== undefined) return yield* new BoundaryFailure({ message: `contradictory durable metadata: ${key}` })
-    const response = yield* commands.execute(
-      config.root,
-      trackerArgs([
-        ...gc,
-        "beads",
-        "metadata-cas",
-        id,
-        `--store-ref=rig:${config.rig}`,
-        `--key=${key}`,
-        "--expected=",
-        `--next=${value}`,
-        "--json"
-      ])
-    )
+    const response = yield* config.executionVersion === "native-v1"
+      ? nativeWrite(id, key, value)
+      : commands.execute(
+          config.root,
+          trackerArgs([
+            ...gc,
+            "beads",
+            "metadata-cas",
+            id,
+            `--store-ref=rig:${config.rig}`,
+            `--key=${key}`,
+            "--expected=",
+            `--next=${value}`,
+            "--json"
+          ])
+        )
     if (config.executionVersion === "native-v1")
       yield* acknowledgeNativeMetadata(response, id, `rig:${config.rig}`, key)
     else if ((yield* bead(id)).metadata?.[key] !== value)
@@ -99,8 +110,7 @@ export const makeTracker = (config: RuntimeConfig, commands: Commands, nativeCli
     encoded: string
   ) {
     if (config.executionVersion === "native-v1") {
-      if (!nativeClient)
-        return yield* new BoundaryFailure({ message: "native tracker requires its scoped HTTP client" })
+      yield* scopedNativeClient()
     } else {
       const current = (yield* bead(id)).metadata?.[`dalph.${key}`]
       if (current) {
@@ -113,8 +123,9 @@ export const makeTracker = (config: RuntimeConfig, commands: Commands, nativeCli
   const record = Effect.fn("Tracker.recordFact")(function* (id: BeadId, key: string, value: Schema.JsonObject) {
     const encoded = canonical(value)
     if (!(yield* factWriteRequired(id, key, encoded))) return
-    const reconciled = yield* commands
-      .execute(
+    const write = Effect.gen(function* () {
+      if (config.executionVersion === "native-v1") return yield* nativeWrite(id, `dalph.${key}`, encoded)
+      return yield* commands.execute(
         config.root,
         trackerArgs([
           ...gc,
@@ -130,22 +141,24 @@ export const makeTracker = (config: RuntimeConfig, commands: Commands, nativeCli
         undefined,
         Duration.seconds(BOUNDARY_SECONDS)
       )
-      .pipe(
-        Effect.tap((response) =>
-          config.executionVersion === "native-v1"
-            ? acknowledgeNativeMetadata(response, id, `rig:${config.rig}`, `dalph.${key}`)
-            : Effect.void
-        ),
-        Effect.as(false),
-        Effect.catch((error) =>
-          Effect.gen(function* () {
-            if (error._tag !== "CommandRejected") return yield* Effect.fail(error)
-            const observed = yield* bead(id)
-            if (observed.metadata?.[`dalph.${key}`] !== encoded) return yield* Effect.fail(error)
-            return true
-          })
-        )
+    })
+    const reconciled = yield* write.pipe(
+      Effect.tap((response) =>
+        config.executionVersion === "native-v1"
+          ? acknowledgeNativeMetadata(response, id, `rig:${config.rig}`, `dalph.${key}`)
+          : Effect.void
+      ),
+      Effect.as(false),
+      Effect.catch((error) =>
+        Effect.gen(function* () {
+          if (error._tag !== "CommandRejected" && error._tag !== "NativeMetadataRequestFailed")
+            return yield* Effect.fail(error)
+          const observed = yield* bead(id)
+          if (observed.metadata?.[`dalph.${key}`] !== encoded) return yield* Effect.fail(error)
+          return true
+        })
       )
+    )
     if (reconciled) return
     if (config.executionVersion !== "native-v1" && (yield* bead(id)).metadata?.[`dalph.${key}`] !== encoded)
       return yield* new BoundaryFailure({ message: `durable fact not acknowledged: ${key}` })

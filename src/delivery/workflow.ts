@@ -34,7 +34,11 @@ export const makeWorkflow = (
     current: Bead,
     candidate: typeof Candidate.Type,
     ordinal: number
-  ) => ReturnType<typeof integrationCustody> = () => Effect.void
+  ) => Effect.Effect<
+    void,
+    Effect.Error<ReturnType<typeof integrationCustody>> | Effect.Error<ReturnType<Tracker["record"]>>,
+    Effect.Services<ReturnType<typeof integrationCustody>>
+  > = () => Effect.void
 ) => {
   const fetch = () => git.git(["fetch", "origin", `${git.target}:${git.remote}`])
   const commitAt = (ref: string, cwd = config.repo) =>

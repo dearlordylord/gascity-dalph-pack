@@ -120,3 +120,60 @@ it.effect("a reconciled failed full and a successful full allow another admissio
     }
   }).pipe(Effect.provide(NodeServices.layer), Effect.scoped)
 )
+
+it.effect("controlled checks overlap within two lanes and native waits for every result", () =>
+  Effect.gen(function* () {
+    const { directory } = yield* fixture
+    const coverage = yield* Deferred.make<void>()
+    const example = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const calls: string[] = []
+    const gate = makeQualityGate((command) => {
+      const stage = command.args[0] ?? ""
+      calls.push(stage)
+      if (stage === "test:coverage")
+        return Deferred.succeed(coverage, undefined).pipe(
+          Effect.andThen(Deferred.await(release)),
+          Effect.as({ stdout: "", stderr: "" })
+        )
+      if (stage === "example:oracle")
+        return Deferred.succeed(example, undefined).pipe(Effect.as({ stdout: "", stderr: "" }))
+      return accepted
+    }, directory)
+    const pending = yield* gate("all", output).pipe(Effect.forkScoped)
+    yield* Deferred.await(coverage)
+    yield* Deferred.await(example)
+    expect(calls).toContain("example:typecheck")
+    expect(calls).toContain("example:test")
+    expect(calls).not.toContain("test:native")
+    yield* Deferred.succeed(release, undefined)
+    yield* Fiber.join(pending)
+    expect(calls).toContain("test:native")
+  }).pipe(Effect.provide(NodeServices.layer), Effect.scoped)
+)
+
+it.effect("a controlled failure joins its live sibling and refuses native admission", () =>
+  Effect.gen(function* () {
+    const { directory } = yield* fixture
+    const started = yield* Deferred.make<void>()
+    const stopped = yield* Ref.make(false)
+    const calls: string[] = []
+    const gate = makeQualityGate((command) => {
+      const stage = command.args[0] ?? ""
+      calls.push(stage)
+      if (stage === "test:coverage")
+        return Deferred.succeed(started, undefined).pipe(
+          Effect.andThen(Effect.never),
+          Effect.ensuring(Ref.set(stopped, true))
+        )
+      if (stage === "example:typecheck")
+        return Deferred.await(started).pipe(
+          Effect.andThen(Effect.fail(new CommandFailure({ command: stage, message: "controlled rejection" })))
+        )
+      return accepted
+    }, directory)
+    expect((yield* Effect.flip(gate("all", output)))._tag).toBe("CommandFailure")
+    expect(yield* Ref.get(stopped)).toBe(true)
+    expect(calls).not.toContain("test:native")
+  }).pipe(Effect.provide(NodeServices.layer), Effect.scoped)
+)

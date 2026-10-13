@@ -15,8 +15,10 @@ mise exec node@24.20.0 -- pnpm check:fast
 ```
 
 Both gates qualify dependencies and build first, then run independent static
-checks with concurrency two. Coverage, example checks and native acceptance
-follow in order. A failure interrupts sibling checks. One deadline covers
+checks with concurrency two. Coverage and independent example checks then share a bounded two-process lane.
+Native acceptance starts only after every preceding check succeeds. These
+checks use separate output paths; this scheduling changes no Dalph runtime
+behavior, gate requirement, coverage threshold or custody boundary. A failure interrupts sibling checks. One deadline covers
 the entire cycle: 60 seconds for fast, 600 seconds for full. Expiry interrupts
 the owned child process group; it never counts as a pass. Stage output streams
 live and each completed stage reports its elapsed time.
@@ -209,3 +211,11 @@ custody boundary, including escaped writers and missing exits. Its escaped-child
 fixture records the child's own PID after exec and protects it with IPC until
 custody transfer; disconnect before transfer must stop the child. These are
 fixture-only changes and cannot change pack runtime behavior.
+
+Native fact writes use the supervisor's public scoped metadata-CAS HTTP endpoint.
+Preflight checks that exact RIG's capability before preparation. The held Gas
+City store retains its capability result; each write carries the explicit
+expected and next values. Ambiguous transport/server failures permit one fresh
+exact-value observation, never an automatic second mutation. Unsupported and
+throttled writes remain refusals. Native acceptance separately checks replay,
+conflict, exact receipts and absence of repeated CLI capability probes.

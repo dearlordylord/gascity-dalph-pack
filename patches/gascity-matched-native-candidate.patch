@@ -1681,6 +1681,810 @@ index 0000000..9bff2dc
 +{"seq":2,"beads":[{"id":"gc-1","title":"CITY collision","status":"open","issue_type":"task"},{"id":"gc-2","title":"CITY only","status":"open","issue_type":"task"}],"revisions":{"gc-1":1,"gc-2":1},"revisions_sealed":true}
 +-- city/tributary/.gc/beads.json --
 +{"seq":1,"beads":[{"id":"gc-1","title":"exact RIG","status":"closed","issue_type":"task"}],"revisions":{"gc-1":1},"revisions_sealed":true}
+diff --git a/docs/reference/schema/openapi.json b/docs/reference/schema/openapi.json
+index cc64b6f..bb685dd 100644
+--- a/docs/reference/schema/openapi.json
++++ b/docs/reference/schema/openapi.json
+@@ -1217,6 +1217,104 @@
+         ],
+         "type": "object"
+       },
++      "BeadMetadataCASCapabilityOutputBody": {
++        "additionalProperties": false,
++        "properties": {
++          "capability": {
++            "enum": [
++              "metadata-value-cas-v1"
++            ],
++            "type": "string"
++          },
++          "ok": {
++            "type": "boolean"
++          },
++          "schema_version": {
++            "enum": [
++              "1"
++            ],
++            "type": "string"
++          },
++          "store_ref": {
++            "type": "string"
++          },
++          "supported": {
++            "type": "boolean"
++          }
++        },
++        "required": [
++          "schema_version",
++          "ok",
++          "store_ref",
++          "capability",
++          "supported"
++        ],
++        "type": "object"
++      },
++      "BeadMetadataCASInputBody": {
++        "additionalProperties": false,
++        "properties": {
++          "expected": {
++            "type": "string"
++          },
++          "key": {
++            "type": "string"
++          },
++          "next": {
++            "type": "string"
++          },
++          "store_ref": {
++            "type": "string"
++          }
++        },
++        "required": [
++          "store_ref",
++          "key",
++          "expected",
++          "next"
++        ],
++        "type": "object"
++      },
++      "BeadMetadataCASOutputBody": {
++        "additionalProperties": false,
++        "properties": {
++          "bead_id": {
++            "type": "string"
++          },
++          "key": {
++            "type": "string"
++          },
++          "ok": {
++            "type": "boolean"
++          },
++          "outcome": {
++            "enum": [
++              "swapped",
++              "already_next",
++              "conflict"
++            ],
++            "type": "string"
++          },
++          "schema_version": {
++            "enum": [
++              "1"
++            ],
++            "type": "string"
++          },
++          "store_ref": {
++            "type": "string"
++          }
++        },
++        "required": [
++          "schema_version",
++          "ok",
++          "bead_id",
++          "store_ref",
++          "key",
++          "outcome"
++        ],
++        "type": "object"
++      },
+       "BeadUpdateBody": {
+         "additionalProperties": false,
+         "properties": {
+@@ -30698,6 +30796,179 @@
+         "summary": "Get v0 city by city name bead by ID deps"
+       }
+     },
++    "/v0/city/{cityName}/bead/{id}/metadata-cas": {
++      "post": {
++        "operationId": "post-v0-city-by-city-name-bead-by-id-metadata-cas",
++        "parameters": [
++          {
++            "description": "Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.",
++            "in": "header",
++            "name": "X-GC-Request",
++            "required": true,
++            "schema": {
++              "description": "Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.",
++              "minLength": 1,
++              "type": "string"
++            }
++          },
++          {
++            "description": "City name.",
++            "in": "path",
++            "name": "cityName",
++            "required": true,
++            "schema": {
++              "description": "City name.",
++              "minLength": 1,
++              "pattern": "\\S",
++              "type": "string"
++            }
++          },
++          {
++            "in": "path",
++            "name": "id",
++            "required": true,
++            "schema": {
++              "maxLength": 512,
++              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
++              "type": "string"
++            }
++          }
++        ],
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/BeadMetadataCASInputBody"
++              }
++            }
++          },
++          "required": true
++        },
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/BeadMetadataCASOutputBody"
++                }
++              }
++            },
++            "description": "OK",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "400": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Bad Request",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "401": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Unauthorized",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "403": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Forbidden",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "404": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Not Found",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "422": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Unprocessable Entity",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "500": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Internal Server Error",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "501": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Not Implemented",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          }
++        },
++        "summary": "Post v0 city by city name bead by ID metadata cas"
++      }
++    },
+     "/v0/city/{cityName}/bead/{id}/reopen": {
+       "post": {
+         "operationId": "post-v0-city-by-city-name-bead-by-id-reopen",
+@@ -39505,6 +39776,112 @@
+         "summary": "Get v0 city by city name maintenance status"
+       }
+     },
++    "/v0/city/{cityName}/metadata-cas-capability": {
++      "get": {
++        "operationId": "get-v0-city-by-city-name-metadata-cas-capability",
++        "parameters": [
++          {
++            "description": "City name.",
++            "in": "path",
++            "name": "cityName",
++            "required": true,
++            "schema": {
++              "description": "City name.",
++              "minLength": 1,
++              "pattern": "\\S",
++              "type": "string"
++            }
++          },
++          {
++            "explode": false,
++            "in": "query",
++            "name": "store_ref",
++            "required": true,
++            "schema": {
++              "type": "string"
++            }
++          }
++        ],
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/BeadMetadataCASCapabilityOutputBody"
++                }
++              }
++            },
++            "description": "OK",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "400": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Bad Request",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "422": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Unprocessable Entity",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "500": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Internal Server Error",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "501": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Not Implemented",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          }
++        },
++        "summary": "Get v0 city by city name metadata cas capability"
++      }
++    },
+     "/v0/city/{cityName}/order/history/{bead_id}": {
+       "get": {
+         "operationId": "get-v0-city-by-city-name-order-history-by-bead-id",
+diff --git a/docs/reference/schema/openapi.txt b/docs/reference/schema/openapi.txt
+index cc64b6f..bb685dd 100644
+--- a/docs/reference/schema/openapi.txt
++++ b/docs/reference/schema/openapi.txt
+@@ -1217,6 +1217,104 @@
+         ],
+         "type": "object"
+       },
++      "BeadMetadataCASCapabilityOutputBody": {
++        "additionalProperties": false,
++        "properties": {
++          "capability": {
++            "enum": [
++              "metadata-value-cas-v1"
++            ],
++            "type": "string"
++          },
++          "ok": {
++            "type": "boolean"
++          },
++          "schema_version": {
++            "enum": [
++              "1"
++            ],
++            "type": "string"
++          },
++          "store_ref": {
++            "type": "string"
++          },
++          "supported": {
++            "type": "boolean"
++          }
++        },
++        "required": [
++          "schema_version",
++          "ok",
++          "store_ref",
++          "capability",
++          "supported"
++        ],
++        "type": "object"
++      },
++      "BeadMetadataCASInputBody": {
++        "additionalProperties": false,
++        "properties": {
++          "expected": {
++            "type": "string"
++          },
++          "key": {
++            "type": "string"
++          },
++          "next": {
++            "type": "string"
++          },
++          "store_ref": {
++            "type": "string"
++          }
++        },
++        "required": [
++          "store_ref",
++          "key",
++          "expected",
++          "next"
++        ],
++        "type": "object"
++      },
++      "BeadMetadataCASOutputBody": {
++        "additionalProperties": false,
++        "properties": {
++          "bead_id": {
++            "type": "string"
++          },
++          "key": {
++            "type": "string"
++          },
++          "ok": {
++            "type": "boolean"
++          },
++          "outcome": {
++            "enum": [
++              "swapped",
++              "already_next",
++              "conflict"
++            ],
++            "type": "string"
++          },
++          "schema_version": {
++            "enum": [
++              "1"
++            ],
++            "type": "string"
++          },
++          "store_ref": {
++            "type": "string"
++          }
++        },
++        "required": [
++          "schema_version",
++          "ok",
++          "bead_id",
++          "store_ref",
++          "key",
++          "outcome"
++        ],
++        "type": "object"
++      },
+       "BeadUpdateBody": {
+         "additionalProperties": false,
+         "properties": {
+@@ -30698,6 +30796,179 @@
+         "summary": "Get v0 city by city name bead by ID deps"
+       }
+     },
++    "/v0/city/{cityName}/bead/{id}/metadata-cas": {
++      "post": {
++        "operationId": "post-v0-city-by-city-name-bead-by-id-metadata-cas",
++        "parameters": [
++          {
++            "description": "Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.",
++            "in": "header",
++            "name": "X-GC-Request",
++            "required": true,
++            "schema": {
++              "description": "Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.",
++              "minLength": 1,
++              "type": "string"
++            }
++          },
++          {
++            "description": "City name.",
++            "in": "path",
++            "name": "cityName",
++            "required": true,
++            "schema": {
++              "description": "City name.",
++              "minLength": 1,
++              "pattern": "\\S",
++              "type": "string"
++            }
++          },
++          {
++            "in": "path",
++            "name": "id",
++            "required": true,
++            "schema": {
++              "maxLength": 512,
++              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
++              "type": "string"
++            }
++          }
++        ],
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/BeadMetadataCASInputBody"
++              }
++            }
++          },
++          "required": true
++        },
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/BeadMetadataCASOutputBody"
++                }
++              }
++            },
++            "description": "OK",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "400": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Bad Request",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "401": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Unauthorized",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "403": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Forbidden",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "404": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Not Found",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "422": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Unprocessable Entity",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "500": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Internal Server Error",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "501": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Not Implemented",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          }
++        },
++        "summary": "Post v0 city by city name bead by ID metadata cas"
++      }
++    },
+     "/v0/city/{cityName}/bead/{id}/reopen": {
+       "post": {
+         "operationId": "post-v0-city-by-city-name-bead-by-id-reopen",
+@@ -39505,6 +39776,112 @@
+         "summary": "Get v0 city by city name maintenance status"
+       }
+     },
++    "/v0/city/{cityName}/metadata-cas-capability": {
++      "get": {
++        "operationId": "get-v0-city-by-city-name-metadata-cas-capability",
++        "parameters": [
++          {
++            "description": "City name.",
++            "in": "path",
++            "name": "cityName",
++            "required": true,
++            "schema": {
++              "description": "City name.",
++              "minLength": 1,
++              "pattern": "\\S",
++              "type": "string"
++            }
++          },
++          {
++            "explode": false,
++            "in": "query",
++            "name": "store_ref",
++            "required": true,
++            "schema": {
++              "type": "string"
++            }
++          }
++        ],
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/BeadMetadataCASCapabilityOutputBody"
++                }
++              }
++            },
++            "description": "OK",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "400": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Bad Request",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "422": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Unprocessable Entity",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "500": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Internal Server Error",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "501": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Not Implemented",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          }
++        },
++        "summary": "Get v0 city by city name metadata cas capability"
++      }
++    },
+     "/v0/city/{cityName}/order/history/{bead_id}": {
+       "get": {
+         "operationId": "get-v0-city-by-city-name-order-history-by-bead-id",
 diff --git a/go.mod b/go.mod
 index 645d082..d5a0fe4 100644
 --- a/go.mod
@@ -2039,6 +2843,1030 @@ index 8559f96..9cbdbd5 100644
  gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
  gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
  gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+diff --git a/internal/api/AGENTS.md b/internal/api/AGENTS.md
+index c9e3606..b279110 100644
+--- a/internal/api/AGENTS.md
++++ b/internal/api/AGENTS.md
+@@ -61,3 +61,17 @@ a sanctioned bypass of the worker boundary. Do not add others; see
+   changes (a manual step, not a CI gate); use
+   `npm run preview -- --host 127.0.0.1 --port <port>` from
+   `internal/api/dashboardspa/web/frontend` after `make dashboard-build-npm`
++
++## Exact scoped metadata CAS
++
++`huma_metadata_cas.go` exposes the existing value-CAS via a required local
++`store_ref`. Reuse controller-owned handles and their capability probes; never
++open a per-request replacement or fall back to another store. False-CAS
++classification reads the same authoritative backing, not a cached projection.
++Keep explicit empty values, exact CLI-compatible receipts, unsupported refusal,
++and the ordinary mutation admission middleware. Capability GET is read-only.
++
++Metadata keys use the intersection of the scoped CLI token grammar and the
++pinned bd metadata grammar: `[A-Za-z][A-Za-z0-9_.]{0,255}`. Reject keys
++outside that set before accessing a store. Revision tokens remain signed int64;
++a negative token is not evidence of overflow or a different storage authority.
+diff --git a/internal/api/BUILD.bazel b/internal/api/BUILD.bazel
+index 2dc084e..33fd54e 100644
+--- a/internal/api/BUILD.bazel
++++ b/internal/api/BUILD.bazel
+@@ -70,6 +70,7 @@ go_library(
+         "huma_enums.go",
+         "huma_handlers_agents.go",
+         "huma_handlers_beads.go",
++        "huma_metadata_cas.go",
+         "huma_handlers_city.go",
+         "huma_handlers_config.go",
+         "huma_handlers_convoys.go",
+@@ -311,6 +312,7 @@ go_test(
+         "handler_beads_partial_prime_test.go",
+         "handler_beads_partial_test.go",
+         "handler_beads_test.go",
++        "huma_metadata_cas_test.go",
+         "handler_city_test.go",
+         "handler_config_test.go",
+         "handler_convoy_dispatch_test.go",
+diff --git a/internal/api/genclient/client_gen.go b/internal/api/genclient/client_gen.go
+index 3f68b0fe11867e1ae491f4438e9411180864f322..21de0cb26f07260515790f583882c747c785b21a 100644
+GIT binary patch
+delta 5409
+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
+
+delta 537
+zcmZqbu6g&NYQq-h&6?cn)-*5L-@a%+BM>tIF*6Xe05R+KMf=&}ou|v^2=Z(%XJO}#
+zn*P99Qe=8PlK|Uv&i`x@(*?G$3q!;{hp<Z_$#w>_^KEBMV1Jr6{X;Ro==6Y->}t~k
+zmPqimE1X~lVh$kY1Y#~A<_2P(?FuJ&3y*`WV%vUaBHs>IuwmQh-r&of1QE^4=ifB}
+zV#T=|e2b_3=U0R9{sakgwEt%k*#4hMP%VD?`wLPW)9nlRS*J^!649BSkk8N8J~vx%
+z``m1ymk+=?+S`JJfmmdFTaf7dV6f@a1y+jkO!xgNDhJlE9mv%W1}WB<uCP;76vR@P
+zp8rKuefl03$$8TYZt%%X-;lu0Hr>w+7$9IJ7b1nZL0q2c3m%A?OfRUDG@1Uv7sxGG
+zCBr}c!%;q|=>~b?Lem{QKtcFTR1D1B{@}mp&$S>&^G`ojC0;ZwP<;0E4U5G3r*Bv(
+zCJhqjo6e;yv26N-2yv0=8!k$TP0y?ss|AIn*!HR|V$ACxfv|6}3`hIyRPpVzQzh(7
+w5q{c!cD}@ch3!E1Z-3w{mDk)3G;#U+3(}{Nw7pv-)BbLe?Dlty<fbG609*CiT>t<8
+
+diff --git a/internal/api/huma_metadata_cas.go b/internal/api/huma_metadata_cas.go
+new file mode 100644
+index 0000000..db9208f
+--- /dev/null
++++ b/internal/api/huma_metadata_cas.go
+@@ -0,0 +1,208 @@
++package api
++
++import (
++	"context"
++	"errors"
++	"fmt"
++	"strings"
++	"unicode/utf8"
++
++	"github.com/gastownhall/gascity/internal/api/apierr"
++	"github.com/gastownhall/gascity/internal/beads"
++)
++
++// BeadMetadataCASInput projects the existing exact-store metadata value-CAS.
++// Pointers preserve required presence independently of the legal empty value.
++type BeadMetadataCASInput struct {
++	CityScope
++	ID   string `path:"id" maxLength:"512" pattern:"^[A-Za-z0-9][A-Za-z0-9._-]*$"`
++	Body struct {
++		StoreRef *string `json:"store_ref" nullable:"false"`
++		Key      *string `json:"key" nullable:"false"`
++		Expected *string `json:"expected" nullable:"false"`
++		Next     *string `json:"next" nullable:"false"`
++	}
++}
++
++// BeadMetadataCASOutput is byte-shape compatible with gc beads metadata-cas.
++// Conflict is a successful observation, not an acknowledgement of a write.
++type BeadMetadataCASOutput struct {
++	Body struct {
++		SchemaVersion string                   `json:"schema_version" enum:"1"`
++		OK            bool                     `json:"ok"`
++		BeadID        string                   `json:"bead_id"`
++		StoreRef      string                   `json:"store_ref"`
++		Key           string                   `json:"key"`
++		Outcome       beads.MetadataCASOutcome `json:"outcome" enum:"swapped,already_next,conflict"`
++	}
++}
++
++func metadataCASToken(value string, limit int) bool {
++	if len(value) == 0 || len(value) > limit {
++		return false
++	}
++	for i, c := range []byte(value) {
++		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' {
++			continue
++		}
++		if i > 0 && (c == '.' || c == '_' || c == '-') {
++			continue
++		}
++		return false
++	}
++	return true
++}
++
++// metadataCASKey is the common key spelling accepted by the scoped GC CLI
++// and the pinned bd write leaf. GC's token grammar alone permits hyphens and
++// leading digits that bd refuses; reject those before any store operation.
++func metadataCASKey(value string) bool {
++	if !metadataCASToken(value, 256) || strings.Contains(value, "-") {
++		return false
++	}
++	first := value[0]
++	return first >= 'a' && first <= 'z' || first >= 'A' && first <= 'Z'
++}
++
++// metadataCASStore pins one controller-owned store. It neither opens nor closes
++// handles: the controller retains their capability cache and lifecycle ownership.
++func (s *Server) metadataCASStore(ref string) (beads.Store, error) {
++	kind, name, ok := strings.Cut(ref, ":")
++	if !ok || !metadataCASToken(name, 255) {
++		return nil, apierr.InvalidRequest.Msg("invalid store_ref")
++	}
++	var store beads.Store
++	switch kind {
++	case "city":
++		if name != s.state.CityName() {
++			return nil, apierr.InvalidRequest.Msg("store_ref names another city")
++		}
++		store = s.state.CityBeadStore()
++	case "rig":
++		cfg := s.state.Config()
++		if cfg == nil {
++			return nil, apierr.Internal.Msg("city configuration unavailable")
++		}
++		found := false
++		for _, rig := range cfg.Rigs {
++			if rig.Name == name && strings.TrimSpace(rig.Path) != "" {
++				found = true
++				break
++			}
++		}
++		if !found {
++			return nil, apierr.InvalidRequest.Msg("store_ref names an unconfigured local rig")
++		}
++		store = s.state.BeadStore(name)
++	default:
++		return nil, apierr.InvalidRequest.Msg("store_ref requires city:<name> or rig:<name>")
++	}
++	if store == nil {
++		return nil, apierr.Internal.Msg("exact store unavailable")
++	}
++	return store, nil
++}
++
++// metadataCASFreshStore keeps writes through the declared capability (including
++// cache invalidation and the existing conditional write-leaf policy), while
++// false-CAS classification reads the same held store below projection caches.
++type metadataCASFreshStore struct{ beads.Store }
++
++func (s metadataCASFreshStore) CompareAndSetMetadataKey(id, key, expected, next string) (bool, error) {
++	writer, ok := beads.MetadataCASWriterFor(s.Store)
++	if !ok {
++		return false, beads.ErrConditionalWriteUnsupported
++	}
++	return writer.CompareAndSetMetadataKey(id, key, expected, next)
++}
++func (s metadataCASFreshStore) Get(id string) (beads.Bead, error) {
++	store := s.Store
++	for range 16 {
++		switch current := store.(type) {
++		case *beads.CachingStore:
++			store = current.Backing()
++		case beads.ConditionalWritesResolveTargeter:
++			store = current.ConditionalWritesResolveTarget()
++		default:
++			b, err := store.Get(id)
++			if err == nil && b.ID != id {
++				return beads.Bead{}, fmt.Errorf("exact store returned another bead")
++			}
++			return b, err
++		}
++		if store == nil {
++			return beads.Bead{}, fmt.Errorf("exact store backing unavailable")
++		}
++	}
++	return beads.Bead{}, fmt.Errorf("exact store wrapper chain unresolved")
++}
++
++func (s *Server) humaHandleBeadMetadataCAS(_ context.Context, input *BeadMetadataCASInput) (*BeadMetadataCASOutput, error) {
++	b := input.Body
++	if b.StoreRef == nil || b.Key == nil || b.Expected == nil || b.Next == nil {
++		return nil, apierr.InvalidRequest.Msg("store_ref, key, expected and next are required")
++	}
++	if !metadataCASToken(input.ID, 512) || !metadataCASKey(*b.Key) {
++		return nil, apierr.InvalidRequest.Msg("invalid bead id or metadata key")
++	}
++	if !utf8.ValidString(*b.Expected) || !utf8.ValidString(*b.Next) || len(*b.Expected) > 64*1024 || len(*b.Next) > 64*1024 {
++		return nil, apierr.InvalidRequest.Msg("metadata values must be UTF-8 and at most 65536 bytes")
++	}
++	store, err := s.metadataCASStore(*b.StoreRef)
++	if err != nil {
++		return nil, err
++	}
++	outcome, err := beads.ApplyMetadataCAS(metadataCASFreshStore{store}, input.ID, *b.Key, *b.Expected, *b.Next)
++	if err != nil {
++		if errors.Is(err, beads.ErrConditionalWriteUnsupported) {
++			return nil, apierr.NotImplemented.Msg(err.Error())
++		}
++		if errors.Is(err, beads.ErrNotFound) {
++			return nil, apierr.BeadNotFound.Msg(err.Error())
++		}
++		return nil, apierr.Internal.Msg(err.Error())
++	}
++	out := &BeadMetadataCASOutput{}
++	out.Body.SchemaVersion = "1"
++	out.Body.OK = true
++	out.Body.BeadID = input.ID
++	out.Body.StoreRef = *b.StoreRef
++	out.Body.Key = *b.Key
++	out.Body.Outcome = outcome
++	return out, nil
++}
++
++// BeadMetadataCASCapabilityInput selects exactly the same held store as POST.
++type BeadMetadataCASCapabilityInput struct {
++	CityScope
++	StoreRef string `query:"store_ref" required:"true"`
++}
++type BeadMetadataCASCapabilityOutput struct {
++	Body struct {
++		SchemaVersion string `json:"schema_version" enum:"1"`
++		OK            bool   `json:"ok"`
++		StoreRef      string `json:"store_ref"`
++		Capability    string `json:"capability" enum:"metadata-value-cas-v1"`
++		Supported     bool   `json:"supported"`
++	}
++}
++
++func (s *Server) humaHandleMetadataCASCapability(_ context.Context, input *BeadMetadataCASCapabilityInput) (*BeadMetadataCASCapabilityOutput, error) {
++	store, err := s.metadataCASStore(input.StoreRef)
++	if err != nil {
++		return nil, err
++	}
++	if err := beads.ProbeMetadataCAS(store); err != nil {
++		if errors.Is(err, beads.ErrConditionalWriteUnsupported) {
++			return nil, apierr.NotImplemented.Msg(err.Error())
++		}
++		return nil, apierr.Internal.Msg(err.Error())
++	}
++	out := &BeadMetadataCASCapabilityOutput{}
++	out.Body.SchemaVersion = "1"
++	out.Body.OK = true
++	out.Body.StoreRef = input.StoreRef
++	out.Body.Capability = "metadata-value-cas-v1"
++	out.Body.Supported = true
++	return out, nil
++}
+diff --git a/internal/api/huma_metadata_cas_test.go b/internal/api/huma_metadata_cas_test.go
+new file mode 100644
+index 0000000..a82152b
+--- /dev/null
++++ b/internal/api/huma_metadata_cas_test.go
+@@ -0,0 +1,292 @@
++package api
++
++import (
++	"context"
++	"encoding/json"
++	"errors"
++	"fmt"
++	"github.com/gastownhall/gascity/internal/beads"
++	"net/http"
++	"net/http/httptest"
++	"strconv"
++	"strings"
++	"testing"
++)
++
++func TestMetadataCASHTTPRequiresExactScope(t *testing.T) {
++	state := newFakeState(t)
++	h := newTestCityHandler(t, state)
++	req := httptest.NewRequest(http.MethodPost, cityURL(state, "/bead/gc-1/metadata-cas"), strings.NewReader(`{"store_ref":"rig:foreign","key":"k","expected":"","next":"v"}`))
++	req.Header.Set("Content-Type", "application/json")
++	req.Header.Set("X-GC-Request", "1")
++	rec := httptest.NewRecorder()
++	h.ServeHTTP(rec, req)
++	if rec.Code != http.StatusBadRequest {
++		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
++	}
++}
++
++func casHTTP(t *testing.T, h http.Handler, state State, id, body string) *httptest.ResponseRecorder {
++	t.Helper()
++	req := httptest.NewRequest(http.MethodPost, cityURL(state, "/bead/"+id+"/metadata-cas"), strings.NewReader(body))
++	req.Header.Set("Content-Type", "application/json")
++	req.Header.Set("X-GC-Request", "1")
++	rec := httptest.NewRecorder()
++	h.ServeHTTP(rec, req)
++	return rec
++}
++func casBody(ref, expected, next string) string {
++	b, _ := json.Marshal(struct {
++		StoreRef string `json:"store_ref"`
++		Key      string `json:"key"`
++		Expected string `json:"expected"`
++		Next     string `json:"next"`
++	}{ref, "k", expected, next})
++	return string(b)
++}
++func requireCAS(t *testing.T, rec *httptest.ResponseRecorder, id, ref, outcome string) {
++	t.Helper()
++	if rec.Code != http.StatusOK {
++		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
++	}
++	var got struct {
++		SchemaVersion string `json:"schema_version"`
++		OK            bool   `json:"ok"`
++		BeadID        string `json:"bead_id"`
++		StoreRef      string `json:"store_ref"`
++		Key           string `json:"key"`
++		Outcome       string `json:"outcome"`
++	}
++	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
++		t.Fatal(err)
++	}
++	if got.SchemaVersion != "1" || !got.OK || got.BeadID != id || got.StoreRef != ref || got.Key != "k" || got.Outcome != outcome {
++		t.Fatalf("receipt=%+v", got)
++	}
++}
++func TestMetadataCASHTTPScopeReplayAndConflict(t *testing.T) {
++	state := newFakeState(t)
++	city := beads.NewMemStore()
++	state.cityBeadStore = city
++	row, err := state.stores["myrig"].Create(beads.Bead{Title: "task", Metadata: map[string]string{"retained": "original"}})
++	if err != nil {
++		t.Fatal(err)
++	}
++	shadow, err := city.Create(beads.Bead{Title: "foreign", Metadata: map[string]string{"k": "foreign"}})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if shadow.ID != row.ID {
++		t.Fatal("fixture needs colliding IDs")
++	}
++	h := newTestCityHandler(t, state)
++	for _, step := range []struct{ expected, next, outcome string }{{"", "v", "swapped"}, {"", "v", "already_next"}, {"", "other", "conflict"}, {"v", "", "swapped"}, {"", "again", "swapped"}} {
++		requireCAS(t, casHTTP(t, h, state, row.ID, casBody("rig:myrig", step.expected, step.next)), row.ID, "rig:myrig", step.outcome)
++	}
++	fresh, _ := city.Get(row.ID)
++	if fresh.Metadata["k"] != "foreign" {
++		t.Fatal("foreign store mutated")
++	}
++	fresh, _ = state.stores["myrig"].Get(row.ID)
++	if fresh.Metadata["retained"] != "original" {
++		t.Fatal("unrelated metadata changed")
++	}
++	requireCAS(t, casHTTP(t, h, state, row.ID, casBody("city:test-city", "foreign", "city-value")), row.ID, "city:test-city", "swapped")
++}
++func TestMetadataCASHTTPPresenceAndUnavailable(t *testing.T) {
++	state := newFakeState(t)
++	h := newTestCityHandler(t, state)
++	for _, body := range []string{`{}`, `{"store_ref":"rig:myrig","key":"k","next":"v"}`, `{"store_ref":"rig:myrig","key":"k","expected":null,"next":"v"}`, casBody("city:foreign", "", "v"), casBody("rig:missing", "", "v")} {
++		rec := casHTTP(t, h, state, "gc-1", body)
++		if rec.Code < 400 {
++			t.Fatalf("accepted %s", body)
++		}
++	}
++	rec := casHTTP(t, h, state, "gc-missing", casBody("rig:myrig", "", "v"))
++	if rec.Code != 404 {
++		t.Fatalf("missing=%d %s", rec.Code, rec.Body.String())
++	}
++	state.stores["myrig"] = nil
++	rec = casHTTP(t, h, state, "gc-1", casBody("rig:myrig", "", "v"))
++	if rec.Code < 500 {
++		t.Fatalf("unavailable=%d", rec.Code)
++	}
++}
++
++type casLostStore struct {
++	beads.Store
++	lost bool
++}
++
++func (s *casLostStore) CompareAndSetMetadataKey(id, key, expected, next string) (bool, error) {
++	w, _ := beads.MetadataCASWriterFor(s.Store)
++	swapped, err := w.CompareAndSetMetadataKey(id, key, expected, next)
++	if err == nil && swapped && !s.lost {
++		s.lost = true
++		return false, errors.New("response lost after commit")
++	}
++	return swapped, err
++}
++func TestMetadataCASHTTPLostResponseIsNotAcknowledged(t *testing.T) {
++	state := newFakeState(t)
++	base := state.stores["myrig"]
++	row, _ := base.Create(beads.Bead{Title: "task"})
++	state.stores["myrig"] = &casLostStore{Store: base}
++	h := newTestCityHandler(t, state)
++	rec := casHTTP(t, h, state, row.ID, casBody("rig:myrig", "", "v"))
++	if rec.Code < 500 {
++		t.Fatal("ambiguous response acknowledged")
++	}
++	requireCAS(t, casHTTP(t, h, state, row.ID, casBody("rig:myrig", "", "v")), row.ID, "rig:myrig", "already_next")
++}
++func TestMetadataCASHTTPFreshClassificationThroughCache(t *testing.T) {
++	state := newFakeState(t)
++	base := state.stores["myrig"]
++	row, _ := base.Create(beads.Bead{Title: "task", Metadata: map[string]string{"k": "stale"}})
++	cache := beads.NewCachingStore(base, nil)
++	if err := cache.Prime(context.Background()); err != nil {
++		t.Fatal(err)
++	}
++	state.stores["myrig"] = cache
++	if err := base.SetMetadata(row.ID, "k", "fresh"); err != nil {
++		t.Fatal(err)
++	}
++	h := newTestCityHandler(t, state)
++	requireCAS(t, casHTTP(t, h, state, row.ID, casBody("rig:myrig", "", "fresh")), row.ID, "rig:myrig", "already_next")
++	requireCAS(t, casHTTP(t, h, state, row.ID, casBody("rig:myrig", "", "stale")), row.ID, "rig:myrig", "conflict")
++}
++func TestMetadataCASHTTPHeldBdStoreProbesOnceAndReplacementReprobes(t *testing.T) {
++	for _, id := range []string{"fi-one", "fi-wisp-one"} {
++		t.Run(id, func(t *testing.T) {
++			state := newFakeState(t)
++			probes, writes := 0, 0
++			value := ""
++			revision := int64(-7151513277199971023)
++			runner := func(_ string, _ string, args ...string) ([]byte, error) {
++				if len(args) > 1 && args[1] == "--help" {
++					probes++
++					return []byte("--if-revision"), nil
++				}
++				switch args[0] {
++				case "show":
++					return []byte(fmt.Sprintf(`[{"id":%q,"status":"open","revision":"%d","metadata":{"k":%q}}]`, id, revision, value)), nil
++				case "update":
++					found := false
++					for i, a := range args {
++						if a == "--if-revision" {
++							found = true
++							if args[i+1] != strconv.FormatInt(revision, 10) {
++								t.Fatal("wrong fence")
++							}
++						}
++						if a == "--set-metadata" {
++							value = strings.TrimPrefix(args[i+1], "k=")
++						}
++					}
++					if !found {
++						t.Fatal("unfenced write")
++					}
++					writes++
++					revision++
++					return []byte(`[]`), nil
++				default:
++					t.Fatalf("unexpected command %v", args)
++					return nil, nil
++				}
++			}
++			state.stores["myrig"] = beads.NewBdStore("/owned-rig", runner)
++			h := newTestCityHandler(t, state)
++			capability := func() {
++				t.Helper()
++				r := httptest.NewRecorder()
++				h.ServeHTTP(r, httptest.NewRequest("GET", cityURL(state, "/metadata-cas-capability?store_ref=rig:myrig"), nil))
++				if r.Code != 200 || !strings.Contains(r.Body.String(), `"capability":"metadata-value-cas-v1"`) {
++					t.Fatalf("capability %d %s", r.Code, r.Body.String())
++				}
++			}
++			capability()
++			requireCAS(t, casHTTP(t, h, state, id, casBody("rig:myrig", "", "v")), id, "rig:myrig", "swapped")
++			requireCAS(t, casHTTP(t, h, state, id, casBody("rig:myrig", "", "v")), id, "rig:myrig", "already_next")
++			capability()
++			if probes != 4 || writes != 1 {
++				t.Fatalf("probes=%d writes=%d", probes, writes)
++			}
++			state.stores["myrig"] = beads.NewBdStore("/owned-rig", runner)
++			capability()
++			if probes != 8 {
++				t.Fatalf("replacement probes=%d", probes)
++			}
++
++		})
++	}
++}
++
++func TestMetadataCASHTTPUnsupportedRuntimeLatchAndEphemeralID(t *testing.T) {
++	state := newFakeState(t)
++	probes, writes := 0, 0
++	state.stores["myrig"] = beads.NewBdStore("/owned-rig", func(_ string, _ string, args ...string) ([]byte, error) {
++		if len(args) > 1 && args[1] == "--help" {
++			probes++
++			return []byte("--if-revision"), nil
++		}
++		if args[0] == "show" {
++			return []byte(`[{"id":"fi-wisp-one","status":"open","revision":1,"metadata":{}}]`), nil
++		}
++		if args[0] == "update" {
++			writes++
++			return nil, errors.New("exit status 1: unknown flag: --if-revision")
++		}
++		t.Fatalf("unexpected %v", args)
++		return nil, nil
++	})
++	h := newTestCityHandler(t, state)
++	for range 2 {
++		rec := casHTTP(t, h, state, "fi-wisp-one", casBody("rig:myrig", "", "v"))
++		if rec.Code != 501 {
++			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
++		}
++	}
++	rec := httptest.NewRecorder()
++	h.ServeHTTP(rec, httptest.NewRequest("GET", cityURL(state, "/metadata-cas-capability?store_ref=rig:myrig"), nil))
++	if rec.Code != 501 || probes != 4 || writes != 1 {
++		t.Fatalf("capability status=%d probes=%d writes=%d", rec.Code, probes, writes)
++	}
++}
++func TestMetadataCASHTTPMutationAdmission(t *testing.T) {
++	state := newFakeState(t)
++	row, _ := state.stores["myrig"].Create(beads.Bead{Title: "task"})
++	for i, h := range []http.Handler{newTestCityHandler(t, state), newTestCityHandlerReadOnly(t, state)} {
++		req := httptest.NewRequest("POST", cityURL(state, "/bead/"+row.ID+"/metadata-cas"), strings.NewReader(casBody("rig:myrig", "", "v")))
++		req.Header.Set("Content-Type", "application/json")
++		if i == 1 {
++			req.Header.Set("X-GC-Request", "1")
++		}
++		rec := httptest.NewRecorder()
++		h.ServeHTTP(rec, req)
++		if rec.Code != 403 {
++			t.Fatalf("unguarded status=%d body=%s", rec.Code, rec.Body.String())
++		}
++	}
++	fresh, _ := state.stores["myrig"].Get(row.ID)
++	if fresh.Metadata["k"] != "" {
++		t.Fatal("admission bypassed")
++	}
++}
++
++func TestMetadataCASHTTPRefusesKeysRejectedByBDWithoutStoreEffects(t *testing.T) {
++	state := newFakeState(t)
++	state.stores["myrig"] = beads.NewBdStore("/owned-rig", func(string, string, ...string) ([]byte, error) { t.Fatal("invalid key reached store"); return nil, nil })
++	h := newTestCityHandler(t, state)
++	for _, key := range []string{"dalph.http-proof", "7key", "_key", "path/key", "", "a b"} {
++		body, _ := json.Marshal(struct {
++			StoreRef string `json:"store_ref"`
++			Key      string `json:"key"`
++			Expected string `json:"expected"`
++			Next     string `json:"next"`
++		}{"rig:myrig", key, "", "value"})
++		rec := casHTTP(t, h, state, "fi-one", string(body))
++		if rec.Code != 400 {
++			t.Fatalf("key=%q status=%d body=%s", key, rec.Code, rec.Body.String())
++		}
++	}
++}
+diff --git a/internal/api/openapi.json b/internal/api/openapi.json
+index cc64b6f..bb685dd 100644
+--- a/internal/api/openapi.json
++++ b/internal/api/openapi.json
+@@ -1217,6 +1217,104 @@
+         ],
+         "type": "object"
+       },
++      "BeadMetadataCASCapabilityOutputBody": {
++        "additionalProperties": false,
++        "properties": {
++          "capability": {
++            "enum": [
++              "metadata-value-cas-v1"
++            ],
++            "type": "string"
++          },
++          "ok": {
++            "type": "boolean"
++          },
++          "schema_version": {
++            "enum": [
++              "1"
++            ],
++            "type": "string"
++          },
++          "store_ref": {
++            "type": "string"
++          },
++          "supported": {
++            "type": "boolean"
++          }
++        },
++        "required": [
++          "schema_version",
++          "ok",
++          "store_ref",
++          "capability",
++          "supported"
++        ],
++        "type": "object"
++      },
++      "BeadMetadataCASInputBody": {
++        "additionalProperties": false,
++        "properties": {
++          "expected": {
++            "type": "string"
++          },
++          "key": {
++            "type": "string"
++          },
++          "next": {
++            "type": "string"
++          },
++          "store_ref": {
++            "type": "string"
++          }
++        },
++        "required": [
++          "store_ref",
++          "key",
++          "expected",
++          "next"
++        ],
++        "type": "object"
++      },
++      "BeadMetadataCASOutputBody": {
++        "additionalProperties": false,
++        "properties": {
++          "bead_id": {
++            "type": "string"
++          },
++          "key": {
++            "type": "string"
++          },
++          "ok": {
++            "type": "boolean"
++          },
++          "outcome": {
++            "enum": [
++              "swapped",
++              "already_next",
++              "conflict"
++            ],
++            "type": "string"
++          },
++          "schema_version": {
++            "enum": [
++              "1"
++            ],
++            "type": "string"
++          },
++          "store_ref": {
++            "type": "string"
++          }
++        },
++        "required": [
++          "schema_version",
++          "ok",
++          "bead_id",
++          "store_ref",
++          "key",
++          "outcome"
++        ],
++        "type": "object"
++      },
+       "BeadUpdateBody": {
+         "additionalProperties": false,
+         "properties": {
+@@ -30698,6 +30796,179 @@
+         "summary": "Get v0 city by city name bead by ID deps"
+       }
+     },
++    "/v0/city/{cityName}/bead/{id}/metadata-cas": {
++      "post": {
++        "operationId": "post-v0-city-by-city-name-bead-by-id-metadata-cas",
++        "parameters": [
++          {
++            "description": "Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.",
++            "in": "header",
++            "name": "X-GC-Request",
++            "required": true,
++            "schema": {
++              "description": "Anti-CSRF header required on mutation requests. Any non-empty value is accepted; the header's presence is what the server checks.",
++              "minLength": 1,
++              "type": "string"
++            }
++          },
++          {
++            "description": "City name.",
++            "in": "path",
++            "name": "cityName",
++            "required": true,
++            "schema": {
++              "description": "City name.",
++              "minLength": 1,
++              "pattern": "\\S",
++              "type": "string"
++            }
++          },
++          {
++            "in": "path",
++            "name": "id",
++            "required": true,
++            "schema": {
++              "maxLength": 512,
++              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
++              "type": "string"
++            }
++          }
++        ],
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/BeadMetadataCASInputBody"
++              }
++            }
++          },
++          "required": true
++        },
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/BeadMetadataCASOutputBody"
++                }
++              }
++            },
++            "description": "OK",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "400": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Bad Request",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "401": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Unauthorized",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "403": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Forbidden",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "404": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Not Found",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "422": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Unprocessable Entity",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "500": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Internal Server Error",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "501": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Not Implemented",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          }
++        },
++        "summary": "Post v0 city by city name bead by ID metadata cas"
++      }
++    },
+     "/v0/city/{cityName}/bead/{id}/reopen": {
+       "post": {
+         "operationId": "post-v0-city-by-city-name-bead-by-id-reopen",
+@@ -39505,6 +39776,112 @@
+         "summary": "Get v0 city by city name maintenance status"
+       }
+     },
++    "/v0/city/{cityName}/metadata-cas-capability": {
++      "get": {
++        "operationId": "get-v0-city-by-city-name-metadata-cas-capability",
++        "parameters": [
++          {
++            "description": "City name.",
++            "in": "path",
++            "name": "cityName",
++            "required": true,
++            "schema": {
++              "description": "City name.",
++              "minLength": 1,
++              "pattern": "\\S",
++              "type": "string"
++            }
++          },
++          {
++            "explode": false,
++            "in": "query",
++            "name": "store_ref",
++            "required": true,
++            "schema": {
++              "type": "string"
++            }
++          }
++        ],
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/BeadMetadataCASCapabilityOutputBody"
++                }
++              }
++            },
++            "description": "OK",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "400": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Bad Request",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "422": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Unprocessable Entity",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "500": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Internal Server Error",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          },
++          "501": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorModel"
++                }
++              }
++            },
++            "description": "Not Implemented",
++            "headers": {
++              "X-GC-Request-Id": {
++                "$ref": "#/components/headers/X-GC-Request-Id"
++              }
++            }
++          }
++        },
++        "summary": "Get v0 city by city name metadata cas capability"
++      }
++    },
+     "/v0/city/{cityName}/order/history/{bead_id}": {
+       "get": {
+         "operationId": "get-v0-city-by-city-name-order-history-by-bead-id",
+diff --git a/internal/api/supervisor_city_routes.go b/internal/api/supervisor_city_routes.go
+index ed7c099..bfaebeb 100644
+--- a/internal/api/supervisor_city_routes.go
++++ b/internal/api/supervisor_city_routes.go
+@@ -212,6 +212,8 @@ func (sm *SupervisorMux) registerCityRoutes() {
+ 	cityPost(sm, "/bead/{id}/close", (*Server).humaHandleBeadClose, errorStatuses(http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict))
+ 	cityPost(sm, "/bead/{id}/reopen", (*Server).humaHandleBeadReopen, errorStatuses(http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict))
+ 	cityPost(sm, "/bead/{id}/update", (*Server).humaHandleBeadUpdate, errorStatuses(http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict))
++	cityGet(sm, "/metadata-cas-capability", (*Server).humaHandleMetadataCASCapability, errorStatuses(http.StatusBadRequest, http.StatusNotImplemented))
++	cityPost(sm, "/bead/{id}/metadata-cas", (*Server).humaHandleBeadMetadataCAS, errorStatuses(http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusNotImplemented))
+ 	cityPatch(sm, "/bead/{id}", (*Server).humaHandleBeadUpdate, errorStatuses(http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict))
+ 	cityPost(sm, "/bead/{id}/assign", (*Server).humaHandleBeadAssign, errorStatuses(http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict))
+ 	cityDelete(sm, "/bead/{id}", (*Server).humaHandleBeadDelete, errorStatuses(http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict),
 diff --git a/internal/beads/BUILD.bazel b/internal/beads/BUILD.bazel
 index 90959d5..4a8187b 100644
 --- a/internal/beads/BUILD.bazel
@@ -2169,6 +3997,38 @@ index 0bff391..3c54dfd 100644
 +		return beads.ExecCommandRunnerWithExactEnvContext(ctx, beadstest.BdSubprocessEnv(env))(dir, name, args...)
 +	}
  }
+diff --git a/internal/beads/metadata_cas.go b/internal/beads/metadata_cas.go
+index 9fbab22..2a10ca2 100644
+--- a/internal/beads/metadata_cas.go
++++ b/internal/beads/metadata_cas.go
+@@ -160,3 +160,27 @@ func ApplyMetadataCAS(store Store, id, key, expected, next string) (MetadataCASO
+ 	}
+ 	return MetadataCASConflict, nil
+ }
++
++// ProbeMetadataCAS verifies the existing narrow value-CAS capability without a
++// mutation. BdStore retains its normal per-instance four-verb probe and runtime
++// unsupported latch; no successful result is persisted across store lifetimes.
++func ProbeMetadataCAS(store Store) error {
++	if _, ok := MetadataCASWriterFor(store); !ok {
++		return ErrConditionalWriteUnsupported
++	}
++	store = followConditionalWritesResolveTarget(store)
++	if cached, ok := store.(*CachingStore); ok {
++		return ProbeMetadataCAS(cached.Backing())
++	}
++	if live, ok := store.(conditionalWritesLiveness); ok {
++		if err := live.conditionalWritesStoreOpen(); err != nil {
++			return err
++		}
++	}
++	if probe, ok := store.(conditionalWriteCapabilityProber); ok {
++		if capable, reason := probe.probeConditionalWriteCapability(); !capable {
++			return fmt.Errorf("%w: %s", ErrConditionalWriteUnsupported, reason)
++		}
++	}
++	return nil
++}
 diff --git a/internal/beads/metadata_many.go b/internal/beads/metadata_many.go
 new file mode 100644
 index 0000000..386795e

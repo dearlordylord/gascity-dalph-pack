@@ -985,3 +985,32 @@ also observes one marker-update subprocess for the cooked graph and a returned
 cook response within the existing 30-second command budget. The complete pack
 still requires the whole 600-second qualification; these focused controls do
 not substitute for it.
+
+## Public scoped metadata CAS transport (S9/S11)
+
+Gas City is serving an initialized local CITY and RIG through its held stores.
+The pack records one workflow fact with an exact store locator, bead identity,
+key, expected value and next value. It sends one public HTTP metadata-CAS
+request with the existing mutation header, through scoped Effect HttpClient.
+The server uses the same conditional mutation and owning policy/write leaf as
+the CLI; it may reuse that held store's capability probe. Explicit empty expected
+values remain distinct from a missing request field. Missing/foreign locators,
+missing beads and malformed requests refuse before mutation or fallback search.
+
+A successful response retains the existing exact CAS receipt and its swapped,
+already_next or conflict result. already_next requires a fresh authoritative
+read from the same store; stale cached metadata cannot acknowledge a write.
+The existing client guard for a present empty fact remains mandatory. Dropped
+responses after a commit stay ambiguous and are reconciled by the existing
+exact-value observation; they never authorize a blind mutation retry. Unsupported
+runtime capability remains a refusal, including after a previously valid probe.
+Restart/reload creates a new store and requires its own capability verification;
+no permanent capability file or bypass flag is introduced.
+
+Controlled SDK HTTP tests must cover two requests sharing one probe, store
+replacement, persistent/ephemeral rows, duplicate IDs in another store, fresh
+replay/conflict, commit followed by response loss and runtime unsupported errors.
+Pack tests retain strict receipt ownership/schema validation and ambiguity
+reconciliation. Focused native evidence compares repeated --help subprocess
+counts for the same sequence of conditional writes. Full acceptance and the
+600-second deadline remain mandatory; no HTTP transport pass closes them.

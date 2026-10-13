@@ -9,6 +9,8 @@ const DISPLAY_DECIMALS = 2
 const STATIC_CONCURRENCY = 2
 const STATIC_START = 2
 const STATIC_END = 7
+const CONTROLLED_END = 11
+const CONTROLLED_CONCURRENCY = 2
 const stages = [
   "verify:effect-cohort",
   "build",
@@ -64,7 +66,12 @@ export const makeQualityGate =
         concurrency: STATIC_CONCURRENCY,
         discard: true
       })
-      for (const stage of selected.slice(STATIC_END)) yield* runStage(stage)
+      // Coverage and example checks own separate artifacts; all must pass before native admission.
+      yield* Effect.forEach(selected.slice(STATIC_END, CONTROLLED_END), runStage, {
+        concurrency: CONTROLLED_CONCURRENCY,
+        discard: true
+      })
+      for (const stage of selected.slice(CONTROLLED_END)) yield* runStage(stage)
       if (mode === "all") yield* fs.remove(fence)
     }).pipe(Effect.timeout(budget))
   }

@@ -78,7 +78,7 @@ for (const response of [
       const error = yield* Effect.flip(
         f.tracker.record(BeadId.make("work"), "proof", { exact: true }).pipe(Effect.provide(f.layer))
       )
-      expect(error._tag).not.toBe("CommandRejected")
+      expect(error._tag).not.toBe("NativeMetadataRequestFailed")
       expect(f.raw("work").metadata["dalph.proof"]).toBe('{"exact":true}')
       expect(reads).toBe(0)
       expect(f.state.pushCalls).toBe(0)
@@ -104,7 +104,7 @@ for (const applied of [true, false])
         })
       const operation = f.tracker.record(BeadId.make("work"), "proof", { exact: true }).pipe(Effect.provide(f.layer))
       if (applied) yield* operation
-      else expect((yield* Effect.flip(operation))._tag).toBe("CommandRejected")
+      else expect((yield* Effect.flip(operation))._tag).toBe("NativeMetadataRequestFailed")
       expect(writes).toBe(1)
       expect(reads).toBe(1)
     })
