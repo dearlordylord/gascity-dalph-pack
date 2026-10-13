@@ -5,19 +5,19 @@ import { makeNativeContinuation, continuationBatch } from "../src/native/continu
 import { BeadId } from "../src/domain/shared.ts"
 import { NativeReviewVerdict } from "../src/native/review-contract.ts"
 
-it.effect("human continuation preserves exhausted review when recovery prerequisites are unavailable", () =>
-  Effect.gen(function* () {
-    for (const fault of [
-      "contract",
-      "pending",
-      "accepted",
-      "findings",
-      "early",
-      "hard",
-      "open",
-      "budget",
-      "control"
-    ] as const) {
+for (const fault of [
+  "contract",
+  "pending",
+  "accepted",
+  "findings",
+  "early",
+  "hard",
+  "open",
+  "budget",
+  "control"
+] as const) {
+  it.effect(`human continuation preserves exhausted review when recovery prerequisite ${fault} is unavailable`, () =>
+    Effect.gen(function* () {
       const f = yield* nativeReviewFixture
       let launches = 0
       const execute = f.commands.execute
@@ -80,9 +80,9 @@ it.effect("human continuation preserves exhausted review when recovery prerequis
         expect(f.raw("review-control").metadata["gc.outcome"]).toBe("fail")
         expect(f.paths.size).toBeGreaterThan(0)
       }).pipe(Effect.provide(f.layer))
-    }
-  })
-)
+    })
+  )
+}
 
 it.effect("a new human batch starts with retained fourth-round findings and keeps the original workspace", () =>
   Effect.gen(function* () {
