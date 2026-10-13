@@ -1096,10 +1096,30 @@ index 8b6f4d8..7ba1506 100644
  	const sessionName = "testpack__worker"
  	const beadID = "bead-123"
 diff --git a/cmd/gc/dispatch_control_ready.go b/cmd/gc/dispatch_control_ready.go
-index ed4f94c..318d542 100644
+index ed4f94c..44771a7 100644
 --- a/cmd/gc/dispatch_control_ready.go
 +++ b/cmd/gc/dispatch_control_ready.go
-@@ -476,7 +476,7 @@ func controlReadyLegsReady(dir, cityPath string, cfg *config.City) (ready []bead
+@@ -12,6 +12,7 @@ import (
+ 	"github.com/gastownhall/gascity/internal/beadmeta"
+ 	"github.com/gastownhall/gascity/internal/beads"
+ 	"github.com/gastownhall/gascity/internal/config"
++	"github.com/gastownhall/gascity/internal/dispatch"
+ 	"github.com/gastownhall/gascity/internal/shellquote"
+ )
+ 
+@@ -384,6 +385,11 @@ func controlReadyLegReady(dir string, binding beads.Store, includeEphemeral bool
+ 	if err != nil {
+ 		return nil, fmt.Errorf("control-ready fallback: reading the graph binding for %s: %w", dir, err)
+ 	}
++	recovery, err := dispatch.RecoverableAttachControls(binding, tier)
++	if err != nil {
++		return nil, fmt.Errorf("control-ready activation recovery for %s: %w", dir, err)
++	}
++	ready = mergeControlReadyLegs(ready, recovery)
+ 	result := make([]beads.Bead, 0, len(ready))
+ 	for _, bead := range ready {
+ 		if bead.Type == controlReadyExcludeType {
+@@ -476,7 +482,7 @@ func controlReadyLegsReady(dir, cityPath string, cfg *config.City) (ready []bead
  // by closeCLIStorageRoutes at process exit; CloseStore is a one-way latch, so
  // closing a binding leg here would poison every later graph-class read and write
  // in the process with ErrStoreClosed. Only the scoped leg
@@ -1108,7 +1128,7 @@ index ed4f94c..318d542 100644
  // returned as owned.
  //
  // An error return must not hand back opened stores. controlReadyLegsReady
-@@ -492,7 +492,9 @@ func controlReadyLegSources(dir, cityPath string, cfg *config.City) (sources, ow
+@@ -492,7 +498,9 @@ func controlReadyLegSources(dir, cityPath string, cfg *config.City) (sources, ow
  	if binding, relocated := controlGraphBinding(cityPath, dir); relocated {
  		return []beads.Store{binding}, nil, nil
  	}
@@ -2091,7 +2111,7 @@ index 36181cf..e20185c 100644
  
  // PinnedSchemaCursors returns the pair a proxied database must already be at
 diff --git a/internal/dispatch/control.go b/internal/dispatch/control.go
-index 20096b4..17ef065 100644
+index 20096b4..60a167d 100644
 --- a/internal/dispatch/control.go
 +++ b/internal/dispatch/control.go
 @@ -29,7 +29,7 @@ const (
@@ -2103,7 +2123,56 @@ index 20096b4..17ef065 100644
  	attemptHardFail
  	// attemptContinue spawns the next attempt when attempts remain, or disposes
  	// of the exhausted control via the strategy when max_attempts is reached.
-@@ -286,6 +286,18 @@ func evaluateRetryAttempt(store beads.Store, bead, attempt beads.Bead, _ int, op
+@@ -131,6 +131,23 @@ func processAttemptControl(store beads.Store, bead beads.Bead, opts ProcessOptio
+ 			bead.ID, strategy.kind, strategy.subjectNoun, bead.Metadata[beadmeta.RootBeadIDMetadataKey])
+ 		return ControlResult{}, fmt.Errorf("%w: %s: %s", ErrControlGraphMalformed, bead.ID, strategy.missingNoun)
+ 	}
++	if strategy.kind == beadmeta.KindRalph && attempt.Metadata[beadmeta.ScopeRoleMetadataKey] == beadmeta.ScopeRoleMember {
++		recipe, err := prepareAttemptRecipe(store, bead, beadmeta.RetryAttemptNumber(attempt.Metadata), opts)
++		if err != nil {
++			return ControlResult{}, err
++		}
++		ref := attempt.Metadata[beadmeta.StepRefMetadataKey]
++		if len(recipe.Steps) == 0 || (ref != recipe.Steps[0].ID && ref != recipe.Steps[0].Metadata[beadmeta.StepRefMetadataKey]) {
++			return ControlResult{}, fmt.Errorf("%w: %s: iteration root is missing; selected member %s", ErrControlGraphMalformed, bead.ID, attempt.ID)
++		}
++	}
++	// A committed newer epoch with no corresponding authoritative attempt is
++	// missing graph evidence, not permission to recreate that attempt.
++	if epoch, err := strconv.Atoi(bead.Metadata[beadmeta.ControlEpochMetadataKey]); err == nil &&
++		epoch > beadmeta.RetryAttemptNumber(attempt.Metadata) {
++		return ControlResult{}, fmt.Errorf("%w: %s: epoch %d exceeds latest attempt %d", ErrControlGraphMalformed,
++			bead.ID, epoch, beadmeta.RetryAttemptNumber(attempt.Metadata))
++	}
+ 	if attempt.Status != "closed" {
+ 		return ensurePendingAttemptConverges(store, bead, attempt, strategy, opts)
+ 	}
+@@ -238,6 +255,24 @@ func processAttemptControl(store beads.Store, bead beads.Bead, opts ProcessOptio
+ // ErrControlPending. Each store boundary error is classified through the
+ // controller spawn boundary so transient failures stay open for retry.
+ func ensurePendingAttemptConverges(store beads.Store, bead, attempt beads.Bead, strategy controlAttemptStrategy, opts ProcessOptions) (ControlResult, error) {
++	if attempt.Metadata[beadmeta.AttachFencePendingMetadataKey] != "" {
++		number := beadmeta.RetryAttemptNumber(attempt.Metadata)
++		recipe, err := prepareAttemptRecipe(store, bead, number, opts)
++		if err != nil {
++			return ControlResult{}, err
++		}
++		_, err = molecule.ResumeAttachActivation(store, recipe, bead.ID, attempt.ID,
++			fmt.Sprintf("%s:attempt:%d", bead.ID, number), number-1)
++		if err != nil {
++			if errors.Is(err, molecule.ErrEpochConflict) {
++				err = markTransientControllerBoundaryError(err)
++			}
++			if controllerSpawnBoundaryPending(store, bead.ID, err, opts) {
++				return ControlResult{}, ErrControlPending
++			}
++			return ControlResult{}, err
++		}
++	}
+ 	if err := ensureBlockingDependency(store, bead.ID, attempt.ID); err != nil {
+ 		if controllerSpawnBoundaryPending(store, bead.ID, err, opts) {
+ 			return ControlResult{}, ErrControlPending
+@@ -286,6 +321,18 @@ func evaluateRetryAttempt(store beads.Store, bead, attempt beads.Bead, _ int, op
  // runs the check script. A GatePass closes the control; anything else spawns
  // the next iteration or exhausts.
  func evaluateRalphIteration(store beads.Store, bead, iteration beads.Bead, iterationNum int, opts ProcessOptions) (attemptEvaluation, error) {
@@ -2122,7 +2191,7 @@ index 20096b4..17ef065 100644
  	// Propagate non-gc metadata from the iteration to the ralph control BEFORE
  	// running the check. This makes the iteration's output (e.g.,
  	// review.verdict) visible on the ralph bead for check scripts that read
-@@ -304,6 +316,34 @@ func evaluateRalphIteration(store beads.Store, bead, iteration beads.Bead, itera
+@@ -304,6 +351,34 @@ func evaluateRalphIteration(store beads.Store, bead, iteration beads.Bead, itera
  	if err != nil {
  		return attemptEvaluation{}, fmt.Errorf("%s: running check: %w", bead.ID, err)
  	}
@@ -2157,11 +2226,241 @@ index 20096b4..17ef065 100644
  	eval := attemptEvaluation{logOutcome: checkResult.Outcome, logDetail: checkResult.Stderr}
  	if checkResult.Outcome == convergence.GatePass {
  		eval.disposition = attemptPass
+@@ -672,81 +747,9 @@ func handleRetryExhaustion(store beads.Store, beadID string, attemptNum int, rea
+ // spawnNextAttempt deserializes the frozen step spec, builds an attempt recipe,
+ // and calls molecule.Attach to graft it onto the control bead.
+ func spawnNextAttempt(ctx context.Context, store beads.Store, control beads.Bead, attemptNum int, opts ProcessOptions) error {
+-	specJSON := control.Metadata[beadmeta.SourceStepSpecMetadataKey]
+-	if specJSON == "" {
+-		// New path: look up the spec bead.
+-		spec, err := findSpecBead(store, control)
+-		if err != nil {
+-			return fmt.Errorf("control bead %s: finding spec bead: %w", control.ID, err)
+-		}
+-		specJSON = spec.Description
+-	}
+-
+-	var step formula.Step
+-	if err := json.Unmarshal([]byte(specJSON), &step); err != nil {
+-		return fmt.Errorf("deserializing step spec: %w", err)
+-	}
+-
+-	recipe := buildAttemptRecipe(&step, control, attemptNum)
+-
+-	// Attach bypasses graph compile routing, so spawned attempts need their
+-	// execution lane restored manually. Prefer each step's explicit target when
+-	// available, and only inherit the parent execution lane as a fallback.
+-	executionRoute := strings.TrimSpace(control.Metadata[beadmeta.ExecutionRoutedToMetadataKey])
+-	executionRigContext := strings.TrimSpace(control.Metadata[beadmeta.ExecutionRigContextMetadataKey])
+-	routeCfg, err := opts.routeConfig()
++	recipe, err := prepareAttemptRecipe(store, control, attemptNum, opts)
+ 	if err != nil {
+-		// A route-config load/parse failure is environmental and transient (a
+-		// momentary city.toml read or include-resolution blip), not a permanent
+-		// defect in this molecule. Classify it as a transient controller-boundary
+-		// error so the spawn boundary retries it as pending instead of
+-		// quarantining an in-flight molecule. Terminal fail-closed stays reserved
+-		// for a config that loads successfully but lacks the required
+-		// store-scoped dispatcher (controlDispatcherTargetForExecutionTarget).
+-		return markTransientControllerBoundaryError(fmt.Errorf("loading attempt route config: %w", err))
+-	}
+-	rootStoreRef := strings.TrimSpace(control.Metadata[beadmeta.RootStoreRefMetadataKey])
+-	for i := range recipe.Steps {
+-		if recipe.Steps[i].Metadata[beadmeta.KindMetadataKey] == beadmeta.KindSpec {
+-			continue
+-		}
+-		if executionRigContext != "" && strings.TrimSpace(recipe.Steps[i].Metadata[beadmeta.ExecutionRigContextMetadataKey]) == "" {
+-			if recipe.Steps[i].Metadata == nil {
+-				recipe.Steps[i].Metadata = make(map[string]string)
+-			}
+-			recipe.Steps[i].Metadata[beadmeta.ExecutionRigContextMetadataKey] = executionRigContext
+-		}
+-		if rootStoreRef != "" {
+-			if recipe.Steps[i].Metadata == nil {
+-				recipe.Steps[i].Metadata = make(map[string]string)
+-			}
+-			// The parent graph owns attached attempts. Ignore stale fragment
+-			// metadata so routing and molecule.Attach's persisted store ref agree.
+-			recipe.Steps[i].Metadata[beadmeta.RootStoreRefMetadataKey] = rootStoreRef
+-		}
+-		target := strings.TrimSpace(recipe.Steps[i].Metadata[beadmeta.RunTargetMetadataKey])
+-		if target == "" {
+-			target = strings.TrimSpace(recipe.Steps[i].Metadata[beadmeta.RoutedToMetadataKey])
+-		}
+-		if target == "" {
+-			target = strings.TrimSpace(recipe.Steps[i].Assignee)
+-		}
+-		if target == "" {
+-			target = executionRoute
+-		} else {
+-			stepRigContext := strings.TrimSpace(recipe.Steps[i].Metadata[beadmeta.ExecutionRigContextMetadataKey])
+-			target = qualifyAttemptTargetWithSourceRoute(target, executionRoute, stepRigContext, routeCfg)
+-		}
+-		if isAttemptControlKind(recipe.Steps[i].Metadata[beadmeta.KindMetadataKey]) {
+-			if err := applyAttemptControlStepRoute(&recipe.Steps[i], target, routeCfg, store); err != nil {
+-				return fmt.Errorf("routing attempt control step %s: %w", recipe.Steps[i].ID, err)
+-			}
+-			continue
+-		}
+-		if target == "" {
+-			continue
+-		}
+-		applyAttemptStepRoute(&recipe.Steps[i], target, routeCfg, store)
++		return err
+ 	}
+ 
+ 	epoch := 0
+@@ -2101,3 +2104,138 @@ func withWrittenRow(bead beads.Bead, row beads.UpdatedRow) beads.Bead {
+ // Note: setOutcomeAndClose, propagateRetrySubjectMetadata,
+ // classifyRetryAttempt, retryPreservedAssigneeWithConfig, and runRalphCheck are
+ // defined in runtime.go, retry.go, and ralph.go respectively.
++
++// prepareAttemptRecipe reconstructs routing only from the authored control spec.
++func prepareAttemptRecipe(store beads.Store, control beads.Bead, attemptNum int, opts ProcessOptions) (*formula.Recipe, error) {
++	specJSON := control.Metadata[beadmeta.SourceStepSpecMetadataKey]
++	if specJSON == "" {
++		// New path: look up the spec bead.
++		spec, err := findSpecBead(store, control)
++		if err != nil {
++			return nil, fmt.Errorf("control bead %s: finding spec bead: %w", control.ID, err)
++		}
++		specJSON = spec.Description
++	}
++
++	var step formula.Step
++	if err := json.Unmarshal([]byte(specJSON), &step); err != nil {
++		return nil, fmt.Errorf("deserializing step spec: %w", err)
++	}
++
++	recipe := buildAttemptRecipe(&step, control, attemptNum)
++
++	// Attach bypasses graph compile routing, so spawned attempts need their
++	// execution lane restored manually. Prefer each step's explicit target when
++	// available, and only inherit the parent execution lane as a fallback.
++	executionRoute := strings.TrimSpace(control.Metadata[beadmeta.ExecutionRoutedToMetadataKey])
++	executionRigContext := strings.TrimSpace(control.Metadata[beadmeta.ExecutionRigContextMetadataKey])
++	routeCfg, err := opts.routeConfig()
++	if err != nil {
++		// A route-config load/parse failure is environmental and transient (a
++		// momentary city.toml read or include-resolution blip), not a permanent
++		// defect in this molecule. Classify it as a transient controller-boundary
++		// error so the spawn boundary retries it as pending instead of
++		// quarantining an in-flight molecule. Terminal fail-closed stays reserved
++		// for a config that loads successfully but lacks the required
++		// store-scoped dispatcher (controlDispatcherTargetForExecutionTarget).
++		return nil, markTransientControllerBoundaryError(fmt.Errorf("loading attempt route config: %w", err))
++	}
++	rootStoreRef := strings.TrimSpace(control.Metadata[beadmeta.RootStoreRefMetadataKey])
++	for i := range recipe.Steps {
++		if recipe.Steps[i].Metadata[beadmeta.KindMetadataKey] == beadmeta.KindSpec {
++			continue
++		}
++		if executionRigContext != "" && strings.TrimSpace(recipe.Steps[i].Metadata[beadmeta.ExecutionRigContextMetadataKey]) == "" {
++			if recipe.Steps[i].Metadata == nil {
++				recipe.Steps[i].Metadata = make(map[string]string)
++			}
++			recipe.Steps[i].Metadata[beadmeta.ExecutionRigContextMetadataKey] = executionRigContext
++		}
++		if rootStoreRef != "" {
++			if recipe.Steps[i].Metadata == nil {
++				recipe.Steps[i].Metadata = make(map[string]string)
++			}
++			// The parent graph owns attached attempts. Ignore stale fragment
++			// metadata so routing and molecule.Attach's persisted store ref agree.
++			recipe.Steps[i].Metadata[beadmeta.RootStoreRefMetadataKey] = rootStoreRef
++		}
++		target := strings.TrimSpace(recipe.Steps[i].Metadata[beadmeta.RunTargetMetadataKey])
++		if target == "" {
++			target = strings.TrimSpace(recipe.Steps[i].Metadata[beadmeta.RoutedToMetadataKey])
++		}
++		if target == "" {
++			target = strings.TrimSpace(recipe.Steps[i].Assignee)
++		}
++		if target == "" {
++			target = executionRoute
++		} else {
++			stepRigContext := strings.TrimSpace(recipe.Steps[i].Metadata[beadmeta.ExecutionRigContextMetadataKey])
++			target = qualifyAttemptTargetWithSourceRoute(target, executionRoute, stepRigContext, routeCfg)
++		}
++		if isAttemptControlKind(recipe.Steps[i].Metadata[beadmeta.KindMetadataKey]) {
++			if err := applyAttemptControlStepRoute(&recipe.Steps[i], target, routeCfg, store); err != nil {
++				return nil, fmt.Errorf("routing attempt control step %s: %w", recipe.Steps[i].ID, err)
++			}
++			continue
++		}
++		if target == "" {
++			continue
++		}
++		applyAttemptStepRoute(&recipe.Steps[i], target, routeCfg, store)
++	}
++
++	return recipe, nil
++}
++
++// RecoverableAttachControls discovers a committed attach that blocks its owner while every child is
++// still held. The owner is recovery work, despite not being ordinary Ready.
++// Resolve it in the same graph leg; never guess another store for a missing ID.
++func RecoverableAttachControls(store beads.Store, tier beads.TierMode) ([]beads.Bead, error) {
++	var roots []beads.Bead
++	for _, marker := range []string{"true", "activating"} {
++		matches, err := store.List(beads.ListQuery{Status: "open", Metadata: map[string]string{
++			beadmeta.AttachFencePendingMetadataKey: marker,
++		}, TierMode: tier})
++		if err != nil {
++			return nil, err
++		}
++		roots = append(roots, matches...)
++	}
++	owners := make(map[string]beads.Bead)
++	for _, root := range roots {
++		pending := root.Metadata[beadmeta.AttachFencePendingMetadataKey]
++		if pending != "true" && pending != "activating" {
++			continue
++		}
++		number := beadmeta.RetryAttemptNumber(root.Metadata)
++		key := root.Metadata[beadmeta.IdempotencyKeyMetadataKey]
++		suffix := fmt.Sprintf(":attempt:%d", number)
++		if number < 2 || !strings.HasSuffix(key, suffix) {
++			continue
++		}
++		id := strings.TrimSuffix(key, suffix)
++		if id == "" {
++			continue
++		}
++		control, err := store.Get(id)
++		if err != nil {
++			return nil, err
++		}
++		kind := control.Metadata[beadmeta.KindMetadataKey]
++		if control.Status != "open" || control.Type == "gate" ||
++			(kind != beadmeta.KindRalph && kind != beadmeta.KindRetry) ||
++			(control.Metadata[beadmeta.ControlEpochMetadataKey] != strconv.Itoa(number) &&
++				!(pending == "true" && control.Metadata[beadmeta.ControlEpochMetadataKey] == strconv.Itoa(number-1))) ||
++			root.Metadata[beadmeta.RootBeadIDMetadataKey] != beadmeta.ResolveRunID(control.Metadata, control.ID, "") ||
++			root.Metadata[beadmeta.RootStoreRefMetadataKey] != control.Metadata[beadmeta.RootStoreRefMetadataKey] {
++			continue
++		}
++		owners[id] = control
++	}
++	result := make([]beads.Bead, 0, len(owners))
++	for _, owner := range owners {
++		result = append(result, owner)
++	}
++	beads.SortBeadsReadyOrder(result)
++	return result, nil
++}
 diff --git a/internal/dispatch/control_test.go b/internal/dispatch/control_test.go
-index 39dd658..a26f34b 100644
+index 39dd658..9892d9f 100644
 --- a/internal/dispatch/control_test.go
 +++ b/internal/dispatch/control_test.go
-@@ -21,6 +21,89 @@ import (
+@@ -15,12 +15,96 @@ import (
+ 	"github.com/gastownhall/gascity/internal/beads"
+ 	"github.com/gastownhall/gascity/internal/formula"
+ 	"github.com/gastownhall/gascity/internal/molecule"
++	"github.com/gastownhall/gascity/internal/rollout/gate"
+ )
+ 
+ // ---------------------------------------------------------------------------
  // processRetryControl tests
  // ---------------------------------------------------------------------------
  
@@ -2251,6 +2550,357 @@ index 39dd658..a26f34b 100644
  func TestProcessRetryControlPass(t *testing.T) {
  	t.Parallel()
  	store := beads.NewMemStore()
+@@ -3809,3 +3893,350 @@ func TestFindSpecBeadPrefersRefOverStepID(t *testing.T) {
+ 
+ // Unused import guard.
+ var _ = strconv.Itoa
++
++// An activation interruption must resume the exact fourth attempt after its
++// epoch CAS, rather than waiting forever on the deliberately held graph.
++func TestProcessRalphControlRecoversClaimedActivationWithoutAnotherEpoch(t *testing.T) {
++	store, control, pending, rootID, all := heldAttachCase(t)
++	count := len(all)
++	_, err := processRalphControl(store, mustGet(t, store, control.ID), testProcessOptionsWithControlDispatcher(""))
++	if !errors.Is(err, ErrControlPending) {
++		t.Fatalf("recovery: %v", err)
++	}
++	if got := mustGet(t, store, pending.ID).Metadata["gc.attach_fence_pending"]; got != "" {
++		t.Fatalf("recovery left activation marker %q", got)
++	}
++	if got := mustGet(t, store, control.ID).Metadata["gc.control_epoch"]; got != "4" {
++		t.Fatalf("recovery advanced epoch to %s", got)
++	}
++	after, err := beads.DirectMembers(store, rootID)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if len(after) != count {
++		t.Fatalf("recovery created nodes: before=%d after=%d", count, len(after))
++	}
++}
++
++func heldAttachCase(t *testing.T) (*claimedActivationCutStore, beads.Bead, beads.Bead, string, []beads.Bead) {
++	t.Helper()
++	prev := molecule.IsGraphApplyEnabled()
++	molecule.SetGraphApplyEnabled(true)
++	t.Cleanup(func() { molecule.SetGraphApplyEnabled(prev) })
++	base := beads.NewMemStore()
++	if err := beads.StampOpenedStore(base, "MemStore", gate.Require, nil, nil); err != nil {
++		t.Fatal(err)
++	}
++	root := mustCreate(t, base, beads.Bead{Title: "workflow", Metadata: map[string]string{"gc.kind": "workflow"}})
++	control := mustCreate(t, base, beads.Bead{Title: "review loop", Metadata: map[string]string{
++		"gc.kind": "ralph", "gc.root_bead_id": root.ID, "gc.step_ref": "mol-test.review-loop",
++		"gc.step_id": "review-loop", "gc.max_attempts": "4", "gc.control_epoch": "3",
++		"gc.source_step_spec": `{"id":"review-loop","title":"Review loop","type":"task","ralph":{"max_attempts":4},"children":[{"id":"review","title":"Review","type":"task"}]}`,
++	}})
++	iteration := mustCreate(t, base, beads.Bead{Title: "iteration 3", Metadata: map[string]string{
++		"gc.kind": "scope", "gc.root_bead_id": root.ID, "gc.step_ref": "mol-test.review-loop.iteration.3", "gc.attempt": "3", "gc.outcome": "fail",
++	}})
++	mustClose(t, base, iteration.ID)
++	mustDep(t, base, control.ID, iteration.ID, "blocks")
++	store := &claimedActivationCutStore{graphApplyOuterDepFailStore: &graphApplyOuterDepFailStore{MemStore: base, failed: true}}
++	_, err := processRalphControl(store, mustGet(t, store, control.ID), testProcessOptionsWithControlDispatcher(""))
++	if !errors.Is(err, ErrControlPending) {
++		t.Fatalf("interrupted activation: %v", err)
++	}
++	all, err := beads.DirectMembers(store, root.ID)
++	if err != nil {
++		t.Fatal(err)
++	}
++	var pending beads.Bead
++	for _, b := range all {
++		if b.Metadata["gc.idempotency_key"] == control.ID+":attempt:4" {
++			pending = b
++		}
++	}
++	if pending.ID == "" || pending.Metadata["gc.attach_fence_pending"] != "activating" {
++		t.Fatalf("missing claimed activation: %+v", pending)
++	}
++	if got := mustGet(t, store, control.ID).Metadata["gc.control_epoch"]; got != "4" {
++		t.Fatalf("epoch after cut = %s", got)
++	}
++	return store, control, pending, root.ID, all
++}
++
++type claimedActivationCutStore struct {
++	*graphApplyOuterDepFailStore
++	cut bool
++}
++
++func (s *claimedActivationCutStore) Update(id string, opts beads.UpdateOpts) error {
++	if !s.cut && opts.Type != nil {
++		s.cut = true
++		return errors.New("activation interrupted: invalid connection: i/o timeout")
++	}
++	return s.MemStore.Update(id, opts)
++}
++
++func TestResumeAttachActivationRejectsUnprovenGraph(t *testing.T) {
++	for _, fault := range []string{"unclaimed", "pre_fence", "partial_child", "old_epoch", "new_epoch", "missing_child", "duplicate_child", "foreign_store", "wrong_key", "wrong_ref", "missing_root"} {
++		t.Run(fault, func(t *testing.T) {
++			store, control, pending, rootID, all := heldAttachCase(t)
++			recipe, err := prepareAttemptRecipe(store, control, 4, testProcessOptionsWithControlDispatcher(""))
++			if err != nil {
++				t.Fatal(err)
++			}
++			var child beads.Bead
++			for _, b := range all {
++				if b.ID != pending.ID && strings.HasSuffix(b.Metadata["gc.step_ref"], ".review") {
++					child = b
++				}
++			}
++			if child.ID == "" {
++				t.Fatal("missing authored child fixture")
++			}
++			switch fault {
++			case "pre_fence":
++				err = store.SetMetadata(control.ID, "gc.control_epoch", "3")
++				if err == nil {
++					err = store.SetMetadata(pending.ID, "gc.attach_fence_pending", "true")
++				}
++			case "unclaimed":
++				err = store.SetMetadata(pending.ID, "gc.attach_fence_pending", "true")
++			case "partial_child":
++				typ := "task"
++				err = store.Update(child.ID, beads.UpdateOpts{Type: &typ, Metadata: map[string]string{"gc.deferred_type": ""}})
++			case "old_epoch":
++				err = store.SetMetadata(control.ID, "gc.control_epoch", "3")
++			case "new_epoch":
++				err = store.SetMetadata(control.ID, "gc.control_epoch", "5")
++			case "missing_child":
++				err = store.Delete(child.ID)
++			case "duplicate_child":
++				child.ID = ""
++				_, err = store.Create(child)
++			case "foreign_store":
++				err = store.SetMetadata(pending.ID, "gc.root_store_ref", "rig:foreign")
++			case "wrong_key":
++				err = store.SetMetadata(pending.ID, "gc.idempotency_key", "foreign:attempt:4")
++			case "wrong_ref":
++				err = store.SetMetadata(pending.ID, "gc.step_ref", "foreign.ref")
++			case "missing_root":
++				err = store.Delete(pending.ID)
++			}
++			if err != nil {
++				t.Fatal(err)
++			}
++			before, err := beads.DirectMembers(store, rootID)
++			if err != nil {
++				t.Fatal(err)
++			}
++			_, err = molecule.ResumeAttachActivation(store, recipe, control.ID, pending.ID, control.ID+":attempt:4", 3)
++			success := fault == "unclaimed" || fault == "pre_fence" || fault == "partial_child"
++			if (err == nil) != success {
++				t.Fatalf("recovery error=%v success=%v", err, success)
++			}
++			after, listErr := beads.DirectMembers(store, rootID)
++			if listErr != nil {
++				t.Fatal(listErr)
++			}
++			if len(after) != len(before) {
++				t.Fatal("resume created graph nodes")
++			}
++			if !success {
++				a, _ := json.Marshal(before)
++				b, _ := json.Marshal(after)
++				if string(a) != string(b) {
++					t.Fatal("refused recovery mutated graph")
++				}
++			}
++		})
++	}
++}
++
++func TestRecoverableAttachControlsFindsCommittedHeldOwner(t *testing.T) {
++	for _, fault := range []string{"unclaimed", "activating", "activated_root", "old_epoch", "new_epoch", "foreign_store", "closed_owner", "held_owner"} {
++		t.Run(fault, func(t *testing.T) {
++			store := beads.NewMemStore()
++			workflow, err := store.Create(beads.Bead{Title: "workflow", Type: "molecule"})
++			if err != nil {
++				t.Fatal(err)
++			}
++			control, err := store.Create(beads.Bead{Title: "control", Type: "task", Metadata: map[string]string{
++				"gc.kind": "ralph", "gc.root_bead_id": workflow.ID, "gc.root_store_ref": "rig:fixture", "gc.control_epoch": "4", "gc.routed_to": "fixture/core.control-dispatcher",
++			}})
++			if err != nil {
++				t.Fatal(err)
++			}
++			pending := "activating"
++			if fault == "unclaimed" {
++				pending = "true"
++			}
++			root, err := store.Create(beads.Bead{Title: "held attempt", Type: "gate", Metadata: map[string]string{
++				"gc.root_bead_id": workflow.ID, "gc.root_store_ref": "rig:fixture", "gc.attempt": "4", "gc.attach_fence_pending": pending, "gc.idempotency_key": control.ID + ":attempt:4",
++			}})
++			if err != nil {
++				t.Fatal(err)
++			}
++			if err := store.DepAdd(control.ID, root.ID, "blocks"); err != nil {
++				t.Fatal(err)
++			}
++			switch fault {
++			case "activated_root":
++				typ := "task"
++				err = store.Update(root.ID, beads.UpdateOpts{Type: &typ})
++			case "old_epoch":
++				err = store.SetMetadata(control.ID, "gc.control_epoch", "3")
++			case "new_epoch":
++				err = store.SetMetadata(control.ID, "gc.control_epoch", "5")
++			case "foreign_store":
++				err = store.SetMetadata(root.ID, "gc.root_store_ref", "rig:foreign")
++			case "closed_owner":
++				err = store.Close(control.ID)
++			case "held_owner":
++				typ := "gate"
++				err = store.Update(control.ID, beads.UpdateOpts{Type: &typ})
++			}
++			if err != nil {
++				t.Fatal(err)
++			}
++			plain, err := store.Ready(beads.ReadyQuery{TierMode: beads.TierBoth})
++			if err != nil {
++				t.Fatal(err)
++			}
++			for _, b := range plain {
++				if b.ID == control.ID {
++					t.Fatal("fixture owner was not blocked")
++				}
++			}
++			ready, err := RecoverableAttachControls(store, beads.TierBoth)
++			if err != nil {
++				t.Fatal(err)
++			}
++			found := false
++			for _, b := range ready {
++				if b.ID == control.ID {
++					found = true
++				}
++			}
++			want := fault == "unclaimed" || fault == "activating" || fault == "activated_root"
++			if found != want {
++				t.Fatalf("owner discovered=%v want=%v", found, want)
++			}
++		})
++	}
++}
++
++func TestProcessRalphControlRefusesMissingCommittedAttempt(t *testing.T) {
++	store, control, pending, rootID, _ := heldAttachCase(t)
++	if err := store.Delete(pending.ID); err != nil {
++		t.Fatal(err)
++	}
++	before, err := beads.DirectMembers(store, rootID)
++	if err != nil {
++		t.Fatal(err)
++	}
++	_, err = processRalphControl(store, mustGet(t, store, control.ID), testProcessOptionsWithControlDispatcher(""))
++	if !errors.Is(err, ErrControlGraphMalformed) {
++		t.Fatalf("missing committed root: %v", err)
++	}
++	if got := mustGet(t, store, control.ID).Metadata["gc.control_epoch"]; got != "4" {
++		t.Fatalf("epoch changed: %s", got)
++	}
++	after, err := beads.DirectMembers(store, rootID)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if len(after) != len(before) {
++		t.Fatalf("replacement graph created: %d -> %d", len(before), len(after))
++	}
++}
++
++func TestProcessRalphControlAllowsNestedSimpleIterationMember(t *testing.T) {
++	store := beads.NewMemStore()
++	workflow := mustCreate(t, store, beads.Bead{Title: "workflow", Metadata: map[string]string{"gc.kind": "workflow"}})
++	control := mustCreate(t, store, beads.Bead{Title: "nested simple loop", Metadata: map[string]string{
++		"gc.kind": "ralph", "gc.root_bead_id": workflow.ID, "gc.step_ref": "outer.iteration.1.inner", "gc.step_id": "inner", "gc.max_attempts": "4", "gc.control_epoch": "1",
++		"gc.source_step_spec": `{"id":"inner","title":"Inner","type":"task","ralph":{"max_attempts":4}}`,
++	}})
++	opts := testProcessOptionsWithControlDispatcher("")
++	recipe, err := prepareAttemptRecipe(store, control, 1, opts)
++	if err != nil {
++		t.Fatal(err)
++	}
++	metadata := make(map[string]string)
++	for key, value := range recipe.Steps[0].Metadata {
++		metadata[key] = value
++	}
++	metadata["gc.root_bead_id"] = workflow.ID
++	metadata["gc.scope_role"] = "member"
++	metadata["gc.scope_ref"] = "outer.iteration.1"
++	metadata["gc.step_ref"] = recipe.Steps[0].ID
++	attempt := mustCreate(t, store, beads.Bead{Title: "inner iteration", Type: "task", Metadata: metadata})
++	mustDep(t, store, control.ID, attempt.ID, "blocks")
++	_, err = processRalphControl(store, control, opts)
++	if !errors.Is(err, ErrControlPending) {
++		t.Fatalf("valid nested simple iteration rejected: %v", err)
++	}
++	if got := mustGet(t, store, control.ID).Metadata["gc.control_epoch"]; got != "1" {
++		t.Fatalf("epoch changed: %s", got)
++	}
++}
++
++type recoveryFenceLoserStore struct {
++	*claimedActivationCutStore
++	candidate string
++	won       bool
++}
++
++func (s *recoveryFenceLoserStore) CompareAndSetMetadataKey(id, key, expected, next string) (bool, error) {
++	if key == "gc.control_epoch" && expected == "3" {
++		other, err := s.Get(s.candidate)
++		if err != nil {
++			return false, err
++		}
++		other.ID = ""
++		if _, err = s.Create(other); err != nil {
++			return false, err
++		}
++		if err = s.SetMetadata(id, key, next); err != nil {
++			return false, err
++		}
++		s.won = true
++		return false, nil
++	}
++	return s.MemStore.CompareAndSetMetadataKey(id, key, expected, next)
++}
++func TestResumeAttachActivationFenceLoserDoesNotPublishRoutes(t *testing.T) {
++	store, control, pending, _, _ := heldAttachCase(t)
++	if err := store.SetMetadata(control.ID, "gc.control_epoch", "3"); err != nil {
++		t.Fatal(err)
++	}
++	if err := store.SetMetadata(pending.ID, "gc.attach_fence_pending", "true"); err != nil {
++		t.Fatal(err)
++	}
++	recipe, err := prepareAttemptRecipe(store, control, 4, testProcessOptionsWithControlDispatcher(""))
++	if err != nil {
++		t.Fatal(err)
++	}
++	racing := &recoveryFenceLoserStore{claimedActivationCutStore: store, candidate: pending.ID}
++	_, err = molecule.ResumeAttachActivation(racing, recipe, control.ID, pending.ID, control.ID+":attempt:4", 3)
++	if !errors.Is(err, molecule.ErrEpochConflict) || !racing.won {
++		t.Fatalf("fence loss: %v won=%v", err, racing.won)
++	}
++	root := mustGet(t, store, pending.ID)
++	if root.Type != "gate" || root.Metadata["gc.attach_fence_pending"] != "true" {
++		t.Fatalf("loser published routes: %+v", root)
++	}
++}
++func TestPendingAttachRecoveryRaceRetainsOpenControl(t *testing.T) {
++	store, control, pending, _, _ := heldAttachCase(t)
++	if err := store.SetMetadata(pending.ID, "gc.attach_fence_pending", ""); err != nil {
++		t.Fatal(err)
++	}
++	_, err := ensurePendingAttemptConverges(store, mustGet(t, store, control.ID), pending, controlAttemptStrategy{subjectNoun: "iteration"}, testProcessOptionsWithControlDispatcher(""))
++	if !errors.Is(err, ErrControlPending) {
++		t.Fatalf("co-activator race: %v", err)
++	}
++	fresh := mustGet(t, store, control.ID)
++	if fresh.Status != "open" || fresh.Metadata["gc.controller_retryable"] != "true" {
++		t.Fatalf("race closed control: %+v", fresh)
++	}
++}
 diff --git a/internal/molecule/attach_conditional_test.go b/internal/molecule/attach_conditional_test.go
 index 06e4b4d..d3c30ca 100644
 --- a/internal/molecule/attach_conditional_test.go
@@ -2505,7 +3155,7 @@ index 8f631f6..3cf2de9 100644
  		ensureGraphNodeMetadata(node)
  		node.Metadata[DeferredAssigneeMetadataKey] = node.Assignee
 diff --git a/internal/molecule/molecule.go b/internal/molecule/molecule.go
-index 1547fa6..568c867 100644
+index 1547fa6..bcad4b3 100644
 --- a/internal/molecule/molecule.go
 +++ b/internal/molecule/molecule.go
 @@ -540,14 +540,7 @@ func findExistingAttach(store beads.Store, recipe *formula.Recipe, rootBeadID, a
@@ -2587,6 +3237,150 @@ index 1547fa6..568c867 100644
  			if !isTransientGraphApplyError(err) {
  				return nil, err
  			}
+@@ -1853,3 +1868,143 @@ func existingLogicalBeadIDIndex(store beads.Store, rootID string) (map[string]st
+ 	}
+ 	return index, nil
+ }
++
++// ResumeAttachActivation finishes one exact attach and its original epoch fence.
++// It never instantiates a recipe: missing or ambiguous members
++// retain the held graph for reconciliation rather than create a replacement.
++func ResumeAttachActivation(store beads.Store, recipe *formula.Recipe, controlID, candidateID, key string, expectedEpoch int) (*AttachResult, error) {
++	if recipe == nil || len(recipe.Steps) == 0 || expectedEpoch < 1 || key == "" {
++		return nil, fmt.Errorf("invalid attach recovery identity")
++	}
++	control, err := store.Get(controlID)
++	if err != nil {
++		return nil, err
++	}
++	if control.Status == "closed" || (control.Metadata[beadmeta.ControlEpochMetadataKey] != strconv.Itoa(expectedEpoch+1) &&
++		control.Metadata[beadmeta.ControlEpochMetadataKey] != strconv.Itoa(expectedEpoch)) {
++		return nil, ErrEpochConflict
++	}
++	workflowID := beadmeta.ResolveRunID(control.Metadata, controlID, "")
++	workflow, err := store.Get(workflowID)
++	if err != nil {
++		return nil, err
++	}
++	if workflow.Status == "closed" {
++		return nil, ErrEpochConflict
++	}
++	candidate, err := store.Get(candidateID)
++	if err != nil {
++		return nil, err
++	}
++	if candidate.Status == "closed" || candidate.Metadata[beadmeta.RootBeadIDMetadataKey] != workflowID ||
++		candidate.Metadata[beadmeta.RootStoreRefMetadataKey] != control.Metadata[beadmeta.RootStoreRefMetadataKey] ||
++		candidate.Metadata[beadmeta.IdempotencyKeyMetadataKey] != key ||
++		(candidate.Metadata[beadmeta.AttachFencePendingMetadataKey] != attachFencePendingActivating && candidate.Metadata[beadmeta.AttachFencePendingMetadataKey] != attachFencePendingUnclaimed) {
++		return nil, fmt.Errorf("attach recovery candidate does not match its committed owner: %w", ErrEpochConflict)
++	}
++	all, err := store.List(beads.ListQuery{Metadata: map[string]string{beadmeta.RootBeadIDMetadataKey: workflowID}, TierMode: beads.TierBoth})
++	if err != nil {
++		return nil, err
++	}
++	matches := 0
++	for _, b := range all {
++		if b.Metadata[beadmeta.IdempotencyKeyMetadataKey] == key && b.Metadata[beadmeta.MoleculeFailedMetadataKey] != "true" && b.Metadata[beadmeta.AttachFencePendingMetadataKey] != attachFencePendingFailed {
++			matches++
++		}
++	}
++	if matches != 1 {
++		return nil, fmt.Errorf("attach recovery candidate is ambiguous")
++	}
++	rootMatches := false
++	rootRef := strings.TrimSpace(candidate.Metadata[beadmeta.StepRefMetadataKey])
++	if rootRef == "" {
++		rootRef = strings.TrimSpace(candidate.Ref)
++	}
++	for _, ref := range attachStepRefs(recipe.Steps[0]) {
++		if rootRef == ref {
++			rootMatches = true
++		}
++	}
++	if !rootMatches {
++		return nil, fmt.Errorf("attach recovery root differs from the authored recipe")
++	}
++	mapping := make(map[string]string, len(recipe.Steps))
++	for i, step := range recipe.Steps {
++		if i == 0 || step.IsRoot {
++			mapping[step.ID] = candidate.ID
++			continue
++		}
++		for _, b := range all {
++			ref := strings.TrimSpace(b.Metadata[beadmeta.StepRefMetadataKey])
++			if ref == "" {
++				ref = strings.TrimSpace(b.Ref)
++			}
++			for _, wanted := range attachStepRefs(step) {
++				if ref != wanted {
++					continue
++				}
++				if mapping[step.ID] != "" && mapping[step.ID] != b.ID {
++					return nil, fmt.Errorf("attach recovery member %s is ambiguous", step.ID)
++				}
++				if b.Metadata[beadmeta.RootStoreRefMetadataKey] != candidate.Metadata[beadmeta.RootStoreRefMetadataKey] || b.Metadata[beadmeta.MoleculeFailedMetadataKey] == "true" {
++					return nil, fmt.Errorf("attach recovery member %s belongs to another authority", step.ID)
++				}
++				mapping[step.ID] = b.ID
++			}
++		}
++		if mapping[step.ID] == "" {
++			return nil, fmt.Errorf("attach recovery member %s is missing", step.ID)
++		}
++	}
++	writer, _, err := beads.ResolveConditionalWriter(store)
++	if err != nil {
++		return nil, err
++	}
++	if writer == nil {
++		return nil, fmt.Errorf("attach recovery requires a conditional writer")
++	}
++	if control.Metadata[beadmeta.ControlEpochMetadataKey] == strconv.Itoa(expectedEpoch) &&
++		candidate.Metadata[beadmeta.AttachFencePendingMetadataKey] != attachFencePendingUnclaimed {
++		return nil, ErrEpochConflict
++	}
++	// Restore the exact edge before publishing routes, then re-read the epoch.
++	// Use the validated mapping rather than a second permissive member lookup.
++	deps, err := store.DepList(controlID, "down")
++	if err != nil {
++		return nil, err
++	}
++	blocked := false
++	for _, dep := range deps {
++		if dep.DependsOnID == candidateID && dep.Type == "blocks" {
++			blocked = true
++		}
++	}
++	if !blocked {
++		if err := store.DepAdd(controlID, candidateID, "blocks"); err != nil {
++			return nil, err
++		}
++	}
++	if control.Metadata[beadmeta.ControlEpochMetadataKey] == strconv.Itoa(expectedEpoch) {
++		ok, casErr := writer.CompareAndSetMetadataKey(controlID, beadmeta.ControlEpochMetadataKey,
++			strconv.Itoa(expectedEpoch), strconv.Itoa(expectedEpoch+1))
++		if !ok {
++			if casErr != nil && !beads.IsPreconditionFailed(casErr) {
++				return nil, casErr
++			}
++			// The epoch alone cannot identify which candidate won the fence.
++			// Reconcile candidates afresh before publishing any route.
++			return nil, ErrEpochConflict
++		}
++	}
++	control, err = store.Get(controlID)
++	if err != nil {
++		return nil, err
++	}
++	if control.Status == "closed" || control.Metadata[beadmeta.ControlEpochMetadataKey] != strconv.Itoa(expectedEpoch+1) {
++		return nil, ErrEpochConflict
++	}
++	if err := activateAttachCandidate(store, candidateID, mapping); err != nil {
++		return nil, err
++	}
++	return &AttachResult{RootID: candidateID, WorkflowRootID: workflowID, IDMapping: mapping, Duplicate: true}, nil
++}
 diff --git a/internal/molecule/molecule_test.go b/internal/molecule/molecule_test.go
 index abefb11..b261800 100644
 --- a/internal/molecule/molecule_test.go

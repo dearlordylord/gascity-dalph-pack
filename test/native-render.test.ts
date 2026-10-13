@@ -2,6 +2,7 @@ import { Duration, Effect, FileSystem, Schema } from "effect"
 import { NodeServices } from "@effect/platform-node"
 import { expect, it } from "@effect/vitest"
 import { parse } from "smol-toml"
+import { pathToFileURL } from "node:url"
 import { runCommand } from "../src/quality/command.ts"
 
 it.live(
@@ -11,6 +12,21 @@ it.live(
       const fs = yield* FileSystem.FileSystem
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "dalph-render-" })
       const pack = yield* fs.realPath(".")
+      const bundleRoot = yield* fs.makeTempDirectoryScoped({ prefix: "dalph-render-entry-" })
+      const entry = `${bundleRoot}/render-city.mjs`
+      yield* runCommand({
+        executable: `${pack}/node_modules/.bin/esbuild`,
+        args: [
+          "scripts/render-city.ts",
+          "--bundle",
+          "--platform=node",
+          "--format=esm",
+          `--outfile=${entry}`,
+          `--define:import.meta.url=${JSON.stringify(pathToFileURL(`${pack}/scripts/render-city.ts`).href)}`
+        ],
+        cwd: pack,
+        timeout: Duration.seconds(10)
+      })
       const environment = {
         DALPH_TRIAL_ROOT: root,
         DALPH_CITY_NAME: "render-city",
@@ -31,12 +47,7 @@ it.live(
       }
       const render = runCommand({
         executable: "env",
-        args: [
-          ...Object.entries(environment).map(([key, value]) => `${key}=${value}`),
-          process.execPath,
-          `${pack}/node_modules/tsx/dist/cli.mjs`,
-          "scripts/render-city.ts"
-        ],
+        args: [...Object.entries(environment).map(([key, value]) => `${key}=${value}`), process.execPath, entry],
         cwd: pack,
         timeout: Duration.seconds(10)
       })

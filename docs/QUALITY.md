@@ -26,12 +26,17 @@ or cached check result is executed. This avoids the unbounded module-loading
 delay observed before the first stage with the tsx entry.
 
 Fast runs every static check, controlled tests with 99% coverage of every
-production source file, and example checks. Controlled tests use at most four
-Vitest workers; this changes only test scheduling, not Dalph runtime behavior.
+production source file, and example checks. Controlled tests use at most three
+Vitest processes and reuse source modules within each process. Every case
+creates its scoped layers and fixtures; global mocking remains prohibited.
+This changes only test scheduling, not Dalph runtime behavior.
 Vitest persists source-keyed module transformations between runs. Every test
 and coverage measurement still executes; test outcomes are never reused.
 Short verification CLIs compile their current TypeScript entry with esbuild
-before execution, avoiding repeated tsx module-loading overhead. Their ignored
+before execution, avoiding repeated tsx module-loading overhead. The controlled city-rendering
+test also compiles its current entry into a scoped temporary directory, retaining
+the original source URL for template lookup. Both rendering calls and the
+configuration and filesystem assertions still execute. Their ignored
 JavaScript bundles are build outputs; every invocation executes the verifier.
 Full adds the real Gas City
 acceptance suite, with at most four file workers. Every test owns its city,

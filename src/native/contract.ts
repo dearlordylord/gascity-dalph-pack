@@ -11,7 +11,8 @@ export const NativeBuild = Schema.Struct({
   version: Schema.Literals([
     "dev-dalph-native-v3",
     "dev-dalph-native-v4-candidate",
-    "dev-dalph-native-v5-scope-candidate"
+    "dev-dalph-native-v5-scope-candidate",
+    "dev-dalph-native-v6-attach-candidate"
   ])
 })
 /** Public fresh formula cook response; the workflow root is not routed to a worker. */

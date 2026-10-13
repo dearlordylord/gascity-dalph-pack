@@ -85,3 +85,11 @@ ephemeral rows, dependencies and closed work, unchanged HEAD, owned reader
 closure, actual operator-off fallback, and composed review convergence.
 Qualification of the full installation/recovery/maintenance composition and
 the complete native suite is still required before adopting this profile.
+
+The candidate also recovers interrupted activation of an existing attached
+attempt. Readiness discovers its pending marker even when the root type has
+already changed from a gate to a task. Recovery validates the exact root,
+store, authored members and original epoch transition before publishing routes.
+A missing committed attempt refuses replacement; a lost fence or concurrent
+activation remains retryable. These focused recovery checks do not replace the
+complete installation, maintenance and live-provider acceptance requirements.

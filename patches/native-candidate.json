@@ -5,9 +5,9 @@
   "gc": {
     "repository": "https://github.com/gastownhall/gascity.git",
     "revision": "8fd6aa25ce73b3e8cf0c1e092e8a14ab00b4c15a",
-    "version": "dev-dalph-native-v5-scope-candidate",
+    "version": "dev-dalph-native-v6-attach-candidate",
     "patch": "gascity-matched-native-candidate.patch",
-    "patchSha256": "25da933d2fea4c8fd3b4ba600e9a0ac3e82b2ea24d69a0868fb6c8a1801d8917",
+    "patchSha256": "52d1a8dc3b57f9edf631234027c49aecd65d4ca71761f8aa6ee2f84ee3e785f9",
     "beadsModule": "github.com/steveyegge/beads",
     "beadsModuleVersion": "v1.3.1-0.20261010163319-1b7bf9b1910d",
     "beadsModuleSum": "h1:kOJptrP3/VelJlqzmmMpzLtcD2nHhe6ABagkaYpg7s0=",

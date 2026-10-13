@@ -40,7 +40,7 @@ it.live("candidate setup pins the CLI to the linked library and the complete pat
     expect(patch).toContain("+++ b/internal/molecule/graph_apply.go")
     expect(patch).toContain("TestAttachFencedGraphLostResponseRecoversOneSurvivor")
     expect(patch).toContain("TestAttachFencedGraphConcurrentAttachesConvergeOnOneSubDAG")
-    expect(manifest.gc.version).toBe("dev-dalph-native-v5-scope-candidate")
+    expect(manifest.gc.version).toBe("dev-dalph-native-v6-attach-candidate")
     expect(manifest.gc.schema).toEqual({ main: 69, ignored: 27 })
   }).pipe(Effect.provide(NodeServices.layer))
 )
