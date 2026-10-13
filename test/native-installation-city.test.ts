@@ -5,7 +5,17 @@ import * as Request from "effect/http/HttpClientRequest"
 import * as Response from "effect/http/HttpClientResponse"
 import { expect, it } from "@effect/vitest"
 import { makeNativeCity } from "./helpers/native-city.ts"
-import { NativeConfig } from "../src/native/contract.ts"
+import { NativeAgents, NativeConfig } from "../src/native/contract.ts"
+
+const Maintenance = Schema.Struct({
+  config: Schema.Struct({
+    Daemon: Schema.Struct({ WispGCInterval: Schema.String, WispTTL: Schema.String }),
+    Orders: Schema.Struct({ Skip: Schema.Array(Schema.String) }),
+    Events: Schema.Struct({
+      Rotation: Schema.Struct({ Enabled: Schema.Boolean, MaxSizeBytes: Schema.Number, ArchiveRetainAge: Schema.String })
+    })
+  })
+})
 
 it.live(
   "S11/S12 fresh native installation passes full preflight without launch and refuses legacy resume",
@@ -37,6 +47,35 @@ it.live(
       expect(
         resolved.config.Agents.filter((agent) => agent.Dir === "fixture" && agent.Name.startsWith("native-"))
       ).toHaveLength(6)
+      const maintenance = yield* city
+        .gc("config", "show", "--json")
+        .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Maintenance))))
+      expect(maintenance.config.Daemon).toEqual({ WispGCInterval: "", WispTTL: "" })
+      expect(maintenance.config.Orders.Skip).toEqual([
+        "dolt-remotes-patrol",
+        "jsonl-export",
+        "mol-dog-backup",
+        "mol-dog-compactor",
+        "mol-dog-stale-db",
+        "prune-branches",
+        "reaper",
+        "wisp-compact"
+      ])
+      expect(maintenance.config.Events.Rotation).toEqual({
+        Enabled: true,
+        MaxSizeBytes: 268435456,
+        ArchiveRetainAge: "720h"
+      })
+      const agents = yield* city
+        .gc("agent", "list", "--json")
+        .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(NativeAgents))))
+      expect(agents.agents.find((agent) => agent.qualified_name === "bd.dog")?.suspended).toBe(false)
+      const rotation = yield* city
+        .gc("events", "rotate", "--wait")
+        .pipe(
+          Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ ok: Schema.Literal(true) }))))
+        )
+      expect(rotation.ok).toBe(true)
       expect((yield* city.rows()).filter((row) => row.metadata?.["dalph.native_launch"])).toEqual([])
       expect(before.filter((row) => row.metadata?.["dalph.native_launch"])).toEqual([])
       const ownedEntries = (yield* city.fs.exists(city.env.DALPH_WORKTREE_ROOT)) ? yield* city.worktreeEntries() : []

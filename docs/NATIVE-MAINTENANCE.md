@@ -62,3 +62,12 @@ event replay and a complete audit older than 30 days are not guaranteed.
 Controlled workflow acceptance fixtures explicitly suppress unrelated patrols
 and suspend the database dog locally. Those fixture restrictions do not appear
 in the production template and do not prove production maintenance behavior.
+The fresh installation fixture uses the production renderer with a controlled
+harness. It observes the eight resolved exclusions, unsuspended database dog,
+disabled age-only collection and the event rotation policy through public Gas
+City configuration. Public `events rotate --wait` succeeds while the legacy
+worktree, branch and uncertain receipt survive repeat preflight and legacy
+resume refusal. Fixture closure waits for supervisor shutdown and stops its
+two exact provider scopes; their retained files are preserved. These focused
+observations do not replace whole-suite qualification or prove a total archive
+byte cap.

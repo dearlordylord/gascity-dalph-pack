@@ -1,6 +1,6 @@
 __pycache__/
 *.pyc
-node_modules/
+node_modules
 
 dashboard/app.bundle.js
 

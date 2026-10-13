@@ -1725,3 +1725,389 @@ index 0000000..e49d94a
 +  },
 +  "additionalProperties": true
 +}
+diff --git a/internal/molecule/attach_conditional_test.go b/internal/molecule/attach_conditional_test.go
+index 06e4b4d..d3c30ca 100644
+--- a/internal/molecule/attach_conditional_test.go
++++ b/internal/molecule/attach_conditional_test.go
+@@ -3,6 +3,7 @@ package molecule
+ import (
+ 	"context"
+ 	"errors"
++	"fmt"
+ 	"strings"
+ 	"sync"
+ 	"testing"
+@@ -12,6 +13,184 @@ import (
+ 	"github.com/gastownhall/gascity/internal/rollout/gate"
+ )
+ 
++type lostFencedGraphResponseStore struct {
++	beads.Store
++	applier              beads.GraphApplyStore
++	calls                int
++	loseResponse         bool
++	failEdge             bool
++	failFenceObservation bool
++	failActivation       bool
++}
++
++func (s *lostFencedGraphResponseStore) ConditionalWritesResolveTarget() beads.Store { return s.Store }
++
++func (s *lostFencedGraphResponseStore) ApplyGraphPlan(ctx context.Context, plan *beads.GraphApplyPlan) (*beads.GraphApplyResult, error) {
++	s.calls++
++	result, err := s.applier.ApplyGraphPlan(ctx, plan)
++	if err != nil {
++		return nil, err
++	}
++	for _, id := range result.IDs {
++		row, err := s.Store.Get(id)
++		if err != nil {
++			return nil, err
++		}
++		if !beads.IsReadyExcludedBead(row) || row.Assignee != "" || row.Metadata[beadmeta.RoutedToMetadataKey] != "" {
++			return nil, fmt.Errorf("pending graph contains runnable row %s", id)
++		}
++	}
++	if s.loseResponse {
++		s.loseResponse = false
++		return nil, errors.New("bd create --graph: connection reset by peer after commit")
++	}
++	return result, nil
++}
++
++func (s *lostFencedGraphResponseStore) DepAdd(from, to, kind string) error {
++	if s.failEdge && kind == "blocks" {
++		s.failEdge = false
++		return errors.New("blocking edge temporarily unavailable")
++	}
++	return s.Store.DepAdd(from, to, kind)
++}
++
++func (s *lostFencedGraphResponseStore) Get(id string) (beads.Bead, error) {
++	row, err := s.Store.Get(id)
++	if err == nil && s.failFenceObservation && row.Metadata["gc.control_epoch"] == "2" {
++		s.failFenceObservation = false
++		return beads.Bead{}, errors.New("fresh epoch observation unavailable")
++	}
++	return row, err
++}
++
++func (s *lostFencedGraphResponseStore) Update(id string, opts beads.UpdateOpts) error {
++	if s.failActivation && opts.Type != nil {
++		s.failActivation = false
++		return errors.New("activation interrupted")
++	}
++	return s.Store.Update(id, opts)
++}
++
++func TestAttachFencedGraphLostResponseRecoversOneSurvivor(t *testing.T) {
++	prev := IsGraphApplyEnabled()
++	SetGraphApplyEnabled(true)
++	t.Cleanup(func() { SetGraphApplyEnabled(prev) })
++	base, err := beads.OpenSQLiteStore(t.TempDir())
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() { _ = base.(interface{ CloseStore() error }).CloseStore() })
++	if err := beads.StampOpenedStore(base, "SQLiteStore", gate.Require, nil, nil); err != nil {
++		t.Fatal(err)
++	}
++	applier, ok := beads.GraphApplyFor(base)
++	if !ok {
++		t.Fatal("missing graph capability")
++	}
++	store := &lostFencedGraphResponseStore{Store: base, applier: applier, loseResponse: true}
++	root := setupWorkflow(t, store)
++	control := setupWorkflowChild(t, store, root.ID, "Control")
++	if err := store.SetMetadata(control.ID, "gc.control_epoch", "1"); err != nil {
++		t.Fatal(err)
++	}
++	opts := AttachOptions{IdempotencyKey: control.ID + ":attempt:2", ExpectedEpoch: 1}
++	if _, err := Attach(t.Context(), store, makeWorkflowRecipe("attempt", "run"), control.ID, opts); err == nil {
++		t.Fatal("lost response reported success")
++	}
++	if store.calls != 1 {
++		t.Fatalf("ambiguous apply retried %d times", store.calls)
++	}
++	pending, err := store.List(beads.ListQuery{Metadata: map[string]string{beadmeta.IdempotencyKeyMetadataKey: opts.IdempotencyKey}})
++	if err != nil || len(pending) != 1 {
++		t.Fatalf("pending roots = %v, %v", pending, err)
++	}
++	if pending[0].Metadata[beadmeta.AttachFencePendingMetadataKey] != "true" {
++		t.Fatal("uncertain graph activated")
++	}
++	store.failEdge = true
++	if _, err := Attach(t.Context(), store, makeWorkflowRecipe("attempt", "run"), control.ID, opts); err == nil {
++		t.Fatal("missing edge reported successful recovery")
++	}
++	stillPending, err := store.Get(pending[0].ID)
++	if err != nil || stillPending.Metadata[beadmeta.AttachFencePendingMetadataKey] != "true" {
++		t.Fatalf("failed edge activated graph: %+v, %v", stillPending, err)
++	}
++	unchanged, err := store.Get(control.ID)
++	if err != nil || unchanged.Metadata["gc.control_epoch"] != "1" {
++		t.Fatalf("failed edge consumed epoch: %+v, %v", unchanged, err)
++	}
++	store.failFenceObservation = true
++	if _, err := Attach(t.Context(), store, makeWorkflowRecipe("attempt", "run"), control.ID, opts); err == nil {
++		t.Fatal("unobserved epoch reported successful recovery")
++	}
++	stillPending, err = store.Get(pending[0].ID)
++	if err != nil || stillPending.Metadata[beadmeta.AttachFencePendingMetadataKey] != "true" {
++		t.Fatalf("unobserved epoch activated graph: %+v, %v", stillPending, err)
++	}
++	store.failActivation = true
++	if _, err := Attach(t.Context(), store, makeWorkflowRecipe("attempt", "run"), control.ID, opts); err == nil {
++		t.Fatal("interrupted activation reported successful recovery")
++	}
++	recovered, err := Attach(t.Context(), store, makeWorkflowRecipe("attempt", "run"), control.ID, opts)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if recovered.RootID != pending[0].ID || !recovered.Duplicate || store.calls != 1 {
++		t.Fatalf("recovery minted another graph: %+v, calls=%d", recovered, store.calls)
++	}
++	activated, err := store.Get(recovered.RootID)
++	if err != nil || activated.Metadata[beadmeta.AttachFencePendingMetadataKey] != "" {
++		t.Fatalf("winner not activated: %+v, %v", activated, err)
++	}
++	current, err := store.Get(control.ID)
++	if err != nil || current.Metadata["gc.control_epoch"] != "2" {
++		t.Fatalf("epoch advanced incorrectly: %+v, %v", current, err)
++	}
++	for step, id := range recovered.IDMapping {
++		row, err := store.Get(id)
++		if err != nil {
++			t.Fatal(err)
++		}
++		if row.Type == "gate" || row.Metadata[DeferredTypeMetadataKey] != "" {
++			t.Fatalf("recovery left executable step deferred: %s %+v", step, row)
++		}
++		if row.Metadata[beadmeta.RootBeadIDMetadataKey] != root.ID {
++			t.Fatalf("lost parent workflow: %+v", row)
++		}
++	}
++	assertBlockingDependency(t, store, control.ID, recovered.RootID)
++}
++
++func assertBlockingDependency(t *testing.T, store beads.Store, from, to string) {
++	t.Helper()
++	deps, err := store.DepList(from, "down")
++	if err != nil {
++		t.Fatal(err)
++	}
++	for _, dep := range deps {
++		if dep.DependsOnID == to && dep.Type == "blocks" {
++			return
++		}
++	}
++	t.Fatalf("missing blocking edge %s -> %s", from, to)
++}
++
++func TestAttachFencedGraphConcurrentAttachesConvergeOnOneSubDAG(t *testing.T) {
++	prev := IsGraphApplyEnabled()
++	SetGraphApplyEnabled(true)
++	t.Cleanup(func() { SetGraphApplyEnabled(prev) })
++	store, err := beads.OpenSQLiteStore(t.TempDir())
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() { _ = store.(interface{ CloseStore() error }).CloseStore() })
++	if err := beads.StampOpenedStore(store, "SQLiteStore", gate.Require, nil, nil); err != nil {
++		t.Fatal(err)
++	}
++	assertConcurrentAttachConvergence(t, store)
++}
++
+ // newStampedAttachStore opens a MemStore through the beads factory so it
+ // carries a real conditional-writes stamp.
+ func newStampedAttachStore(t *testing.T, mode gate.Mode) *beads.MemStore {
+@@ -37,6 +216,11 @@ func newStampedAttachStore(t *testing.T, mode gate.Mode) *beads.MemStore {
+ // edge detached) and a re-entrant call returns the winner.
+ func TestAttachEpochFenceConcurrentAttachesConvergeOnOneSubDAG(t *testing.T) {
+ 	store := newStampedAttachStore(t, gate.Auto)
++	assertConcurrentAttachConvergence(t, store)
++}
++
++func assertConcurrentAttachConvergence(t *testing.T, store beads.Store) {
++	t.Helper()
+ 	root := setupWorkflow(t, store)
+ 	control := setupWorkflowChild(t, store, root.ID, "Control")
+ 	_ = store.SetMetadata(control.ID, "gc.control_epoch", "1")
+diff --git a/internal/molecule/attach_test.go b/internal/molecule/attach_test.go
+index 6e0cbb5..b4b7a70 100644
+--- a/internal/molecule/attach_test.go
++++ b/internal/molecule/attach_test.go
+@@ -39,7 +39,7 @@ func makeWorkflowRecipe(name string, stepIDs ...string) *formula.Recipe {
+ }
+ 
+ // setupWorkflow creates a workflow root bead and returns its ID.
+-func setupWorkflow(t *testing.T, store *beads.MemStore) beads.Bead {
++func setupWorkflow(t *testing.T, store beads.Store) beads.Bead {
+ 	t.Helper()
+ 	root, err := store.Create(beads.Bead{
+ 		Title: "Test Workflow",
+@@ -56,7 +56,7 @@ func setupWorkflow(t *testing.T, store *beads.MemStore) beads.Bead {
+ }
+ 
+ // setupWorkflowChild creates a child bead under a workflow root.
+-func setupWorkflowChild(t *testing.T, store *beads.MemStore, rootID, title string) beads.Bead {
++func setupWorkflowChild(t *testing.T, store beads.Store, rootID, title string) beads.Bead {
+ 	t.Helper()
+ 	child, err := store.Create(beads.Bead{
+ 		Title:    title,
+diff --git a/internal/molecule/graph_apply.go b/internal/molecule/graph_apply.go
+index 8f631f6..3cf2de9 100644
+--- a/internal/molecule/graph_apply.go
++++ b/internal/molecule/graph_apply.go
+@@ -354,6 +354,17 @@ func buildRecipeApplyPlan(recipe *formula.Recipe, opts Options) (*beads.GraphApp
+ }
+ 
+ func deferGraphNodeRouting(node *beads.GraphApplyNode) {
++	// Match the sequential attach fence: withholding an assignee alone does
++	// not exclude unassigned work from Ready. Preserve its type for activation.
++	if !beads.IsReadyExcludedBead(beads.Bead{Type: node.Type, Metadata: node.Metadata}) {
++		beadType := node.Type
++		if beadType == "" {
++			beadType = "task"
++		}
++		ensureGraphNodeMetadata(node)
++		node.Metadata[DeferredTypeMetadataKey] = beadType
++		node.Type = "gate"
++	}
+ 	if node.Assignee != "" {
+ 		ensureGraphNodeMetadata(node)
+ 		node.Metadata[DeferredAssigneeMetadataKey] = node.Assignee
+diff --git a/internal/molecule/molecule.go b/internal/molecule/molecule.go
+index 1547fa6..568c867 100644
+--- a/internal/molecule/molecule.go
++++ b/internal/molecule/molecule.go
+@@ -540,14 +540,7 @@ func findExistingAttach(store beads.Store, recipe *formula.Recipe, rootBeadID, a
+ 		// its own pick.)
+ 		sort.Slice(activating, func(i, j int) bool { return activating[i].ID < activating[j].ID })
+ 		survivor := activating[0]
+-		idMapping, err := existingAttachIDMapping(store, recipe, rootBeadID, survivor)
+-		if err != nil {
+-			return nil, err
+-		}
+-		if err := activateAttachCandidate(store, survivor.ID, idMapping); err != nil {
+-			return nil, fmt.Errorf("finishing claimed attach candidate %s: %w", survivor.ID, err)
+-		}
+-		return adoptExistingAttach(store, recipe, rootBeadID, attachBeadID, expectedEpoch, survivor)
++		return adoptDeferredAttach(store, recipe, rootBeadID, attachBeadID, expectedEpoch, survivor)
+ 	}
+ 	if len(pending) > 0 {
+ 		// Only unclaimed pending candidates survive under this key: the fence
+@@ -578,19 +571,35 @@ func findExistingAttach(store beads.Store, recipe *formula.Recipe, rootBeadID, a
+ 				return nil, fmt.Errorf("detaching stale attach candidate %s: %w", loser.ID, err)
+ 			}
+ 		}
+-		idMapping, err := existingAttachIDMapping(store, recipe, rootBeadID, winner)
++		return adoptDeferredAttach(store, recipe, rootBeadID, attachBeadID, expectedEpoch, winner)
++	}
++	if failedRootID != "" {
++		return nil, fmt.Errorf("existing attach root %s for idempotency key %q is marked molecule_failed", failedRootID, key)
++	}
++	return nil, nil
++}
++
++// An uncertain batch may have committed before Attach wired the blocking edge
++// or advanced the epoch. Reconcile both before publishing runnable work.
++func adoptDeferredAttach(store beads.Store, recipe *formula.Recipe, rootBeadID, attachBeadID string, expectedEpoch int, candidate beads.Bead) (*AttachResult, error) {
++	result, err := adoptExistingAttach(store, recipe, rootBeadID, attachBeadID, expectedEpoch, candidate)
++	if err != nil {
++		return nil, err
++	}
++	if expectedEpoch > 0 {
++		control, err := store.Get(attachBeadID)
+ 		if err != nil {
+ 			return nil, err
+ 		}
+-		if err := activateAttachCandidate(store, winner.ID, idMapping); err != nil {
+-			return nil, fmt.Errorf("activating recovered attach candidate %s: %w", winner.ID, err)
++		epoch, err := strconv.Atoi(control.Metadata[beadmeta.ControlEpochMetadataKey])
++		if err != nil || epoch <= expectedEpoch {
++			return nil, fmt.Errorf("recovered attach epoch not observed advanced: %w", ErrEpochConflict)
+ 		}
+-		return adoptExistingAttach(store, recipe, rootBeadID, attachBeadID, expectedEpoch, winner)
+ 	}
+-	if failedRootID != "" {
+-		return nil, fmt.Errorf("existing attach root %s for idempotency key %q is marked molecule_failed", failedRootID, key)
++	if err := activateAttachCandidate(store, candidate.ID, result.IDMapping); err != nil {
++		return nil, fmt.Errorf("activating recovered attach candidate %s: %w", candidate.ID, err)
+ 	}
+-	return nil, nil
++	return result, nil
+ }
+ 
+ // adoptExistingAttach returns an existing sub-DAG root as the idempotent
+@@ -835,12 +844,18 @@ func Instantiate(ctx context.Context, store beads.Store, recipe *formula.Recipe,
+ 		recipe = recipeWithNativeStepDependencies(recipe)
+ 		opts.nativeStepTopologyPrepared = true
+ 	}
+-	if !opts.DeferAssignees && IsGraphApplyEnabled() {
++	if IsGraphApplyEnabled() {
+ 		if applier, ok := beads.GraphApplyFor(store); ok {
+ 			result, err := instantiateViaGraphApply(ctx, applier, recipe, opts)
+ 			if err == nil {
+ 				return result, nil
+ 			}
++			// A fenced attach reconciles its idempotency-keyed pending graph
++			// before retry. A lost apply response must not create another
++			// speculative graph in this invocation or fall back to per-row writes.
++			if opts.DeferAssignees {
++				return nil, err
++			}
+ 			if !isTransientGraphApplyError(err) {
+ 				return nil, err
+ 			}
+diff --git a/internal/molecule/molecule_test.go b/internal/molecule/molecule_test.go
+index abefb11..b261800 100644
+--- a/internal/molecule/molecule_test.go
++++ b/internal/molecule/molecule_test.go
+@@ -3789,6 +3789,45 @@ func TestNonRootStepBeadType(t *testing.T) {
+ // TestInstantiate_DeferredStepsStayGate verifies that deferBeadRouting's
+ // "gate" type is preserved for deferred non-root steps in non-graph
+ // workflows and is not coerced to "step" by the #1039 non-root type coercion.
++func TestInstantiateDeferredGraphApplyKeepsFencePendingWorkUnrunnable(t *testing.T) {
++	prev := IsGraphApplyEnabled()
++	SetGraphApplyEnabled(true)
++	t.Cleanup(func() { SetGraphApplyEnabled(prev) })
++	store := &graphApplySpyStore{MemStore: beads.NewMemStore()}
++	recipe := &formula.Recipe{
++		Name: "fenced-attempt",
++		Steps: []formula.RecipeStep{
++			{ID: "fenced-attempt", Title: "Attempt", Type: "task", IsRoot: true,
++				Metadata: map[string]string{beadmeta.AttachFencePendingMetadataKey: "true"}},
++			{ID: "fenced-attempt.work", Title: "Work", Type: "task", Assignee: "worker",
++				Metadata: map[string]string{beadmeta.RoutedToMetadataKey: "worker", beadmeta.ExecutionRoutedToMetadataKey: "worker"}},
++		},
++		Deps: []formula.RecipeDep{{StepID: "fenced-attempt.work", DependsOnID: "fenced-attempt", Type: "parent-child"}},
++	}
++	_, err := Instantiate(context.Background(), store, recipe, Options{DeferAssignees: true, PreserveRootType: true})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if store.calls != 1 {
++		t.Fatalf("graph apply calls = %d, want one atomic graph creation", store.calls)
++	}
++	for _, node := range store.plan.Nodes {
++		if node.Type != "gate" || node.Assignee != "" || node.AssignAfterCreate {
++			t.Fatalf("pending candidate is runnable: %+v", node)
++		}
++		if node.Metadata[DeferredTypeMetadataKey] != "task" {
++			t.Fatalf("lost activation type: %+v", node)
++		}
++		if node.Metadata[beadmeta.RoutedToMetadataKey] != "" || node.Metadata[beadmeta.ExecutionRoutedToMetadataKey] != "" {
++			t.Fatalf("pending candidate has live routing: %+v", node)
++		}
++	}
++	work := store.plan.Nodes[1]
++	if work.Metadata[DeferredAssigneeMetadataKey] != "worker" || work.Metadata[DeferredRoutedToMetadataKey] != "worker" || work.Metadata[DeferredExecutionRoutedToMetadataKey] != "worker" {
++		t.Fatalf("lost deferred activation: %+v", work)
++	}
++}
++
+ func TestInstantiate_DeferredStepsStayGate(t *testing.T) {
+ 	store := beads.NewMemStore()
+ 	recipe := &formula.Recipe{

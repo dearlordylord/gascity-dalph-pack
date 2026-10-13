@@ -494,10 +494,27 @@ cause a visible admission failure before cook, model calls or worktree creation.
 Repairing configuration permits a fresh admission without rewriting retained
 attempts. The standalone preflight reports Git's registered worktree inventory
 without treating listed resources as owned or authorizing cleanup.
-Config reads are read-only, so an interrupted preflight has no uncertain
-mutation to reconcile. Controlled tests: `native-installation.test.ts`.
+Config reads are read-only. Native provider health can recover backend services
+through its own lifecycle boundary; it is not proof of stopped project writers.
+Controlled tests: `native-installation.test.ts` and `native-provider-health.test.ts`.
 
 # Native maintenance configuration (S11/S12)
+
+The matched Gas City candidate also preserves fenced native graph attachment.
+After a blocking review the controller creates the next iteration through its
+existing atomic GraphApply primitive. Before epoch CAS succeeds, executable
+nodes are gates with deferred type, assignment and routing. A committed batch
+with a lost response is not repeated internally: the next Attach reconciles
+the same idempotency-keyed graph, restores its blocking edge, advances and
+freshly observes the epoch, then activates the selected survivor. Failure to
+restore the edge or observe the epoch leaves the graph deferred. Interrupted
+activation resumes on that survivor. Concurrent attaches still leave one live
+graph; a loser never becomes claimable. No review budget or prerequisite changes.
+Matched SDK controls: `TestInstantiateDeferredGraphApplyKeepsFencePendingWorkUnrunnable`,
+`TestAttachFencedGraphLostResponseRecoversOneSurvivor` and
+`TestAttachFencedGraphConcurrentAttachesConvergeOnOneSubDAG`, together with the
+existing Attach tests. The pack manifest pins the complete source patch.
+These controls do not replace the bounded full native acceptance stage.
 
 The Operator renders a fresh city without starting a product workflow. Native
 health, orphan claim reconciliation, order tracking and storm detection retain
@@ -510,6 +527,14 @@ Repeating rendering reads the same inputs and creates no sessions, tracker rows
 or Git mutations. Configuration tests pin these boundaries; fresh-city tests
 must separately observe native resolved configuration and retained recovery data.
 Event replay beyond the diagnostic retention window is not guaranteed.
+
+After each isolated native acceptance case, the fixture waits for the public
+supervisor shutdown and stops the rig and city Beads backend through Gas City.
+The fixture's idle timeout zero may retain recovery data during the case; it
+must not leak live backend services after scope closure. Failure to observe
+cleanup fails the case. Exact Git resources, tracker files and diagnostic roots
+remain retained. Acceptance: the native-city fixtures' scoped finalizer and
+`native-installation-city.test.ts`; no foreign city or backend is selected.
 
 # Review recovery after approval, before qualification
 

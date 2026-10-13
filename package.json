@@ -24,9 +24,9 @@
     "lint:fix": "oxlint --fix src scripts test dashboard && dprint fmt",
     "format": "dprint fmt",
     "check-format": "dprint check",
-    "check-all": "tsx scripts/check-all.ts",
-    "check:all": "tsx scripts/check-all.ts",
-    "check:fast": "tsx scripts/check-fast.ts",
+    "check-all": "pnpm check all",
+    "check:all": "pnpm check all",
+    "check:fast": "pnpm check fast",
     "circular": "dpdm --no-warning --no-tree --no-progress --exit-code circular:1 --transform \"src/**/*.ts\"",
     "complexity": "oxlint -c oxlint.complexity.json src",
     "test:coverage": "vitest run --coverage",
@@ -36,10 +36,11 @@
     "verify:schema-boundaries": "esbuild scripts/verify-schema-boundaries.ts --bundle --platform=node --format=esm --outfile=dist/verify-schema-boundaries.js && node dist/verify-schema-boundaries.js",
     "prepare": "husky",
     "trial:render-city": "tsx scripts/render-city.ts",
-    "check": "tsx scripts/check.ts",
+    "check": "sh -c 'seconds=60; [ \"$1\" != all ] || seconds=600; exec timeout --signal=INT --kill-after=3s \"${seconds}s\" pnpm check:run \"$@\"' --",
     "example:typecheck": "node node_modules/@typescript/native/bin/tsc -p examples/expenses/tsconfig.json",
     "example:test": "pnpm --dir examples/expenses test",
-    "example:oracle": "esbuild trial/verify-product.ts --bundle --platform=node --format=esm --outfile=dist/verify-product.js && node dist/verify-product.js \"$PWD/examples/expenses\""
+    "example:oracle": "esbuild trial/verify-product.ts --bundle --platform=node --format=esm --outfile=dist/verify-product.js && node dist/verify-product.js \"$PWD/examples/expenses\"",
+    "check:run": "esbuild scripts/check.ts --bundle --platform=node --format=cjs --outfile=dist/check.cjs && node dist/check.cjs"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

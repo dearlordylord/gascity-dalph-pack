@@ -20,6 +20,10 @@ follow in order. A failure interrupts sibling checks. One deadline covers
 the entire cycle: 60 seconds for fast, 600 seconds for full. Expiry interrupts
 the owned child process group; it never counts as a pass. Stage output streams
 live and each completed stage reports its elapsed time.
+The CLI compiles its current TypeScript entry before execution. The outer Linux
+`timeout` includes that compilation in the same budget; no stale compiled gate
+or cached check result is executed. This avoids the unbounded module-loading
+delay observed before the first stage with the tsx entry.
 
 Fast runs every static check, controlled tests with 99% coverage of every
 production source file, and example checks. Controlled tests use at most four
@@ -36,6 +40,10 @@ directory, API port, target Git repository and retained evidence. Each worker ad
 cities run across the two workers. This replaces serial scheduling within a
 file; the scenario bodies and assertions are unchanged. This limit governs
 qualification fixtures; application concurrency is unchanged.
+Fixture scope closure waits for supervisor shutdown and stops its exact city
+and rig provider backend through Gas City. Backend idle timeout zero does not
+authorize leaked services across cases. Files and evidence remain available;
+a failed shutdown fails the case rather than silently accepting cleanup.
 Native scenarios remain
 unchanged in `vitest.native.config.ts`; they are not part of routine fast runs.
 Native city fixtures enable Gas City's `GC_BD_TRACE_JSON` in their own retained

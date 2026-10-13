@@ -177,11 +177,23 @@ export const makeNativeCity = (fault: boolean | string = false) =>
       ? `\n[[patches.agent]]\nname = "fixture/dalph.native-prepare"\nmax_active_sessions = 2\n[[patches.agent]]\nname = "fixture/dalph.native-integrator"\nstart_command = ${string(`${process.execPath} ${pack}/dist/native-delivery-fixture.js`)}\n`
       : ""
     const template = join(root, "template.toml")
-    const installedSource =
-      reviewFault === "installation"
-        ? source.replace('[[patches.agent]]\nname = "bd.dog"\nsuspended = true\n', "") +
-          '\n[events.rotation]\nenabled = true\nmax_size_bytes = 268435456\narchive_retain_age = "720h"\n'
-        : source
+    let installedSource = source
+    if (reviewFault === "installation") {
+      const rendered = yield* execute(
+        [process.execPath, `${pack}/node_modules/tsx/dist/cli.mjs`, "scripts/render-city.ts"],
+        sourcePack
+      )
+      const body = yield* Schema.decodeUnknownEffect(Schema.NonEmptyString)(rendered.split("[workspace.env]")[0])
+      // Only the harness and isolated fixture environment differ from the
+      // production renderer. Maintenance defaults and exclusions stay intact.
+      installedSource =
+        body.replace('provider = "codex"', 'provider = "fixture"') +
+        `\n[providers.fixture]\ncommand = ${string(process.execPath)}\nargs = [${string(`${pack}/dist/native-fixture.js`)}]\nprompt_mode = "none"\nprocess_names = ["node"]\nready_delay_ms = 0\n[api]\nallow_mutations = true\n[workspace.env]\n` +
+        Object.entries(env)
+          .map(([key, value]) => `${key} = ${string(value)}`)
+          .join("\n") +
+        "\n"
+    }
     yield* fs.writeFileString(template, installedSource + deliveryPatch)
     yield* fs.writeFileString(
       env.DALPH_NATIVE_CONTRACT,
@@ -214,9 +226,13 @@ export const makeNativeCity = (fault: boolean | string = false) =>
     ])
     yield* Effect.acquireRelease(Effect.void, () =>
       Effect.gen(function* () {
-        yield* execute(["gc", "--city", city, "stop"]).pipe(Effect.ignore)
-        yield* execute(["gc", "supervisor", "stop"]).pipe(Effect.ignore)
-      })
+        yield* execute(["gc", "--city", city, "stop"], undefined, 15)
+        yield* execute(["gc", "supervisor", "stop", "--wait"], undefined, 15)
+        // Idle timeout zero retains recovery data, not a licence to leave
+        // every isolated fixture's provider services running after its test.
+        yield* execute(["gc", "--city", city, "--rig", "fixture", "bd", "dolt", "stop"], undefined, 10)
+        yield* execute(["gc", "--city", city, "bd", "dolt", "stop"], undefined, 10)
+      }).pipe(Effect.orDie)
     )
     yield* execute(["gc", "start", city, "--json"], undefined, 120)
     // Tracker bootstrap is installation; qualify a clean project only after it completes.
