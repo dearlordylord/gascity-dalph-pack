@@ -165,8 +165,9 @@ Run from the pack with the prepared environment:
 mise exec node@24.20.0 -- pnpm check:fast
 ```
 
-Use the full `pnpm check all` at most once a day. The entire fast cycle is bounded
-by 60 seconds and full by ten minutes; a timeout is a failure, not qualification.
+Choose checks under the [verification cost limit](QUALITY.md#cost-limit).
+Broad commands are optional; the fast command has a 60-second deadline and full
+has a ten-minute deadline. A timeout is a failure, not qualification.
 
 Pack tests cover protocol, actual child custody, the Effect HTTP boundary, and
 native worktree refusal/idempotence. Native worktree checks require `gc`; an absent binary fails the check. Application checks run in the
