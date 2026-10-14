@@ -11,9 +11,10 @@ executes one claimed step per session. The default limits are two workers and
 one integrator. A successor depends on its prerequisite's **delivery**, so it
 starts after integration and cleanup, rather than after a model response.
 
-This is a pinned Linux prototype. Completed live trials include operator
-recovery from Beads timeouts; autonomous cold replay and low-latency dashboard
-updates are not established. Read [setup](docs/SETUP.md) before starting a fresh
+This is a pinned Linux prototype. A minimal configured-provider diamond has
+survived interruption, integrated all four tasks and cleaned its owned worktrees.
+Broad native qualification, alternate-harness launch and third admission under
+uncertain retained sessions remain incomplete. Read [setup](docs/SETUP.md) before starting a fresh
 city. New native runs use the launch/resume instructions there and the
 [native maintenance boundaries](docs/NATIVE-MAINTENANCE.md). Use
 [legacy recovery](docs/RECOVERY.md) for an older workflow.
@@ -60,8 +61,8 @@ replacement graph. See [product graph boundaries](docs/PRODUCT-GRAPH.md).
 Serve the dashboard with `pnpm dashboard:serve` and open
 `http://HOST:43597/?city=CITY&scope=RIG&run=WORKFLOW_ID`. It shows four product
 tasks with their dependency edges; selection exposes their execution phases.
-Unproven delivery stays incomplete. Native graph acceptance is still in
-progress; failed broad verification remains failed.
+Unproven delivery stays incomplete. The minimal live graph completed; combined
+native acceptance is still incomplete and failed broad verification remains failed.
 
 ## Legacy four-task demo
 
