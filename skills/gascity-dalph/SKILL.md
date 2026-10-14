@@ -13,10 +13,10 @@ sessions; this pack supplies workflow formulas and delivery policy.
 
 ## Locate the pack and the run
 
-When reading this file through a web link, clone
-`https://github.com/dearlordylord/gascity-dalph-pack.git` into a directory beside
+When reading this file through a web link, locate a prepared matching pack
+checkout, or clone `https://github.com/dearlordylord/gascity-dalph-pack.git` beside
 the target project. Record its exact commit and set `DALPH_PACK_ROOT` to that
-absolute directory. Resolve the links below against the cloned repository;
+absolute directory. Resolve the links below against that repository;
 they are operational instructions, not additional skills to install.
 
 Identify the target repository, target branch, configured project check command
@@ -28,6 +28,31 @@ If the project already has a city, retained environment, contract or workflow ID
 inspect those exact resources and take the **Recover** branch. Otherwise take
 **Prepare**. Done: one identified project and either one retained workflow or
 one new isolated workspace; no second root has been launched.
+
+## Concurrent projects and agents
+
+Share a prepared pack checkout, its dependencies/build outputs and matching
+`gc`/`bd` binaries **read-only** across different projects. Verify the recorded
+commit and build identities before reuse; keep the matching native binaries
+together on PATH. Installation and compilation belong to initial preparation.
+An upgrade uses a separate checkout/tool directory while existing runs retain
+their original inputs.
+
+Each project owns its city, registry, tracker/provider data, temporary directory,
+worktree root, evidence, contracts and ports. In its environment file explicitly
+set `GC_HOME`, `DOLT_ROOT_PATH`, `TMUX_TMPDIR`, `TMPDIR`,
+`DALPH_WORKTREE_ROOT`, `DALPH_NATIVE_CONTRACT`, `DALPH_TRACKER_ENDPOINT`
+and `DALPH_DASHBOARD_PORT`, alongside the target variables below. Source that
+file before `trial/env.sh`: its defaults preserve inherited variables, so changing
+only the target path can accidentally select another city's state. Confirm
+distinct directories and free ports before starting this project's services.
+
+For multiple agents on the same project, share its recorded environment and
+existing root. One coordinator launches/resumes that root; Gas City assigns
+task attempts. Hand another agent the environment-file path and workflow ID.
+A second isolated city writing the same target is not a qualified concurrency
+configuration. Done: independent projects have independent state; agents on
+one project refer to one coordinated workflow.
 
 ## Prepare a new machine or project
 
@@ -51,7 +76,8 @@ one new isolated workspace; no second root has been launched.
    workspace so another agent can recover the same resources.
    Done: exact paths, city identity and endpoint are recorded and independent
    of another project's live city.
-3. Follow setup to build the pack and matched native tools, author the native
+3. Follow setup to prepare missing pack/native artifacts, or reuse the verified
+   read-only installation above. Author the native
    contract with the project's actual check command, render the city, initialize
    it and register the rig with this pack. Select the proxied-native profile
    **before** rendering/initialization as described in matched native build.
