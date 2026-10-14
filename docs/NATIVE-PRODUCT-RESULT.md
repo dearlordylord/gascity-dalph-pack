@@ -38,6 +38,13 @@ Scoped Astra reviews closed the implementation findings. The retained city used
 the matched v9 native build and configured Codex CLI 0.162.1 with tmux 3.3a and
 Node 24.20.0. The pack supplied no model override.
 
+After the Operator revised product acceptance, two in-memory DOM tests passed
+against the extracted production view; two selected admission/recovery tests
+passed; and all four selected installation/maintenance tests passed. Each
+completed focused invocation stayed below 60 seconds. The initial combined
+DOM/controller invocation timed out and remains failed. TypeScript checking,
+changed-file lint and dashboard bundling passed. No broad gate was run.
+
 ## Incomplete evidence
 
 - Broad native qualification previously exceeded 600 seconds and remains
@@ -45,8 +52,11 @@ Node 24.20.0. The pack supplied no model override.
   declared exhausted. The live trial required multiple interrupted windows;
   it does not prove a complete 600-second quality cycle.
 - Current candidate coverage was not measured; the 99% threshold is unchanged.
-- The live browser DOM check failed before launch because `libatk-1.0.so.0`
-  was absent. HTTP/projection observations do not substitute for that check.
+- The real-browser check failed before launch because `libatk-1.0.so.0`
+  was absent; browser layout/compatibility remains untested. Two in-memory DOM
+  tests now pass for task selection, frontier, stale retention and recovery
+  after refresh failure, against the production mounted view. They do not
+  establish Chromium layout or compatibility.
 - Selected Hapsland checks returned skipped with no classifier request; they
   are not credited as completed semantic reviews.
 - A separate real Claude Code 2.1.296 launch/execution passed preflight, claimed
@@ -56,11 +66,12 @@ Node 24.20.0. The pack supplied no model override.
   city, supervisor and both providers were stopped; the owned worktree and
   unpublished commit remain retained for recovery. This proves alternate
   launch/execution, not a fully qualified Claude delivery composition.
-- Explicit third admission with two occupied positions through restart and
-  uncertain custody remains unproven. The separate controlled case did not
-  obtain two acknowledged attempts: its native runtime reported no tmux server.
-  It was stopped and no further infrastructure repair or broad retry followed.
-  The successful diamond does not substitute for this requirement of #7.
+- The separate live third-admission fixture failed before two acknowledged
+  attempts: its native runtime reported no tmux server. It remains failed.
+  Under the updated product acceptance contract, focused production admission
+  and controller tests separately prove third refusal and retained positions
+  through restart/uncertainty: two selected tests passed in 14.12 seconds,
+  with 15 unselected tests skipped. No fixture repair or broad retry followed.
 
 Further exhausted infrastructure repair is deferred under the current quality
 policy. Missing product proofs retain their acceptance status.
@@ -75,16 +86,16 @@ complete combined acceptance of #1, #6 or #7.
 | Scenario | Observed evidence and remaining obligation |
 | --- | --- |
 | S1: configured agent | Live Codex diamond completed; real Claude launch, claim, implementation commit and 19 project tests succeeded. Claude review/delivery remains incomplete. Missing-capability controls belong to `test/native-installation-city.test.ts`; current complete installation qualification remains unproven. |
-| S2: bounded fork/join | Native root `pr-wec` delivered A/B/C/D and D used a Base containing B/C. Fork recovery preserved the original attempts. Explicit third admission with two occupied positions through restart and uncertain custody remains unproven; do not infer it from a completed diamond. |
+| S2: bounded fork/join | Native root `pr-wec` delivered A/B/C/D and D used a Base containing B/C. Fork recovery preserved the original attempts. Separate selected production admission/controller tests prove third refusal and retained occupied positions. The live fault fixture remains failed. |
 | S3: first clean review | C received a clean independent review before delivery. Correlation and approval refusal have focused observation/settlement evidence; this does not establish every malformed/transport case in the current live composition. |
 | S4: blocking review and budgets | A/B/D received blocking findings and same-attempt fixes before clean approval. Exhaustion, duplicate human continuation and all crash-budget cases remain separately accountable to [the S3/S4 handoff](S3-S4-REVIEW-HANDOFF.md); the live diamond did not reach exhaustion. |
-| S5: retained recovery | A/B/C and D recovery comparisons preserve exact attempts, Base and worktree identity; A/B/C proposals also match across the fork cut. `test/native-session-parallel.test.ts` owns controlled unknown-session refusal. The explicit two-occupied/third-admission restart proof remains incomplete. |
+| S5: retained recovery | A/B/C and D recovery comparisons preserve exact attempts, Base and worktree identity; A/B/C proposals also match across the fork cut. Selected `native-controller` and `native-session-parallel` tests passed for retained positions, third refusal and occupied-writer recovery. |
 | S6: project qualification | The delivered target passed its configured 18-test command. [The delivery handoff](S7-S8-DELIVERY-HANDOFF.md) records separate qualification controls. This live trial does not prove the parent scenario's non-pnpm command, timeout or changed-tree refusals. |
 | S7: serialized delivery and lost response | The live diamond integrated both branches and local/remote heads agree. Historical composed lost-push/serialization evidence is recorded in [the delivery handoff](S7-S8-DELIVERY-HANDOFF.md). No lost push was injected into the current diamond. |
 | S8: exact cleanup and unsafe preservation | Final Git inventory contains only the main worktree and no owned temporary branches; fresh session inventory contains no task writers. Focused settlement/recovery checks passed. Dirty, foreign, moved, live and uncertain resource refusals retain their separate [S8 evidence](S7-S8-DELIVERY-HANDOFF.md); successful cleanup does not prove those refusals. |
 | S9: native tracker authority | The live graph used public scoped native tracker operations. Provider-neutral and idle/drain evidence remains scoped to [the tracker handoff](S9-TRACKER-HANDOFF.md); the configured backend in this trial does not prove all tracker combinations. |
-| S10: four-task live UI | Host HTTP frames and production projection show four product tasks and four prerequisite edges; focused tests cover missing metadata refusal and phase projection. Browser DOM acceptance failed before launch due to missing `libatk-1.0.so.0`; interactive selection and stale rendering are not credited as live browser passes. |
-| S11: safe fresh installation | Both isolated provider configurations passed preflight. Historical fresh-installation evidence is in [the exact-read handoff](NATIVE-EXACT-READ-HANDOFF.md#fresh-installation-and-pin-observations). All-role maintenance/retention acceptance, eligible Hapsland review and current candidate coverage remain incomplete. |
+| S10: four-task live UI | Host HTTP frames and production projection show four product tasks and four prerequisite edges. Two in-memory DOM tests passed for four nodes/edges, frontier, selection/facts, refresh failure retention and recovery. Real-browser layout/compatibility remains untested. |
+| S11: safe fresh installation | Both isolated provider configurations passed preflight. Four current focused installation/maintenance tests passed for complete role admission, permission/bounds/suspension refusal, health defaults, recovery retention and diagnostic bounds. Historical fresh-installation evidence retains its revision scope in [the exact-read handoff](NATIVE-EXACT-READ-HANDOFF.md#fresh-installation-and-pin-observations). Hapsland is explicitly deferred and current candidate coverage remains unmeasured. |
 | S12: migration boundary | Historical installation evidence covers legacy resume refusal and retained legacy resources. The new diamond establishes new-run composition, not migration of a pending legacy run. Current complete upgrade/setup qualification remains unproven. |
 
 The next proofs must target these named gaps. The exhausted verification fixture

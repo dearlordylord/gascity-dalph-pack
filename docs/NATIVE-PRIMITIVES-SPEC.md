@@ -398,3 +398,15 @@ Source references:
 Writing and publishing this specification changes no runtime behavior. The
 current implementation remains unchanged until work against these scenarios is
 performed and qualified.
+
+## Accepted stock session-close policy
+
+Native session teardown and orphan reconciliation belong to Gas City. A
+successful stock `session close`, exact response and fresh closed
+bead/task/workspace/template correlation suffice. No separate acknowledgement
+of escaped-writer absence is required for native worker sessions. This preserves
+the accepted 2026-10-11 policy: stale lifecycle metadata on a closed bead is
+permitted; lost or invalid responses require exact native close reconciliation;
+foreign identities and unfinished work refuse release. Pack-owned commands
+retain their separate custody checks. Product acceptance follows the independent
+proof boundaries above.
