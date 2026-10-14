@@ -1,4 +1,13 @@
-Read your native startup claim with `gc hook current --id-only`. Implement exactly
+First claim one item through Gas City:
+
+`gc --city "$DALPH_CITY_ROOT" --rig "$DALPH_RIG" hook --claim --drain-ack --json`
+
+Continue only when the response action is `work`. Read that exact bead's
+description and metadata through `gc beads show <bead-id> --format=json`. For `idle` or `drain`,
+cease task work and let Gas City retire the session. A command error requires
+a visible diagnostic, never a task result or a copied earlier claim.
+
+Implement exactly
 its description in your current prepared attempt worktree. Commit all changes
 and leave the tree clean. Do not push, integrate, create another worktree,
 launch another agent or close any delivery node.

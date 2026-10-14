@@ -1,0 +1,72 @@
+formula = "native-product-diamond"
+description = "Four product completion barriers; Gas City owns fork/join readiness"
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[vars.a_instruction]
+required = true
+
+[vars.b_instruction]
+required = true
+
+[vars.c_instruction]
+required = true
+
+[vars.d_instruction]
+required = true
+
+[[steps]]
+id = "a-launch"
+title = "Launch product task A"
+description = "{{a_instruction}}"
+metadata = { "gc.run_target" = "dalph.native-prepare", "dalph.runtime" = "native-v1", "dalph.phase" = "product-launch", "dalph.product_task" = "a" }
+
+[[steps]]
+id = "a"
+title = "Product task A"
+description = "{{a_instruction}}"
+needs = ["a-launch"]
+metadata = { "dalph.runtime" = "native-v1", "dalph.phase" = "product-completion", "dalph.product_task" = "a" }
+
+[[steps]]
+id = "b-launch"
+title = "Launch product task B"
+description = "{{b_instruction}}"
+needs = ["a"]
+metadata = { "gc.run_target" = "dalph.native-prepare", "dalph.runtime" = "native-v1", "dalph.phase" = "product-launch", "dalph.product_task" = "b" }
+
+[[steps]]
+id = "b"
+title = "Product task B"
+description = "{{b_instruction}}"
+needs = ["b-launch"]
+metadata = { "dalph.runtime" = "native-v1", "dalph.phase" = "product-completion", "dalph.product_task" = "b" }
+
+[[steps]]
+id = "c-launch"
+title = "Launch product task C"
+description = "{{c_instruction}}"
+needs = ["a"]
+metadata = { "gc.run_target" = "dalph.native-prepare", "dalph.runtime" = "native-v1", "dalph.phase" = "product-launch", "dalph.product_task" = "c" }
+
+[[steps]]
+id = "c"
+title = "Product task C"
+description = "{{c_instruction}}"
+needs = ["c-launch"]
+metadata = { "dalph.runtime" = "native-v1", "dalph.phase" = "product-completion", "dalph.product_task" = "c" }
+
+[[steps]]
+id = "d-launch"
+title = "Launch product task D"
+description = "{{d_instruction}}"
+needs = ["b","c"]
+metadata = { "gc.run_target" = "dalph.native-prepare", "dalph.runtime" = "native-v1", "dalph.phase" = "product-launch", "dalph.product_task" = "d" }
+
+[[steps]]
+id = "d"
+title = "Product task D"
+description = "{{d_instruction}}"
+needs = ["d-launch"]
+metadata = { "dalph.runtime" = "native-v1", "dalph.phase" = "product-completion", "dalph.product_task" = "d" }

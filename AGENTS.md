@@ -11,13 +11,10 @@ typed errors, Schema-owned boundary payloads, Config at startup, scoped services
 Effect HTTP, and injected clocks. Supply test dependencies through layers or
 ports. Put property tests in `*.property.test.ts`.
 
-During implementation and handoff use `pnpm check:fast`: the entire cycle has a
-60-second deadline, including static checks and 99% coverage of all production
-source. The full `pnpm check all`, including native city acceptance, has a
-ten-minute deadline. There is no calendar-day admission limit. Retain each
-result and diagnose a failure with a focused check before another full run.
-Treat limits as design constraints rather than suppressing diagnostics. Preserve
-native acceptance scenarios in the full stage. See [quality](docs/QUALITY.md).
+Before choosing checks, repairing their infrastructure, or retrying a failed
+gate, follow the [verification cost limit](docs/QUALITY.md#cost-limit).
+Use a focused check for the changed product boundary. Broad quality commands
+are available evidence tools, not mandatory steps for every edit or handoff.
 
 Hapsland reviews selected TypeScript source through the installed agent hooks.
 Use `hapsland doctor codex` to diagnose local readiness and `hapsland rules check`

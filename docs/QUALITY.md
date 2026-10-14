@@ -1,9 +1,33 @@
 # Local quality gate
 
-The pack maintainer uses `pnpm check:fast` during implementation and handoff.
-`pnpm check` defaults to that same fast cycle. Run `pnpm check all` (also
-`pnpm check-all` or `pnpm check:all`) for full acceptance. CI is
-intentionally absent.
+The pack maintainer chooses verification for the changed product boundary.
+`pnpm check:fast` and `pnpm check all` are available broad checks; neither is
+mandatory for every edit or handoff. `pnpm check` defaults to the fast command.
+CI is intentionally absent.
+
+## Cost limit
+
+- Cap each verification-infrastructure problem at **30 minutes total and two
+  attempts**, including diagnosis, edits, review, preparation, and command
+  waiting across turns, sessions, and agents. Full runs and timeouts count.
+  Renaming or committing never resets limits; already-overbudget work is
+  exhausted. Record elapsed time, attempts, and deadline in existing evidence.
+- Run a focused check first; retry only after new causal evidence or repair.
+  At either cap, stop safely, reconcile custody, complete required cleanup even
+  over cap, and preserve fences and evidence. Defer infrastructure repair;
+  **continue product work this turn without awaiting approval**.
+- Product defects block affected claims; unknowns are not harmless. Remove
+  verification-only dependencies within authorized scope; retain actual product
+  dependencies. Use the smallest direct proof through existing public tools for
+  the same behavior. Never rebuild the exhausted harness, weaken tests, or imply
+  unrun checks passed.
+- Product proof covers graph, recovery, integration, ticket closure, owned
+  cleanup, and live UI. If one boundary is unavailable, pursue other ready
+  product work; only genuine external dependencies block everything.
+- Further infrastructure repair requires separate explicit user choice; never
+  make that choice prerequisite. Broad checks are optional per edit/handoff.
+
+## Available commands
 
 Prepare the pinned dependencies and native Gas City binary as described in
 [setup](SETUP.md), then run:
@@ -61,6 +85,14 @@ host directory had 283,958 entries; the SDK's directory traversal took
 0.53–0.70 seconds per call, versus 34–166 microseconds in an empty namespace.
 This fixture isolation changes no runtime policy, acknowledgement order,
 secret-file permissions, scenario assertions or cleanup requirements.
+The two controlled provider entrypoints bundle their pinned dependencies into
+the freshly built actor artifact. Loading the external Effect and platform-node
+module trees took 3.8–6.2 seconds per diagnostic process; the same imports in a
+bundle took 0.56–1.18 seconds. The ESM artifact uses the existing Node
+`createRequire` banner. Providers remain separate processes, with unchanged
+CLI/HTTP boundaries, fault ports, barriers and finalizers. A focused bundle
+probe executes a real Undici HTTP request and a completed child process;
+these measurements do not establish a successful full native acceptance run.
 Fixture scope closure waits for supervisor shutdown and stops its exact city
 and rig provider backend through Gas City. Backend idle timeout zero does not
 authorize leaked services across cases. Files and evidence remain available;

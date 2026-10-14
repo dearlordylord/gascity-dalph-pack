@@ -85,6 +85,18 @@ export const makeNativeController = (
       return yield* new BoundaryFailure({ message: "native resume has no exact delivery identity" })
     const delivery = yield* Schema.decodeUnknownEffect(BeadSchema)(deliveries[0])
     if (yield* settleNative(tracker, delivery, attempt)) return
+    const continued = rows.filter(
+      (node) =>
+        node.metadata?.["dalph.product_root"] === root &&
+        node.metadata["dalph.task"] === attempt.task &&
+        node.metadata["dalph.phase"] === "deliver" &&
+        isExecutionMetadata(node.metadata) &&
+        node.status === "closed" &&
+        node.metadata["gc.outcome"] === "pass"
+    )
+    if (continued.length > 1)
+      return yield* new BoundaryFailure({ message: "native resume has ambiguous settled continuation delivery" })
+    if (continued[0] && (yield* settleNative(tracker, continued[0], attempt))) return
     yield* reconcileNativeAttempt(
       config,
       commands,
@@ -112,7 +124,7 @@ export const makeNativeController = (
     )
     for (const row of work) yield* retainedResource(row, rows, productRoot, root)
   })
-  const resume = Effect.fn("Native.resume")(function* (root: BeadId) {
+  const reconcile = Effect.fn("Native.reconcileRoot")(function* (root: BeadId) {
     const launch = yield* tracker.fact(
       root,
       "native_launch",
@@ -126,7 +138,10 @@ export const makeNativeController = (
       return yield* new BoundaryFailure({ message: "native resume requires the original launch contract" })
     yield* nativePreflight(config, launch.contract, commands)
     yield* retainedResources(root)
+  })
+  const resume = Effect.fn("Native.resume")(function* (root: BeadId) {
+    yield* reconcile(root)
     yield* commands.execute(config.root, ["gc", "--city", config.city, "resume"])
   })
-  return { launch, resume }
+  return { launch, resume, reconcile }
 }

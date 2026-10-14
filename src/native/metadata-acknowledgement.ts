@@ -11,7 +11,7 @@ const MetadataAcknowledgement = Schema.Struct({
   outcome: Schema.Literals(["swapped", "already_next", "conflict"])
 })
 
-export const acknowledgeNativeMetadata = Effect.fn("Native.acknowledgeMetadata")(function* (
+export const acknowledgeNativeMetadataOutcome = Effect.fn("Native.acknowledgeMetadataOutcome")(function* (
   response: string,
   bead: BeadId,
   store: string,
@@ -22,4 +22,10 @@ export const acknowledgeNativeMetadata = Effect.fn("Native.acknowledgeMetadata")
     return yield* new BoundaryFailure({ message: "native metadata acknowledgement names another bead, store or key" })
   if (receipt.outcome === "conflict")
     return yield* new BoundaryFailure({ message: `contradictory durable metadata: ${key}` })
+  return receipt.outcome
 })
+
+export const acknowledgeNativeMetadata = Effect.fn("Native.acknowledgeMetadata")(
+  (response: string, bead: BeadId, store: string, key: string) =>
+    acknowledgeNativeMetadataOutcome(response, bead, store, key).pipe(Effect.asVoid)
+)

@@ -36,6 +36,33 @@ Launch creates a new workflow; preflight and resume do not launch another root.
 The independent native reviewer owns at most four semantic rounds. Infrastructure
 failures retain their current round and exact recovery resources.
 
+## Native four-task graph
+
+Author a JSON object with four concrete instructions named `a`, `b`, `c`, and
+`d`. The graph runs A first, B/C after A delivery, and D after both B/C
+deliveries. Each instruction owns its files and states its acceptance checks.
+
+```sh
+. trial/env.sh
+mise exec node@24.20.0 -- node dist/native.js launch-graph /absolute/path/instructions.json
+```
+
+Retain the returned `workflow_id`. Recover that same graph after interruption:
+
+```sh
+mise exec node@24.20.0 -- node dist/native.js resume-graph <workflow-id>
+```
+
+Gas City owns dispatch and review iterations. Resume reconciles retained launch,
+attempt, Git and delivery identities before waking the city. It does not cook a
+replacement graph. See [product graph boundaries](docs/PRODUCT-GRAPH.md).
+
+Serve the dashboard with `pnpm dashboard:serve` and open
+`http://HOST:43597/?city=CITY&scope=RIG&run=WORKFLOW_ID`. It shows four product
+tasks with their dependency edges; selection exposes their execution phases.
+Unproven delivery stays incomplete. Native graph acceptance is still in
+progress; failed broad verification remains failed.
+
 ## Legacy four-task demo
 
 This formula uses the retained `legacy-v1` adapter. The redesigned native

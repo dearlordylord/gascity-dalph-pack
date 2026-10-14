@@ -4,6 +4,7 @@ import { nativeReviewFixture } from "./helpers/native-review-fixture.ts"
 import { canonical } from "../src/delivery/files.ts"
 import { NativeAttempt } from "../src/native/contract.ts"
 import { NativeReviewVerdict } from "../src/native/review-contract.ts"
+import { makeNativeController } from "../src/native/controller.ts"
 import { settleNative } from "../src/native/settlement.ts"
 import { BeadId } from "../src/domain/shared.ts"
 import { RESULT } from "./helpers/workflow-fixture.ts"
@@ -53,3 +54,33 @@ for (const fault of ["none", "missing-outcome", "missing", "commit", "attempt", 
       })
   )
 }
+
+it.effect("original batch recovery accepts exact successful continuation settlement after owned cleanup", () =>
+  Effect.gen(function* () {
+    const f = yield* nativeReviewFixture
+    yield* Effect.gen(function* () {
+      yield* f.start
+      f.branches.set("dalph/work/work", RESULT)
+      yield* f.review.prepare(yield* f.row("review-prepare"))
+      yield* f.review.submit(yield* f.row("review"), yield* f.verdict)
+      yield* f.review.gate(yield* f.row("review-control"))
+      f.raw("work").metadata["dalph.review_required"] = "true"
+      yield* f.workflow.check(yield* f.row("review-control"))
+      yield* f.workflow.integrate(yield* f.row("delivery"))
+      f.raw("delivery").metadata["gc.root_bead_id"] = "continued-root"
+      f.raw("delivery").metadata["dalph.product_root"] = "root"
+      f.rows.set("original-skipped", {
+        id: BeadId.make("original-skipped"),
+        status: "closed",
+        metadata: { "gc.root_bead_id": "root", "dalph.task": "task", "dalph.phase": "deliver", "gc.outcome": "skipped" }
+      })
+      delete f.raw("work").metadata["dalph.native_settled"]
+      const controller = makeNativeController(f.config, f.contract, f.commands, f.tracker, process.execPath)
+      yield* controller.reconcile(BeadId.make("root"))
+      expect(f.raw("work").metadata["dalph.native_settled"]).toBeDefined()
+      expect(f.paths.size).toBe(0)
+      expect(f.state.pushCalls).toBe(1)
+      expect(f.raw("original-skipped").metadata["gc.outcome"]).toBe("skipped")
+    }).pipe(Effect.provide(f.layer))
+  })
+)

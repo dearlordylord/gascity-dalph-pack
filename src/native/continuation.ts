@@ -16,6 +16,7 @@ import { NativeReviewVerdict, REVIEW_ROUNDS } from "./review-contract.ts"
 import { isReviewControlMetadata } from "./nodes.ts"
 import { WorkspaceSlug } from "./shared-workspace.ts"
 import { reviewFactKey } from "./review-fact-key.ts"
+import { ProductBinding } from "./product-contract.ts"
 
 type Tracker = ReturnType<typeof makeTracker>
 const HumanKey = Schema.String.check(Schema.isMinLength(1))
@@ -88,11 +89,19 @@ export const makeNativeContinuation = (
         yield* nativePreflight(config, contract, commands)
         const check = yield* nativeCheckLauncher(config, commands, nodeExecutable, "review-gate")
         const workspace = yield* Schema.decodeUnknownEffect(WorkspaceSlug)(basename(facts.attempt.plan.path))
+        const metadata = facts.group.work.metadata
+        const product = metadata["dalph.product_completion"]
+          ? yield* Schema.decodeUnknownEffect(ProductBinding)({
+              workflow: metadata["dalph.product_workflow"],
+              completion: metadata["dalph.product_completion"],
+              launch: metadata["dalph.product_launch"]
+            })
+          : null
         const response = yield* commands.execute(config.root, [
           ...tracker.gc,
           "formula",
           "cook",
-          "native-review-continuation",
+          product ? "native-product-continuation" : "native-review-continuation",
           "--json",
           "--var",
           `agent=${contract.agent}`,
@@ -107,7 +116,17 @@ export const makeNativeContinuation = (
           "--var",
           `product_root=${facts.attempt.root}`,
           "--var",
-          `previous_batch=${facts.batch}`
+          `previous_batch=${facts.batch}`,
+          ...(product
+            ? [
+                "--var",
+                `product_workflow=${product.workflow}`,
+                "--var",
+                `product_completion=${product.completion}`,
+                "--var",
+                `product_launch=${product.launch}`
+              ]
+            : [])
         ])
         const cooked = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(NativeCookResponse))(response)
         const launch = { workflow_id: cooked.root_id }

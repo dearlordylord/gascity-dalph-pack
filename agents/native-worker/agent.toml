@@ -1,6 +1,6 @@
 scope = "rig"
 # The selected native provider, options, permissions and runtime inherit Gas City configuration.
-prompt_template = "native-worker.md"
+prompt_template = "agents/native-worker/native-worker.md"
 sleep_after_idle = "10s"
 min_active_sessions = 0
 max_active_sessions = 2

@@ -18,10 +18,19 @@ export const GraphNode = Schema.Struct({
   executionInstances: Schema.Array(Instance)
 })
 export type GraphNode = typeof GraphNode.Type
+export const ProductTaskFrame = Schema.Struct({
+  id: Identity,
+  title: Schema.String,
+  status: Schema.String,
+  phase: Schema.String,
+  prerequisites: Schema.Array(Identity),
+  nodes: Schema.Array(GraphNode)
+})
 export const RunDetail = Schema.Struct({
   runId: Identity,
   title: Schema.String,
   nodes: Schema.Array(GraphNode),
+  productTasks: Schema.optionalKey(Schema.Array(ProductTaskFrame)),
   edges: Schema.Array(Schema.Struct({ from: Identity, to: Identity, kind: Schema.String })),
   progress: Schema.Struct({ terminal: Schema.Boolean }),
   completeness: Schema.Struct({ kind: Schema.String, reasons: Schema.optionalKey(Schema.Array(Schema.String)) })

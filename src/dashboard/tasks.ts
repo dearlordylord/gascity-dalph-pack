@@ -7,7 +7,7 @@ export interface ObservedTask {
   readonly id: string
   readonly title: string
   readonly status: string
-  readonly phase: "work" | "delivery"
+  readonly phase: string
   readonly nodes: ReadonlyArray<GraphNode>
 }
 const phaseNode = (nodes: readonly [GraphNode, ...GraphNode[]]): GraphNode => {
@@ -17,6 +17,7 @@ const phaseNode = (nodes: readonly [GraphNode, ...GraphNode[]]): GraphNode => {
 }
 /** Derives a display frame only; it cannot claim, schedule, or persist workflow facts. */
 export const observedTasks = (detail: RunDetail): ReadonlyArray<ObservedTask> => {
+  if (detail.productTasks) return detail.productTasks
   const groups = new Map<string, [GraphNode, ...GraphNode[]]>()
   for (const node of detail.nodes) {
     if (!node.visibleInGraph || node.constructKind === "run-root" || node.id.endsWith(".workflow-finalize")) continue

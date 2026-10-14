@@ -25,6 +25,13 @@ export const NativeCookResponse = Schema.Struct({
   mode: Schema.Literal("cook"),
   root_id: BeadId
 })
+/** Attaching a distinct task batch returns the public attach operation mode. */
+export const NativeAttachResponse = Schema.Struct({
+  schema_version: Schema.Literal("1"),
+  ok: Schema.Literal(true),
+  mode: Schema.Literal("attach"),
+  root_id: BeadId
+})
 export const NativeTaskIdentity = Schema.Struct({
   "gc.root_bead_id": BeadId,
   "dalph.task": Text,

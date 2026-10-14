@@ -16,6 +16,10 @@ import { NativeReviewVerdict, ReviewBlocking } from "../src/native/review-contra
 import { acknowledgeActorRetirement, acknowledgeCompletedActor } from "../src/native/actor-retirement.ts"
 import { runtimeHeartbeat } from "../src/native/runtime-heartbeat.ts"
 import { nativePreflight } from "../src/native/preflight.ts"
+import { makeProductLaunch } from "../src/native/product-launch.ts"
+import { completeProductTask } from "../src/native/product-completion.ts"
+import { makeProductController } from "../src/native/product-controller.ts"
+import { ProductInstructions } from "../src/native/product-contract.ts"
 
 const INFRASTRUCTURE_EXIT = 75
 
@@ -23,6 +27,8 @@ const execution = Effect.gen(function* () {
   const mode = yield* Schema.decodeUnknownEffect(
     Schema.Literals([
       "launch",
+      "launch-graph",
+      "resume-graph",
       "preflight",
       "continue",
       "resume",
@@ -73,6 +79,18 @@ const execution = Effect.gen(function* () {
   const workflow = makeNativeWorkflow(config, contract, commands, tracker, git)
   const controller = makeNativeController(config, contract, commands, tracker, process.execPath)
   const review = makeNativeReview(config, commands, tracker, git)
+  if (mode === "launch-graph" || mode === "resume-graph") {
+    const product = makeProductController(config, contract, commands, tracker, process.execPath)
+    if (mode === "resume-graph") yield* product.resume(yield* Schema.decodeUnknownEffect(BeadId)(process.argv[3]))
+    else {
+      const path = yield* Schema.decodeUnknownEffect(AbsolutePath)(process.argv[3])
+      const instructions = yield* fs
+        .readFileString(path)
+        .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(ProductInstructions))))
+      yield* Console.log(JSON.stringify(yield* product.launch(instructions)))
+    }
+    return
+  }
   if (mode === "launch") {
     const instruction = yield* Config.NonEmptyString("DALPH_NATIVE_TASK")
     yield* Console.log(JSON.stringify(yield* controller.launch(instruction)))
@@ -91,8 +109,9 @@ const execution = Effect.gen(function* () {
   }
   if (mode === "check" || mode === "review-gate") {
     const id = yield* Config.schema(BeadId, "GC_BEAD_ID")
-    if (mode === "check") yield* workflow.check(yield* tracker.bead(id))
-    else yield* tracker.bead(id).pipe(Effect.flatMap(review.gate))
+    const subject = yield* tracker.bead(id)
+    if (mode === "check") yield* workflow.check(subject)
+    else yield* review.gate(subject)
     return
   }
   const claim = yield* workflow.claim()
@@ -107,6 +126,16 @@ const execution = Effect.gen(function* () {
         Config.orElse(() => Config.NonEmptyString("GC_SESSION_NAME"))
       )
     )
+  if (mode === "prepare" && current.metadata?.["dalph.phase"] === "product-launch") {
+    yield* makeProductLaunch(config, contract, commands, tracker, process.execPath).launch(current)
+    yield* acknowledgeCompletedActor(config, commands, tracker, current.id)
+    return
+  }
+  if (mode === "prepare" && current.metadata?.["dalph.phase"] === "product-settlement") {
+    yield* completeProductTask(config, commands, tracker, current)
+    yield* acknowledgeCompletedActor(config, commands, tracker, current.id)
+    return
+  }
   if (mode === "review-context") {
     const facts = yield* review.context(current)
     yield* Console.log(

@@ -1,0 +1,75 @@
+formula = "native-product-task"
+description = "native-v1: one configured implementation and existing safe deterministic delivery"
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[vars.instruction]
+required = true
+[vars.workspace]
+required = true
+[vars.agent]
+required = true
+[vars.pack]
+required = true
+[vars.check]
+required = true
+[vars.review_check]
+required = true
+[vars.reviewer]
+required = true
+
+[[steps]]
+id = "prepare"
+needs = ["activation"]
+title = "Prepare immutable qualified native attempt"
+metadata = { "dalph.product_workflow" = "{{product_workflow}}", "dalph.product_completion" = "{{product_completion}}", "dalph.product_launch" = "{{product_launch}}", "gc.run_target" = "dalph.native-prepare", "dalph.task" = "task", "dalph.phase" = "prepare", "dalph.runtime" = "native-v1" }
+
+[[steps]]
+id = "work"
+title = "Implement assigned task through configured native harness"
+description = "{{instruction}}"
+needs = ["prepare"]
+metadata = { "dalph.product_workflow" = "{{product_workflow}}", "dalph.product_completion" = "{{product_completion}}", "dalph.product_launch" = "{{product_launch}}", "gc.run_target" = "{{agent}}", "dalph.task" = "task", "dalph.phase" = "work", "gc.pack_workspace" = "{{workspace}}", "dalph.runtime" = "native-v1", "dalph.review_required" = "true" }
+
+[[steps]]
+id = "review"
+expand = "native-independent-review"
+needs = ["work"]
+expand_vars = { product_workflow = "{{product_workflow}}", product_completion = "{{product_completion}}", product_launch = "{{product_launch}}", agent = "{{agent}}", reviewer = "{{reviewer}}", review_check = "{{review_check}}", delivery_scope = "delivery-scope", workspace = "{{workspace}}" }
+
+[[steps]]
+id = "qualify"
+title = "Qualify the exact independently approved candidate"
+needs = ["review"]
+metadata = { "dalph.product_workflow" = "{{product_workflow}}", "dalph.product_completion" = "{{product_completion}}", "dalph.product_launch" = "{{product_launch}}", "gc.scope_ref" = "delivery-scope", "gc.scope_role" = "member", "gc.on_fail" = "abort_scope", "gc.run_target" = "dalph.native-qualifier", "dalph.task" = "task", "dalph.phase" = "qualify", "dalph.runtime" = "native-v1" }
+
+[[steps]]
+id = "deliver"
+title = "Qualify, publish, promote and safely settle owned resources"
+needs = ["qualify"]
+metadata = { "dalph.product_workflow" = "{{product_workflow}}", "dalph.product_completion" = "{{product_completion}}", "dalph.product_launch" = "{{product_launch}}", "gc.scope_ref" = "delivery-scope", "gc.scope_role" = "member", "gc.on_fail" = "abort_scope", "gc.run_target" = "dalph.native-integrator", "dalph.task" = "task", "dalph.phase" = "deliver", "dalph.runtime" = "native-v1" }
+
+[[steps]]
+id = "delivery-scope"
+title = "Stop downstream delivery when the native review batch fails"
+needs = ["deliver"]
+metadata = { "dalph.product_workflow" = "{{product_workflow}}", "dalph.product_completion" = "{{product_completion}}", "dalph.product_launch" = "{{product_launch}}", "gc.kind" = "scope", "gc.scope_name" = "delivery", "gc.scope_role" = "body" }
+
+[vars.product_workflow]
+required = true
+[vars.product_completion]
+required = true
+[vars.product_launch]
+required = true
+
+[[steps]]
+id = "activation"
+title = "Activate only the durably observed product batch"
+metadata = { "dalph.phase" = "product-activation", "dalph.product_launch" = "{{product_launch}}" }
+
+[[steps]]
+id = "product-settlement"
+title = "Close product completion only after exact delivery settlement"
+needs = ["delivery-scope"]
+metadata = { "gc.scope_ref" = "delivery-scope", "gc.scope_role" = "teardown", "gc.run_target" = "dalph.native-prepare", "dalph.phase" = "product-settlement", "dalph.runtime" = "native-v1", "dalph.task" = "task", "dalph.product_workflow" = "{{product_workflow}}", "dalph.product_completion" = "{{product_completion}}", "dalph.product_launch" = "{{product_launch}}" }

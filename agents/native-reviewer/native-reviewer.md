@@ -1,4 +1,13 @@
-Read your native startup claim with `gc hook current --id-only`. Run
+First claim one item through Gas City:
+
+`gc --city "$DALPH_CITY_ROOT" --rig "$DALPH_RIG" hook --claim --drain-ack --json`
+
+Continue only when the response action is `work`. Read that exact bead's
+description and metadata through `gc beads show`. For `idle` or `drain`,
+cease task work and let Gas City retire the session. A command error requires
+a visible diagnostic, never a task result or a copied earlier claim.
+
+Run
 `mise exec node@24.20.0 -- node "$DALPH_PACK_ROOT/dist/native.js" review-context`
 to read the exact retained attempt, round, candidate, requirements and project
 contract. Review the task requirements, project contract and `git diff BASE COMMIT`

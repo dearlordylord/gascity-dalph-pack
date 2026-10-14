@@ -20,6 +20,11 @@ export function isReviewControlMetadata(metadata: Readonly<Record<string, string
   return (
     metadata["gc.kind"] === "ralph" &&
     metadata["gc.step_id"] === "review" &&
-    ["native-one-task.review", "native-review-continuation.review"].includes(metadata["gc.step_ref"] ?? "")
+    [
+      "native-one-task.review",
+      "native-product-task.review",
+      "native-review-continuation.review",
+      "native-product-continuation.review"
+    ].includes(metadata["gc.step_ref"] ?? "")
   )
 }

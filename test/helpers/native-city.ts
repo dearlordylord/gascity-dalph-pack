@@ -108,7 +108,7 @@ export const makeNativeCity = (fault: boolean | string = false) =>
         "--bundle",
         "--platform=node",
         "--format=esm",
-        "--packages=external",
+        '--banner:js=import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);',
         `--outfile=${pack}/dist/native-fixture.js`
       ],
       sourcePack
@@ -121,7 +121,7 @@ export const makeNativeCity = (fault: boolean | string = false) =>
           "--bundle",
           "--platform=node",
           "--format=esm",
-          "--packages=external",
+          '--banner:js=import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);',
           `--outfile=${pack}/dist/native-delivery-fixture.js`
         ],
         sourcePack

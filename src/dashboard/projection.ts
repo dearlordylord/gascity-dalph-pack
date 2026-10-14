@@ -8,7 +8,10 @@ const positionClasses = (status: string): ReadonlyArray<"frontier" | "held"> =>
 export const project = (detail: RunDetail): DeliveryGraphProjection => {
   const nodes = observedTasks(detail)
   const ids = new Set(nodes.map((node) => node.id))
-  const edges = detail.edges
+  const sourceEdges = detail.productTasks
+    ? detail.productTasks.flatMap((task) => task.prerequisites.map((from) => ({ from, to: task.id, kind: "blocks" })))
+    : detail.edges
+  const edges = sourceEdges
     .filter((edge) => !["parent", "parent-child", "contains"].includes(edge.kind))
     .map((edge) => ({ from: taskId(edge.from), to: taskId(edge.to), kind: "Prerequisite" as const }))
     .filter((edge) => edge.from !== edge.to && ids.has(edge.from) && ids.has(edge.to))
