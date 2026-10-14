@@ -292,11 +292,13 @@ launches a second root workflow.
 
 ## Testing Decisions
 
-Use one primary acceptance seam: launch and resume the composed native workflow
-in an isolated city through public Gas City commands, then observe native tracker
-and sessions, Git target/remote/resources and the read-only task graph. Inject
-controlled harness/runtime/check responses and fault barriers behind that seam.
-Do not qualify the migration merely by testing command strings or a new reducer.
+Launch and resume the minimal composed workflow through public Gas City commands,
+then observe native tracker and sessions, Git target/remote/resources and the
+read-only task graph. Prove independent safety and failure scenarios separately
+through the production services with controlled boundary responses and clocks.
+The live graph and focused proofs together establish acceptance; no single
+fixture must exercise every fault. Command-string assertions or a replacement
+reducer alone do not qualify workflow behavior.
 
 | Scenario | Acceptance test at the native workflow seam |
 | --- | --- |
@@ -328,11 +330,37 @@ capability must have real native launch evidence; a fake alone is insufficient
 to claim compatibility. Do not retry throttled mutations. Record finite fixture
 deadlines, stop safely at them and diagnose the exact failed boundary.
 
-Required pack qualification remains pnpm check all with 99% coverage and
-configured Hapsland review evidence for eligible changed declarations. Run
-focused checks first. Application qualification is owned by the project
-contract, not the pack's own quality gate. Final handoff maps S1–S12 individually
-to evidence and names every unqualified boundary.
+Pack verification follows docs/QUALITY.md: focused checks first, broad gates
+optional, unchanged 99% coverage threshold whenever coverage is measured, and
+the existing exhausted infrastructure repair budget remains exhausted.
+Hapsland acceptance is deferred by the Operator; skipped declarations are never
+credited as reviewed. Application qualification remains owned by the project
+contract. Final handoff maps S1–S12 individually to evidence and explicitly names
+failed, unrun and deferred checks.
+
+### Product acceptance boundaries
+
+- S2/S5 retain the limit of two occupied task attempts across restart. Test
+  third-admission refusal and unknown session custody with controlled native
+  boundary observations against the production admission/resume services.
+  The live diamond separately proves B/C overlap, dependency release, retained
+  attempts and D's composed Base. A broken live fixture is not a required
+  acceptance environment and does not prove a product defect.
+- S1 alternate-harness evidence requires real native launch, claim and execution
+  of the prepared task. Full alternate-harness review/delivery is separate
+  compatibility work; it is not a requirement for the primary configured
+  composition. Never advertise unqualified alternate delivery support.
+- S11 installation acceptance covers the documented, pinned primary composition
+  and every role within it. It does not require every harness/runtime combination.
+  Native maintenance, capability refusal, exact ownership and preservation of
+  unfinished evidence remain mandatory; extra combinations require separate
+  qualification.
+- S10 functional UI acceptance may run in memory with controlled HTTP responses
+  and clocks: four task nodes, prerequisite edges, frontier, selection/phase
+  detail, refresh, stale retention and delivery-gated finality. A live endpoint
+  separately proves native data binding. Real-browser layout and compatibility
+  checks remain explicitly unrun when the browser is unavailable; they do not
+  block functional acceptance or imply a visual compatibility pass.
 
 ## Out of Scope
 
