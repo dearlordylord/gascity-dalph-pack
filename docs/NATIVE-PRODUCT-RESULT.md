@@ -49,9 +49,18 @@ Node 24.20.0. The pack supplied no model override.
   was absent. HTTP/projection observations do not substitute for that check.
 - Selected Hapsland checks returned skipped with no classifier request; they
   are not credited as completed semantic reviews.
-- A real alternate model harness launch, and explicit third admission with
-  two occupied positions through restart/uncertain custody, remain unproven.
-  The successful diamond does not substitute for these requirements of #7.
+- A separate real Claude Code 2.1.296 launch/execution passed preflight, claimed
+  the prepared worktree and committed its small constant/test change. Its 19
+  project tests passed and implementation closed. Independent review/delivery
+  did not complete: review preparation repeated without task progress. Its
+  city, supervisor and both providers were stopped; the owned worktree and
+  unpublished commit remain retained for recovery. This proves alternate
+  launch/execution, not a fully qualified Claude delivery composition.
+- Explicit third admission with two occupied positions through restart and
+  uncertain custody remains unproven. The separate controlled case did not
+  obtain two acknowledged attempts: its native runtime reported no tmux server.
+  It was stopped and no further infrastructure repair or broad retry followed.
+  The successful diamond does not substitute for this requirement of #7.
 
 Further exhausted infrastructure repair is deferred under the current quality
 policy. Missing product proofs retain their acceptance status.

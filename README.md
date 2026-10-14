@@ -13,8 +13,9 @@ starts after integration and cleanup, rather than after a model response.
 
 This is a pinned Linux prototype. A minimal configured-provider diamond has
 survived interruption, integrated all four tasks and cleaned its owned worktrees.
-Broad native qualification, alternate-harness launch and third admission under
-uncertain retained sessions remain incomplete. Read [setup](docs/SETUP.md) before starting a fresh
+Codex and Claude have demonstrated real launch/execution. Broad qualification,
+Claude review/delivery and third admission under uncertain retained sessions
+remain incomplete. Read [setup](docs/SETUP.md) before starting a fresh
 city. New native runs use the launch/resume instructions there and the
 [native maintenance boundaries](docs/NATIVE-MAINTENANCE.md). Use
 [legacy recovery](docs/RECOVERY.md) for an older workflow.
