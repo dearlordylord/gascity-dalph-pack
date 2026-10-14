@@ -6,6 +6,17 @@ native harness, independent bounded review/fix, qualification, integration,
 ordinary push and recoverable cleanup. A separate
 read-only dashboard shows the DAG, frontier, and current work.
 
+## Give an agent one link
+
+Send the agent [the Gas City Dalph skill](skills/gascity-dalph/SKILL.md), your
+target repository and the requested tasks. It routes a fresh machine through
+setup, or an existing run through recovery, then follows delivery to completion.
+The ready commands support one task or A → {B,C} → D; other graph shapes need
+an explicit native formula extension.
+
+For example: “Read this skill and use it to deliver these tasks in this project.
+Preserve the graph dependencies and report the live dashboard and final result.”
+
 Gas City owns readiness, claims, and sessions. The pack supplies formulas and
 executes one claimed step per session. The default limits are two workers and
 one integrator. A successor depends on its prerequisite's **delivery**, so it
@@ -13,9 +24,10 @@ starts after integration and cleanup, rather than after a model response.
 
 This is a pinned Linux prototype. A minimal configured-provider diamond has
 survived interruption, integrated all four tasks and cleaned its owned worktrees.
-Codex and Claude have demonstrated real launch/execution. Broad qualification,
-Claude review/delivery and third admission under uncertain retained sessions
-remain incomplete. Read [setup](docs/SETUP.md) before starting a fresh
+Codex and Claude have demonstrated real launch/execution. Separate controlled
+proofs cover third-admission refusal and retained positions across recovery.
+Broad qualification and Claude review/delivery remain incomplete. Read
+[setup](docs/SETUP.md) before starting a fresh
 city. New native runs use the launch/resume instructions there and the
 [native maintenance boundaries](docs/NATIVE-MAINTENANCE.md). Use
 [legacy recovery](docs/RECOVERY.md) for an older workflow.
@@ -62,8 +74,8 @@ replacement graph. See [product graph boundaries](docs/PRODUCT-GRAPH.md).
 Serve the dashboard with `pnpm dashboard:serve` and open
 `http://HOST:43597/?city=CITY&scope=RIG&run=WORKFLOW_ID`. It shows four product
 tasks with their dependency edges; selection exposes their execution phases.
-Unproven delivery stays incomplete. The minimal live graph completed; combined
-native acceptance is still incomplete and failed broad verification remains failed.
+Unproven delivery stays incomplete. Product acceptance completed through live
+and independent focused proofs; failed broad verification remains failed.
 
 ## Legacy four-task demo
 
@@ -125,8 +137,9 @@ normal remote and exact project check command. For a retained legacy workflow,
 author a formula with work/delivery pairs using
 `gc.run_target` (`dalph.worker` / `dalph.integrator`) and `dalph.phase`
 (`work` / `deliver`); each pair shares a `dalph.task` identity. Successor work
-steps depend on delivery steps. The project contract describes its build/test
-and product requirements; this prototype currently qualifies with `pnpm test`.
+steps depend on delivery steps. The project contract describes build/test and
+product requirements. The native contract supplies the exact check command;
+the example uses `pnpm test`.
 
 Use an isolated city and worktree root per target project. The city template
 keeps native health and lifecycle defaults and documents narrow destructive

@@ -81,6 +81,13 @@ git -C "$DALPH_TARGET_REPO" commit -m 'seed expenses example'
 git init --bare "$DALPH_TRIAL_ROOT/expenses-remote.git"
 git -C "$DALPH_TARGET_REPO" remote add origin "$DALPH_TRIAL_ROOT/expenses-remote.git"
 git -C "$DALPH_TARGET_REPO" push -u origin "$DALPH_TARGET_BRANCH"
+```
+
+For an existing project, preserve its files, branch and normal remote instead
+of running the demo seed commands above. Verify a clean worktree and matching
+local/remote target heads. Continue from the pack directory for either target:
+
+```sh
 mise exec node@24.20.0 -- pnpm install --frozen-lockfile
 mise exec node@24.20.0 -- pnpm build
 dolt config --global --add user.name 'Dalph Trial'
