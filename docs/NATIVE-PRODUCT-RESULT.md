@@ -1,7 +1,9 @@
 # Native product result
 
-The minimal live four-task diamond completed. Combined acceptance for issue #7
-remains incomplete; this result does not close #6 or replace missing scenarios.
+Product acceptance is complete under the Operator's revised independent-proof
+contract. The minimal live diamond, current focused admission/recovery, review,
+installation and DOM evidence complement the accepted #2–#5 handoffs. This is
+not a passed broad qualification or universal harness/browser compatibility.
 
 ## Observed product boundaries
 
@@ -45,7 +47,21 @@ completed focused invocation stayed below 60 seconds. The initial combined
 DOM/controller invocation timed out and remains failed. TypeScript checking,
 changed-file lint and dashboard bundling passed. No broad gate was run.
 
-## Incomplete evidence
+Two additional controller tests passed in 8.82 seconds: primary launch/resume
+delivery and legacy/lost-resource/ambiguous recovery refusal. Four selected
+review tests passed in 14.49 seconds for first clean exit, four blocking rounds,
+later clean repair and deduplicated finite human continuation. Unselected cases
+remain unselected, not passes. Native session events also prove B/C worker
+overlap: C became active at 19:46:30 local time while B remained awake until
+19:46:38. The retained `branch-worker-timeline.jsonl` correlates both exact
+worktree paths with their native session identities.
+
+The commit hook exceeded its 60-second limit during Effect diagnostics and
+remains failed. After focused TypeScript, lint and DOM passes, the commit was
+created with that hook disabled rather than repeating exhausted infrastructure
+work. This is not credit for the incomplete hook or its unrun stages.
+
+## Failed, unmeasured and deferred evidence
 
 - Broad native qualification previously exceeded 600 seconds and remains
   failed/incomplete. No broad gate ran after the infrastructure budget was
@@ -65,7 +81,9 @@ changed-file lint and dashboard bundling passed. No broad gate was run.
   did not complete: review preparation repeated without task progress. Its
   city, supervisor and both providers were stopped; the owned worktree and
   unpublished commit remain retained for recovery. This proves alternate
-  launch/execution, not a fully qualified Claude delivery composition.
+  launch/execution, satisfying the alternate-launch requirement, not a fully
+  qualified Claude delivery composition. Alternate full delivery is separate
+  compatibility work under the revised contract.
 - The separate live third-admission fixture failed before two acknowledged
   attempts: its native runtime reported no tmux server. It remains failed.
   Under the updated product acceptance contract, focused production admission
@@ -80,15 +98,15 @@ policy. Missing product proofs retain their acceptance status.
 
 This ledger maps the parent specification to evidence, not to an aggregate test
 count. Historical handoffs retain their original revision and environment scope;
-they do not qualify the current candidate. None of the rows below certifies the
-complete combined acceptance of #1, #6 or #7.
+they are accepted prerequisite evidence, not a fresh broad qualification of this
+candidate. Current focused proofs qualify the changed product boundaries.
 
 | Scenario | Observed evidence and remaining obligation |
 | --- | --- |
 | S1: configured agent | Live Codex diamond completed; real Claude launch, claim, implementation commit and 19 project tests succeeded. Claude review/delivery remains incomplete. Missing-capability controls belong to `test/native-installation-city.test.ts`; current complete installation qualification remains unproven. |
 | S2: bounded fork/join | Native root `pr-wec` delivered A/B/C/D and D used a Base containing B/C. Fork recovery preserved the original attempts. Separate selected production admission/controller tests prove third refusal and retained occupied positions. The live fault fixture remains failed. |
 | S3: first clean review | C received a clean independent review before delivery. Correlation and approval refusal have focused observation/settlement evidence; this does not establish every malformed/transport case in the current live composition. |
-| S4: blocking review and budgets | A/B/D received blocking findings and same-attempt fixes before clean approval. Exhaustion, duplicate human continuation and all crash-budget cases remain separately accountable to [the S3/S4 handoff](S3-S4-REVIEW-HANDOFF.md); the live diamond did not reach exhaustion. |
+| S4: blocking review and budgets | A/B/D received blocking findings and same-attempt fixes before clean approval. Current selected production review tests pass for exhaustion and duplicate finite human continuation; [the S3/S4 handoff](S3-S4-REVIEW-HANDOFF.md) retains additional crash-budget evidence. The live diamond did not reach exhaustion. |
 | S5: retained recovery | A/B/C and D recovery comparisons preserve exact attempts, Base and worktree identity; A/B/C proposals also match across the fork cut. Selected `native-controller` and `native-session-parallel` tests passed for retained positions, third refusal and occupied-writer recovery. |
 | S6: project qualification | The delivered target passed its configured 18-test command. [The delivery handoff](S7-S8-DELIVERY-HANDOFF.md) records separate qualification controls. This live trial does not prove the parent scenario's non-pnpm command, timeout or changed-tree refusals. |
 | S7: serialized delivery and lost response | The live diamond integrated both branches and local/remote heads agree. Historical composed lost-push/serialization evidence is recorded in [the delivery handoff](S7-S8-DELIVERY-HANDOFF.md). No lost push was injected into the current diamond. |
@@ -96,8 +114,9 @@ complete combined acceptance of #1, #6 or #7.
 | S9: native tracker authority | The live graph used public scoped native tracker operations. Provider-neutral and idle/drain evidence remains scoped to [the tracker handoff](S9-TRACKER-HANDOFF.md); the configured backend in this trial does not prove all tracker combinations. |
 | S10: four-task live UI | Host HTTP frames and production projection show four product tasks and four prerequisite edges. Two in-memory DOM tests passed for four nodes/edges, frontier, selection/facts, refresh failure retention and recovery. Real-browser layout/compatibility remains untested. |
 | S11: safe fresh installation | Both isolated provider configurations passed preflight. Four current focused installation/maintenance tests passed for complete role admission, permission/bounds/suspension refusal, health defaults, recovery retention and diagnostic bounds. Historical fresh-installation evidence retains its revision scope in [the exact-read handoff](NATIVE-EXACT-READ-HANDOFF.md#fresh-installation-and-pin-observations). Hapsland is explicitly deferred and current candidate coverage remains unmeasured. |
-| S12: migration boundary | Historical installation evidence covers legacy resume refusal and retained legacy resources. The new diamond establishes new-run composition, not migration of a pending legacy run. Current complete upgrade/setup qualification remains unproven. |
+| S12: migration boundary | Current selected controller test passes for legacy/lost-resource/ambiguous recovery refusal; historical fresh-city evidence covers retained legacy resources. The live diamond establishes new-run composition. No conversion of a pending legacy run is advertised. |
 
-The next proofs must target these named gaps. The exhausted verification fixture
-and broad gate are not prerequisites for already available product work, and
+Real-browser compatibility, complete alternate delivery, Hapsland and broad
+qualification remain outside the completed product claim. Their failed or
+deferred status is preserved. The exhausted verification fixture and broad gate
 must not be restarted under the current repair budget.
